@@ -127,26 +127,20 @@ CREATE TABLE recently_watched (
   }) async {
     final db = await database;
     final refreshedAt = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('playlists', {
-      'name': name,
-      'url': url,
-      'last_refreshed_at': refreshedAt,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.update(
-      'playlists',
-      {'name': name, 'last_refreshed_at': refreshedAt},
-      where: 'url = ?',
-      whereArgs: [url],
+    // Single upsert: insert or update name + timestamp on url conflict.
+    // RETURNING id avoids a separate SELECT query.
+    final result = await db.rawQuery(
+      '''
+INSERT INTO playlists (name, url, last_refreshed_at)
+VALUES (?, ?, ?)
+ON CONFLICT(url) DO UPDATE SET
+  name = excluded.name,
+  last_refreshed_at = excluded.last_refreshed_at
+RETURNING id
+''',
+      [name, url, refreshedAt],
     );
-
-    final rows = await db.query(
-      'playlists',
-      columns: ['id'],
-      where: 'url = ?',
-      whereArgs: [url],
-      limit: 1,
-    );
-    return rows.single['id'] as int;
+    return result.single['id'] as int;
   }
 
   Future<List<Playlist>> playlists() async {
