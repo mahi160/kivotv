@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/channel.dart';
+import '../models/channel_group.dart';
 import '../models/playlist.dart';
 import '../core/db/database_service.dart';
 import 'playlist_service.dart';
@@ -151,13 +152,17 @@ class PlaylistRepository {
     _bumpDashboard();
   }
 
+  Future<List<ChannelGroup>> groups() => DatabaseService.instance.groups();
+
   Future<List<Channel>> channels({
     String query = '',
+    String? group,
     int limit = 100,
     int offset = 0,
   }) {
     return DatabaseService.instance.channels(
       query: query,
+      group: group,
       limit: limit,
       offset: offset,
     );

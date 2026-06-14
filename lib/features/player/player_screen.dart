@@ -12,10 +12,19 @@ import '../../models/channel.dart';
 import '../../services/playlist_repository.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.channel, this.query = ''});
+  const PlayerScreen({
+    super.key,
+    required this.channel,
+    this.query = '',
+    this.groupFilter,
+  });
 
   final Channel channel;
   final String query;
+
+  /// The group filter active in the channel list we came from (if any).
+  /// Used to navigate back correctly (group-filtered list vs. all channels).
+  final String? groupFilter;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -81,6 +90,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     while (true) {
       final page = await PlaylistRepository.instance.channels(
         query: widget.query,
+        group: widget.groupFilter,
         limit: pageSize,
         offset: offset,
       );
@@ -165,6 +175,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _navigateBack() {
+    final group = widget.groupFilter;
+    if (group != null) {
+      context.go('/channels?group=${Uri.encodeComponent(group)}');
+    } else {
+      context.go('/channels');
+    }
+  }
+
   void _playPrevious() {
     final index = _currentIndex;
     if (index <= 0) return;
@@ -197,7 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.browserBack) {
-      if (mounted) context.go('/channels');
+      if (mounted) _navigateBack();
       return KeyEventResult.handled;
     }
 
@@ -288,7 +307,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onPrevious: _playPrevious,
                   onNext: _playNext,
                   onInteraction: _scheduleOverlayHide,
-                  onBack: () => context.go('/channels'),
+                  onBack: _navigateBack,
                 ),
               ),
             ),

@@ -13,7 +13,10 @@ import '../../providers/dashboard_provider.dart';
 import '../../services/playlist_repository.dart';
 
 class ChannelListScreen extends ConsumerStatefulWidget {
-  const ChannelListScreen({super.key});
+  const ChannelListScreen({super.key, this.groupFilter});
+
+  /// When set, only channels in this group are shown.
+  final String? groupFilter;
 
   @override
   ConsumerState<ChannelListScreen> createState() => _ChannelListScreenState();
@@ -63,6 +66,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     try {
       final page = await PlaylistRepository.instance.channels(
         query: _query,
+        group: widget.groupFilter,
         limit: _pageSize,
         offset: _offset,
       );
@@ -95,7 +99,11 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   }
 
   void _openPlayer(Channel channel) {
-    context.go('/player', extra: {'channel': channel, 'query': _query});
+    context.go('/player', extra: {
+      'channel': channel,
+      'query': _query,
+      'group': widget.groupFilter,
+    });
   }
 
   @override
@@ -105,10 +113,13 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
       if (next is AsyncData) _resetAndLoad();
     });
 
+    // Back destination: groups screen if filtered, otherwise home.
+    final backRoute = widget.groupFilter != null ? '/groups' : '/';
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go('/');
+        if (!didPop) context.go(backRoute);
       },
       child: Scaffold(
       body: GradientBackground(
@@ -126,25 +137,31 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
                 Row(
                   children: [
                     IconButton.filledTonal(
-                      onPressed: () => context.go('/'),
+                      onPressed: () => context.go(backRoute),
                       icon: const Icon(Icons.arrow_back_rounded),
                     ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'All Channels',
-                      style: Theme.of(context).textTheme.headlineLarge,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        widget.groupFilter ?? 'All Channels',
+                        style: Theme.of(context).textTheme.headlineLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: AppSpacing.sm),
                     SizedBox(
-                      width: 460,
+                      width: 400,
                       child: TextField(
                         controller: _searchController,
                         autofocus: false,
                         onChanged: _onSearchChanged,
                         style: Theme.of(context).textTheme.bodyLarge,
-                        decoration: const InputDecoration(
-                          hintText: 'Search name or group',
-                          prefixIcon: Icon(Icons.search_rounded),
+                        decoration: InputDecoration(
+                          hintText: widget.groupFilter != null
+                              ? 'Search in ${widget.groupFilter}…'
+                              : 'Search name or group',
+                          prefixIcon: const Icon(Icons.search_rounded),
                         ),
                       ),
                     ),
