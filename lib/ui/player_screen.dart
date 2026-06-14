@@ -209,14 +209,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             Video(controller: _controller, fit: BoxFit.contain),
             if (_allStreamsFailed)
-              const Center(
+              Center(
                 child: ColoredBox(
                   color: Colors.black87,
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
                     child: Text(
                       'All available streams failed',
-                      style: TextStyle(fontSize: 28),
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
                   ),
                 ),

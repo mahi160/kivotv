@@ -113,24 +113,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: const Icon(Icons.arrow_back_rounded),
                       ),
                       const SizedBox(width: 16),
-                      const Text(
+                      Text(
                         'Settings',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        style: Theme.of(context).textTheme.headlineLarge,
                       ),
                     ],
                   ),
                   const SizedBox(height: 26),
-                  const Text(
+                  Text(
                     'Playlist sources',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'Add any M3U URL. Channels merge into one TV guide.',
-                    style: TextStyle(color: Colors.white70),
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 18),
                   TextField(

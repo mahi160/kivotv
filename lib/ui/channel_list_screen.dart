@@ -125,12 +125,9 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                       icon: const Icon(Icons.arrow_back_rounded),
                     ),
                     const SizedBox(width: 16),
-                    const Text(
+                    Text(
                       'All Channels',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: Theme.of(context).textTheme.headlineLarge,
                     ),
                     const Spacer(),
                     SizedBox(
@@ -139,7 +136,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                         controller: _searchController,
                         autofocus: false,
                         onChanged: _onSearchChanged,
-                        style: const TextStyle(fontSize: 18),
+                        style: Theme.of(context).textTheme.bodyLarge,
                         decoration: const InputDecoration(
                           hintText: 'Search name or group',
                           prefixIcon: Icon(Icons.search_rounded),
@@ -153,10 +150,10 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                   child: _channels.isEmpty && _loading
                       ? const Center(child: CircularProgressIndicator())
                       : _channels.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 'No channels found',
-                                style: TextStyle(fontSize: 22),
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
                             )
                           : ListView.builder(
@@ -256,13 +253,13 @@ class _ChannelTileState extends State<_ChannelTile> {
               widget.channel.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             subtitle: Text(
               widget.channel.group ?? 'Ungrouped',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,

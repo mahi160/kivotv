@@ -161,23 +161,19 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final left = Row(
       mainAxisSize: MainAxisSize.min,
-      children: const [
-        _LogoMark(),
-        SizedBox(width: 18),
+      children: [
+        const _LogoMark(),
+        const SizedBox(width: 18),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Kivo',
-              style: TextStyle(
-                fontSize: 42,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-              ),
+              style: Theme.of(context).textTheme.displayLarge,
             ),
             Text(
               'Live TV launcher',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),
@@ -267,10 +263,10 @@ class _StatPill extends StatelessWidget {
         children: [
           Text(
             value,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white70)),
+          const SizedBox(width: AppSpacing.xs),
+          Text(label, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -305,10 +301,7 @@ class _DashboardSection extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
             ],
           ),
@@ -355,7 +348,7 @@ class _EmptyRow extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: const TextStyle(color: Colors.white60, fontSize: 18),
+        style: Theme.of(context).textTheme.bodyLarge,
       ),
     );
   }
@@ -424,17 +417,14 @@ class _ChannelCardState extends State<_ChannelCard> {
                   widget.channel.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   widget.channel.group ?? 'Ungrouped',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),

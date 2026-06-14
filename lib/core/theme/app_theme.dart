@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'app_spacing.dart';
@@ -151,8 +152,9 @@ abstract final class AppTheme {
       ),
 
       // ── Text theme ─────────────────────────────────────────────────────
-      // Uses the system default (Roboto on Android), size overrides below.
+      // Inter via Google Fonts — TV-legible, weight range 100–900.
       textTheme: _buildTextTheme(isDark),
+      primaryTextTheme: _buildTextTheme(isDark),
 
       // ── Focus ──────────────────────────────────────────────────────────
       // Sandy accent for focus highlights — visible on both dark/light.
@@ -161,55 +163,74 @@ abstract final class AppTheme {
   }
 
   static TextTheme _buildTextTheme(bool isDark) {
-    final base = isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme;
-    final onSurface = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final onSurface =
+        isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
     final onSurfaceVariant =
         isDark ? AppColors.darkOnSurfaceVariant : AppColors.lightOnSurfaceVariant;
 
-    return base.copyWith(
-      // Display / hero text (app title)
-      displayLarge: base.displayLarge?.copyWith(
+    // Inter: excellent TV legibility, strong weight range (100–900).
+    // GoogleFonts.interTextTheme() returns a full TextTheme with Inter applied.
+    final inter = GoogleFonts.interTextTheme().copyWith(
+      // Display / hero (app title, big numbers)
+      displayLarge: GoogleFonts.inter(
         fontSize: 42,
         fontWeight: FontWeight.w900,
         color: onSurface,
+        letterSpacing: -0.5,
       ),
       // Screen headings
-      headlineLarge: base.headlineLarge?.copyWith(
+      headlineLarge: GoogleFonts.inter(
         fontSize: 34,
         fontWeight: FontWeight.w900,
         color: onSurface,
+        letterSpacing: -0.25,
       ),
-      headlineMedium: base.headlineMedium?.copyWith(
+      headlineMedium: GoogleFonts.inter(
         fontSize: 26,
         fontWeight: FontWeight.w800,
         color: onSurface,
       ),
-      // Section labels
-      titleLarge: base.titleLarge?.copyWith(
+      // Section / card labels
+      titleLarge: GoogleFonts.inter(
         fontSize: 22,
         fontWeight: FontWeight.w800,
         color: onSurface,
       ),
       // List tile primary text
-      titleMedium: base.titleMedium?.copyWith(
+      titleMedium: GoogleFonts.inter(
         fontSize: 19,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
         color: onSurface,
       ),
-      // Body / descriptions
-      bodyLarge: base.bodyLarge?.copyWith(
-        fontSize: 18,
-        color: onSurface,
-      ),
-      bodyMedium: base.bodyMedium?.copyWith(
+      titleSmall: GoogleFonts.inter(
         fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: onSurface,
+      ),
+      // Body
+      bodyLarge: GoogleFonts.inter(
+        fontSize: 18,
+        fontWeight: FontWeight.w400,
+        color: onSurface,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
         color: onSurfaceVariant,
       ),
       // Captions / metadata
-      bodySmall: base.bodySmall?.copyWith(
+      bodySmall: GoogleFonts.inter(
         fontSize: 14,
+        fontWeight: FontWeight.w400,
         color: onSurfaceVariant,
       ),
+      labelLarge: GoogleFonts.inter(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: onSurface,
+      ),
     );
+
+    return inter;
   }
 }
