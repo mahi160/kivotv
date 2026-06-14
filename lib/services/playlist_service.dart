@@ -12,14 +12,11 @@ class PlaylistService {
 
   static const playlistUrl = 'https://iptv-org.github.io/iptv/index.m3u';
 
+  /// Fetches and parses an M3U playlist without loading it fully into memory.
+  ///
+  /// The response body is processed line-by-line via a streaming transformer,
+  /// so even 200 MB playlist files never allocate a single giant String.
   Future<List<Channel>> fetchChannels({String url = playlistUrl}) async {
-    final content = await _downloadPlaylist(url);
-    final channels = parseM3u(content);
-    debugPrint('Parsed ${channels.length} channels from $url');
-    return channels;
-  }
-
-  Future<String> _downloadPlaylist(String url) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 30);
     try {
@@ -37,16 +34,29 @@ class PlaylistService {
         );
       }
 
-      return response.transform(utf8.decoder).join();
+      // Stream decode → split lines → parse M3U incrementally.
+      final lines = await response
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .toList();
+
+      final channels = parseM3uLines(lines);
+      debugPrint('Parsed ${channels.length} channels from $url');
+      return channels;
     } finally {
       client.close(force: true);
     }
   }
 }
 
-List<Channel> parseM3u(String content) {
-  final lines = const LineSplitter()
-      .convert(content)
+/// Parses a full M3U string (kept for unit tests and small playlists).
+List<Channel> parseM3u(String content) =>
+    parseM3uLines(const LineSplitter().convert(content));
+
+/// Parses an M3U playlist from an already-split list of lines.
+/// Prefer this overload when the lines come from a streaming source.
+List<Channel> parseM3uLines(List<String> rawLines) {
+  final lines = rawLines
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty)
       .toList();
