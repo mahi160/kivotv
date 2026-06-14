@@ -181,20 +181,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _channels.indexWhere((channel) => channel.url == _currentChannel.url);
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    final key = event.logicalKey;
+
+    // Select / Enter / A-button → toggle overlay visibility.
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.gameButtonA) {
       _toggleOverlay();
       return KeyEventResult.handled;
     }
 
-    if (_showOverlay) {
-      _scheduleOverlayHide();
+    // Back / Escape → return to channel list.
+    if (key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.browserBack) {
+      if (mounted) context.go('/channels');
+      return KeyEventResult.handled;
     }
+
+    // Media play/pause toggle.
+    if (key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPause ||
+        key == LogicalKeyboardKey.mediaPlayPause) {
+      _player.playOrPause();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // Media stop.
+    if (key == LogicalKeyboardKey.mediaStop) {
+      _player.stop();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // Channel up/down → next / previous channel.
+    if (key == LogicalKeyboardKey.channelUp ||
+        key == LogicalKeyboardKey.arrowRight) {
+      _playNext();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.channelDown ||
+        key == LogicalKeyboardKey.arrowLeft) {
+      _playPrevious();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // Any other key while overlay is visible → reset the auto-hide timer.
+    if (_showOverlay) _scheduleOverlayHide();
 
     return KeyEventResult.ignored;
   }
