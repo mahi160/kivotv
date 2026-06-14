@@ -505,7 +505,7 @@ class AppTheme {
 | 26 | [FEAT-2] Channel logos with cached_network_image | ✅ done |
 | 27 | [FEAT-5] Auto-refresh stale playlists on startup | ✅ done |
 | 28 | [FEAT-6] Expand tests: Channel, Playlist, AppColors (22 total) | ✅ done |
-| 29 | [FEAT-1] Group browser screen | ⬜ future |
+| 29 | [FEAT-1] Group browser screen | ✅ done |
 
 ---
 
