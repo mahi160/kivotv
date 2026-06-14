@@ -26,12 +26,19 @@ class PlaylistRepository {
   static const _refreshThreshold = Duration(hours: 24);
 
   Future<void> _bootstrap() async {
-    var storedCount = await DatabaseService.instance.channelCount();
+    // Ensure the default playlist record exists immediately so Settings
+    // always shows it, even before channels have been fetched.
+    await DatabaseService.instance.upsertPlaylist(
+      name: 'IPTV Org',
+      url: PlaylistService.playlistUrl,
+    );
+
+    final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
 
     _bootstrapped = true;
 
-    // Seed default playlist on first launch, then auto-refresh stale ones.
+    // Fetch channels in the background (does not block app launch).
     _seedAndRefresh();
   }
 

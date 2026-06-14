@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import '../models/channel.dart';
 
 class PlaylistService {
@@ -27,7 +25,7 @@ class PlaylistService {
     _activeClient?.close(force: true);
 
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 30);
+      ..connectionTimeout = const Duration(seconds: 60);
     _activeClient = client;
 
     try {
@@ -45,16 +43,15 @@ class PlaylistService {
         );
       }
 
-      // Stream-decode the response into lines (no giant String in memory).
+      // Stream-decode into lines then parse synchronously.
+      // compute() with 150k strings causes isolate message failures in
+      // release builds — sync parse is safer; brief UI block is acceptable.
       final lines = await response
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .toList();
 
-      // Parse on a background isolate — 50 k+ lines with RegExp matching
-      // would ANR the UI thread if left on the main isolate.
-      final channels = await compute(parseM3uLines, lines);
-      return channels;
+      return parseM3uLines(lines);
     } finally {
       // Only clear the reference if this client is still the active one.
       if (identical(_activeClient, client)) _activeClient = null;
