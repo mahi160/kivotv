@@ -14,7 +14,7 @@ val keystoreProperties = Properties().also { props ->
 
 android {
     namespace = "com.kivo.tv"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -37,7 +37,7 @@ android {
 
     defaultConfig {
         applicationId = "com.kivo.tv"
-        minSdk    = 21   // media_kit minimum; covers all Android TV hardware
+        minSdk = flutter.minSdkVersion   // media_kit minimum; covers all Android TV hardware
         targetSdk = 35   // Android 15
         versionCode = flutter.versionCode
         versionName = flutter.versionName

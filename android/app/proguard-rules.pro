@@ -7,6 +7,11 @@
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
 
+# Flutter references Play Core for deferred components but Kivo does not use
+# deferred components. Suppress the missing-class error so R8 succeeds.
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+
 # ── media_kit ────────────────────────────────────────────────────────────────
 # media_kit uses JNI reflection to load its native player.
 -keep class com.alexmercerind.** { *; }
