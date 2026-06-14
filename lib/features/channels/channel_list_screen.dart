@@ -12,7 +12,9 @@ import '../../core/widgets/channel_card.dart';
 import '../../models/channel.dart';
 import '../../services/playlist_repository.dart';
 
-// ── Screen ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ChannelListScreen extends ConsumerStatefulWidget {
   const ChannelListScreen({super.key});
@@ -25,21 +27,29 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   static const _pageSize   = 60;
   static const _crossCount = 3;
 
-  final _searchController  = TextEditingController();
-  final _scrollController  = ScrollController();
-  final _searchFocusNode   = FocusNode();
-  final _gridScopeNode     = FocusScopeNode();
+  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  // Single explicit focus node for the search field.
+  // No FocusScopeNode for the grid — natural ReadingOrder traversal handles it.
+  final _searchFocusNode  = FocusNode();
+
   final List<Channel> _channels = [];
   String _query   = '';
   Timer? _searchTimer;
-  bool  _loading  = false;
-  bool  _hasMore  = true;
-  int   _offset   = 0;
+  bool   _loading = false;
+  bool   _hasMore = true;
+  int    _offset  = 0;
+
+  // ── lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Keyboard-dismiss recovery (flutter/flutter#147772):
+    // if the search keyboard closes and primaryFocus goes null, restore it
+    // to the search field so the remote keeps working.
+    _searchFocusNode.addListener(_onSearchFocusChanged);
     _loadNextPage();
   }
 
@@ -48,10 +58,24 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     _searchTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
+    _searchFocusNode.removeListener(_onSearchFocusChanged);
     _searchFocusNode.dispose();
-    _gridScopeNode.dispose();
     super.dispose();
   }
+
+  // ── keyboard-dismiss recovery ──────────────────────────────────────────────
+
+  void _onSearchFocusChanged() {
+    if (_searchFocusNode.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (FocusManager.instance.primaryFocus == null) {
+        _searchFocusNode.requestFocus();
+      }
+    });
+  }
+
+  // ── data ───────────────────────────────────────────────────────────────────
 
   void _resetAndLoad() {
     if (!mounted) return;
@@ -109,7 +133,6 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     final newValue = !channel.isFavorite;
     await PlaylistRepository.instance.setFavorite(channel, newValue);
     if (!mounted) return;
-    // Patch the single row in-place so scroll position is preserved.
     final idx = _channels.indexWhere((c) => c.url == channel.url);
     if (idx != -1) {
       setState(() {
@@ -118,22 +141,17 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     }
   }
 
+  // ── build ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // Intentionally not reloading the grid on dashboard changes.
-    // Favouriting patches the row in-place (see _toggleFavorite) so scroll
-    // position is preserved. A full _resetAndLoad here would jump back to top.
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        // If keyboard was open for search, close it — stay on this screen.
         if (_searchFocusNode.hasFocus) {
           _searchFocusNode.unfocus();
-          // Move focus into the channel grid so D-pad works immediately.
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) { if (mounted) _gridScopeNode.requestFocus(); },
-          );
           return;
         }
         context.go('/');
@@ -153,36 +171,43 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
               children: [
                 const AppNavBar(active: NavDestination.channels),
                 const SizedBox(height: AppSpacing.md),
-                // D-pad Down on the search field jumps straight to the grid.
+
+                // ── Search field ─────────────────────────────────────────────
+                // Wrapped in a plain Focus solely to intercept D-pad Down so
+                // the user can jump straight to the grid without pressing Tab.
+                // No FocusScopeNode — traversal continues naturally into the
+                // grid below via ReadingOrderTraversalPolicy.
                 Focus(
                   onKeyEvent: (_, event) {
-                    if (event is KeyDownEvent &&
-                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      _gridScopeNode.requestFocus();
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      // Move to the next focusable widget (first grid card).
+                      FocusScope.of(context).nextFocus();
                       return KeyEventResult.handled;
                     }
                     return KeyEventResult.ignored;
                   },
                   child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    autofocus: false,
-                    onChanged: _onSearchChanged,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    controller:  _searchController,
+                    focusNode:   _searchFocusNode,
+                    autofocus:   false,
+                    onChanged:   _onSearchChanged,
+                    style:       Theme.of(context).textTheme.bodyLarge,
                     decoration: const InputDecoration(
-                      filled: true,
-                      hintText: 'Search channels…',
+                      filled:     true,
+                      hintText:   'Search channels…',
                       prefixIcon: Icon(Icons.search_rounded),
                     ),
                   ),
                 ),
+
                 const SizedBox(height: AppSpacing.md),
-                Expanded(
-                  child: FocusScope(
-                    node: _gridScopeNode,
-                    child: _buildGrid(),
-                  ),
-                ),
+
+                // ── Channel grid ─────────────────────────────────────────────
+                // No FocusScopeNode wrapper — grid cards are plain siblings in
+                // the traversal tree. D-pad moves between them via the default
+                // ReadingOrderTraversalPolicy (top-to-bottom, left-to-right).
+                Expanded(child: _buildGrid()),
               ],
             ),
           ),
@@ -207,11 +232,10 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     final itemCount = _channels.length + (_hasMore ? 1 : 0);
 
     return GridView.builder(
-      controller: _scrollController,
-      // Extra padding so focus borders on edge cells are never clipped.
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      clipBehavior: Clip.none,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      controller:    _scrollController,
+      padding:       const EdgeInsets.all(AppSpacing.xs),
+      clipBehavior:  Clip.none,
+      gridDelegate:  const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount:   _crossCount,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing:  AppSpacing.md,
@@ -229,13 +253,12 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
         }
         final ch = _channels[index];
         return ChannelCard(
-          key: ValueKey(ch.url),
-          channel: ch,
-          onTap: () => _openPlayer(ch),
+          key:                 ValueKey(ch.url),
+          channel:             ch,
+          onTap:               () => _openPlayer(ch),
           onFavoriteLongPress: () => _toggleFavorite(ch),
         );
       },
     );
   }
 }
-

@@ -26,23 +26,18 @@ class PlaylistRepository {
 
   static const _refreshThreshold = Duration(hours: 24);
 
-  // Playlists seeded on first launch.
-  static const _seededKey = 'kivo_playlists_seeded_v1';
+  // Bumping the key version forces a re-seed on every existing install
+  // when the default playlist list changes.
+  static const _seededKey = 'kivo_playlists_seeded_v3';
   static const _seededPlaylists = [
-    (name: 'Sports (IPTV-org)',    url: 'https://iptv-org.github.io/iptv/categories/sports.m3u'),
-    (name: 'Bangladesh (IPTV-org)', url: 'https://iptv-org.github.io/iptv/countries/bd.m3u'),
-  ];
-
-  // One fallback sample so the app has something visible before the
-  // first network fetch completes.
-  static const _sampleChannels = [
-    Channel(
-      id: 'sample-bpk-1723',
-      name: 'BPK TV',
-      url: 'https://owrcovcrpy.gpcdn.net/bpk-tv/1723/output/index.m3u8',
-      group: 'Samples',
+    (
+      name: 'Ultimate IPTV',
+      url:  'https://raw.githubusercontent.com/mahi160/iptv_list/refs/heads/main/Ultimate.m3u',
     ),
   ];
+
+  // No local sample channels — the seeded playlist provides content.
+  static const _sampleChannels = <Channel>[];
 
   Future<void> _bootstrap() async {
     // Store built-in sample channel (idempotent — safe on every launch).

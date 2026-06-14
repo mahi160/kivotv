@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -40,7 +41,16 @@ class KivoApp extends ConsumerWidget {
     final bootstrap   = ref.watch(bootstrapProvider);
     final themeMode   = ref.watch(themeModeProvider);
 
-    return MaterialApp.router(
+    // Map the TV remote SELECT / OK key to ActivateIntent at the app root.
+    // This single Shortcuts wrapper makes EVERY standard Material button
+    // (ElevatedButton, TextButton, OutlinedButton, InkWell …) respond to the
+    // remote's select key without needing custom onKeyEvent handlers.
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.select):     ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+      },
+      child: MaterialApp.router(
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
@@ -49,16 +59,12 @@ class KivoApp extends ConsumerWidget {
       // Show a branded splash until bootstrap completes.
       builder: (context, child) {
         return bootstrap.when(
-          // Bootstrap done — render the normal app.
-          data: (_) => child!,
-
-          // Bootstrap failed — show error screen instead of blank/crash.
-          error: (error, _) => _BootstrapError(error: error),
-
-          // Bootstrap in progress — show branded splash.
+          data:    (_) => child!,
+          error:   (error, _) => _BootstrapError(error: error),
           loading: () => const _SplashScreen(),
         );
       },
+      ),
     );
   }
 }
