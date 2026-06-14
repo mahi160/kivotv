@@ -27,9 +27,20 @@ class AppNavBar extends StatelessWidget {
         // ── Branding ───────────────────────────────────────────────────────
         const _LogoMark(),
         const SizedBox(width: AppSpacing.sm),
-        Text(
-          'Kivo',
-          style: Theme.of(context).textTheme.headlineLarge,
+        RichText(
+          text: TextSpan(
+            style: Theme.of(context).textTheme.headlineLarge,
+            children: const [
+              TextSpan(text: 'Kivo '),
+              TextSpan(
+                text: 'TV',
+                style: TextStyle(
+                  color: AppColors.oceanDeepBlue,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
         ),
         // ── Spacer pushes icons to the right ───────────────────────────────
         const Spacer(),
@@ -70,22 +81,26 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // K-play logo on a rounded ocean-blue tile.
+    const size = 46.0;
     return Container(
-      width:  AppSpacing.logoSize * 0.72,
-      height: AppSpacing.logoSize * 0.72,
+      width:  size,
+      height: size,
       decoration: BoxDecoration(
-        color: AppColors.oceanDeepBlue,
-        borderRadius: BorderRadius.circular(AppSpacing.logoRadius * 0.6),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.oceanMid, AppColors.oceanDeepBlue],
+        ),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: AppColors.oceanDeepBlue.withValues(alpha: 0.40),
-            blurRadius: 12,
-            spreadRadius: 1,
+            color: AppColors.oceanDeepBlue.withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(8),
       child: const KivoLogo(),
     );
   }
