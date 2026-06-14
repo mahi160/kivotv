@@ -1,5 +1,6 @@
 import 'dart:io';
 
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/utils/focus_utils.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
 import '../../models/playlist.dart';
@@ -124,7 +126,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go('/');
+        if (didPop) return;
+        if (dismissKeyboardIfOpen()) return;
+        context.go('/');
       },
       child: Scaffold(
       body: GradientBackground(
