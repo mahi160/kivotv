@@ -247,10 +247,6 @@ ORDER BY group_name COLLATE NOCASE ASC
     return rows.map(ChannelGroup.fromDb).toList();
   }
 
-  Future<List<Channel>> allChannels({String query = ''}) {
-    return channels(query: query, limit: 100000, offset: 0);
-  }
-
   Future<List<Channel>> pinnedChannels({int limit = 12}) async {
     final db = await database;
     final rows = await db.query(

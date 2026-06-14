@@ -182,10 +182,6 @@ class PlaylistRepository {
     );
   }
 
-  Future<List<Channel>> allChannels({String query = ''}) {
-    return DatabaseService.instance.allChannels(query: query);
-  }
-
   Future<List<Channel>> pinnedChannels() =>
       DatabaseService.instance.pinnedChannels();
 
