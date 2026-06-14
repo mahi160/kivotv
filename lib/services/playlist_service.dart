@@ -45,13 +45,15 @@ class PlaylistService {
         );
       }
 
-      // Stream decode → split lines → parse M3U incrementally.
+      // Stream-decode the response into lines (no giant String in memory).
       final lines = await response
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .toList();
 
-      final channels = parseM3uLines(lines);
+      // Parse on a background isolate — 50 k+ lines with RegExp matching
+      // would ANR the UI thread if left on the main isolate.
+      final channels = await compute(parseM3uLines, lines);
       debugPrint('Parsed ${channels.length} channels from $url');
       return channels;
     } finally {
