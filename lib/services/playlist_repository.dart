@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
 import '../models/playlist.dart';
@@ -25,16 +26,16 @@ class PlaylistRepository {
 
   static const _refreshThreshold = Duration(hours: 24);
 
-  // Two built-in sample channels so the app has content on first open.
+  // Playlists seeded on first launch.
+  static const _seededKey = 'kivo_playlists_seeded_v1';
+  static const _seededPlaylists = [
+    (name: 'Sports (IPTV-org)',    url: 'https://iptv-org.github.io/iptv/categories/sports.m3u'),
+    (name: 'Bangladesh (IPTV-org)', url: 'https://iptv-org.github.io/iptv/countries/bd.m3u'),
+  ];
+
+  // One fallback sample so the app has something visible before the
+  // first network fetch completes.
   static const _sampleChannels = [
-    Channel(
-      id: 'sample-1live',
-      name: '1LIVE',
-      url: 'http://103.89.248.22:8082/1LIVE/tracks-a1/index.fmp4.m3u8'
-           '?token=c3350d500806be60bc5c9a7859bdfb75e05c9021'
-           '-bd999b1fab19a5867973b1040e73a267-1781457467-1781446667',
-      group: 'Samples',
-    ),
     Channel(
       id: 'sample-bpk-1723',
       name: 'BPK TV',
@@ -44,7 +45,7 @@ class PlaylistRepository {
   ];
 
   Future<void> _bootstrap() async {
-    // Store the two built-in sample channels (idempotent — safe on every launch).
+    // Store built-in sample channel (idempotent — safe on every launch).
     await _storeSampleChannels();
 
     final storedCount = await DatabaseService.instance.channelCount();
@@ -53,8 +54,8 @@ class PlaylistRepository {
 
     _bootstrapped = true;
 
-    // Refresh any user-added playlists that are older than 24 h.
-    _refreshStalePlaylists();
+    // Seed the default playlists once, then keep them refreshed.
+    _seedAndRefresh();
   }
 
   Future<void> _storeSampleChannels() async {
@@ -68,12 +69,26 @@ class PlaylistRepository {
     );
   }
 
-  /// Refreshes user-added playlists that are stale (> 24 h old).
-  /// Runs in the background — never blocks bootstrap or the UI.
-  Future<void> _refreshStalePlaylists() async {
+  /// On first launch: adds the default playlists and fetches them.
+  /// On subsequent launches: refreshes any user playlist older than 24 h.
+  /// Never blocks bootstrap or the UI.
+  Future<void> _seedAndRefresh() async {
     isFetching.value = true;
     try {
-      final playlists = await DatabaseService.instance.playlists();
+      final prefs       = await SharedPreferences.getInstance();
+      final alreadyDone = prefs.getBool(_seededKey) ?? false;
+
+      if (!alreadyDone) {
+        // First launch: add and fetch the default playlists.
+        for (final p in _seededPlaylists) {
+          await addAndRefreshPlaylist(p.url, name: p.name);
+        }
+        await prefs.setBool(_seededKey, true);
+        return; // counts already bumped inside addAndRefreshPlaylist
+      }
+
+      // Subsequent launches: refresh playlists older than 24 h.
+      final playlists    = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
       if (userPlaylists.isEmpty) return;
 
@@ -84,10 +99,9 @@ class PlaylistRepository {
         return now.difference(last) > _refreshThreshold;
       }).toList();
 
-      if (stale.isEmpty) return;
-      await refreshAllPlaylists();
+      if (stale.isNotEmpty) await refreshAllPlaylists();
     } catch (_) {
-      // Silent — stale data is shown gracefully.
+      // Background failures are silent — the UI shows whatever is cached.
     } finally {
       isFetching.value = false;
     }
@@ -135,8 +149,8 @@ class PlaylistRepository {
     );
   }
 
-  Future<int> addAndRefreshPlaylist(String url) async {
-    final playlistId = await addPlaylist(url: url);
+  Future<int> addAndRefreshPlaylist(String url, {String? name}) async {
+    final playlistId = await addPlaylist(url: url, name: name);
     final channels = await PlaylistService.instance.fetchChannels(
       url: url.trim(),
     );
