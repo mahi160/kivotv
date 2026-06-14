@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -8,16 +9,17 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
 import '../../models/playlist.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/playlist_repository.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _playlistUrlController = TextEditingController();
   bool _isRefreshing = false;
   bool _isAdding = false;
@@ -166,6 +168,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: Theme.of(context).textTheme.headlineLarge,
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  // ── Appearance ───────────────────────────────────────────
+                  Text(
+                    'Appearance',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _ThemePicker(
+                    current: ref.watch(themeModeProvider),
+                    onChanged: (mode) =>
+                        ref.read(themeModeProvider.notifier).set(mode),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  // ── Playlist sources ─────────────────────────────────────
                   Text(
                     'Playlist sources',
                     style: Theme.of(context).textTheme.titleLarge,
@@ -241,6 +256,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
 );
   }
 }
+// ── Theme picker ─────────────────────────────────────────────────────────────
+
+class _ThemePicker extends StatelessWidget {
+  const _ThemePicker({required this.current, required this.onChanged});
+
+  final ThemeMode                    current;
+  final ValueChanged<ThemeMode>      onChanged;
+
+  static const _options = [
+    (ThemeMode.light,  Icons.wb_sunny_rounded,       'Light'),
+    (ThemeMode.dark,   Icons.nights_stay_rounded,    'Dark'),
+    (ThemeMode.system, Icons.brightness_auto_rounded, 'System'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: _options.map((opt) {
+        final (mode, icon, label) = opt;
+        final active = current == mode;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.xs),
+            child: _ThemeOption(
+              icon:     icon,
+              label:    label,
+              active:   active,
+              isDark:   isDark,
+              onTap:    () => onChanged(mode),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _ThemeOption extends StatefulWidget {
+  const _ThemeOption({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final IconData     icon;
+  final String       label;
+  final bool         active;
+  final bool         isDark;
+  final VoidCallback onTap;
+
+  @override
+  State<_ThemeOption> createState() => _ThemeOptionState();
+}
+
+class _ThemeOptionState extends State<_ThemeOption> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final highlight = widget.active || _focused;
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.sm + 2,
+            horizontal: AppSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: highlight
+                ? AppColors.oceanDeepBlue.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            border: Border.all(
+              color: highlight
+                  ? AppColors.oceanDeepBlue
+                  : (widget.isDark
+                      ? AppColors.darkBorder
+                      : AppColors.lightBorder),
+              width: highlight ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 26,
+                color: highlight
+                    ? AppColors.oceanDeepBlue
+                    : (widget.isDark
+                        ? AppColors.darkOnSurfaceVariant
+                        : AppColors.lightOnSurfaceVariant),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                widget.label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: highlight
+                      ? AppColors.oceanDeepBlue
+                      : null,
+                  fontWeight: highlight
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlaylistTile extends StatelessWidget {
   const _PlaylistTile({
     required this.playlist,

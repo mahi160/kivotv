@@ -7,8 +7,9 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/bootstrap_provider.dart';
 import 'core/router/app_router.dart';
+import 'providers/theme_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
 
@@ -24,7 +25,14 @@ void main() {
     ..maximumSize      = 200
     ..maximumSizeBytes = 80 << 20; // 80 MB
 
-  runApp(const ProviderScope(child: KivoApp()));
+  // Build a temporary container just to hydrate theme before first frame.
+  final container = ProviderContainer();
+  await container.read(themeModeProvider.notifier).load();
+
+  runApp(UncontrolledProviderScope(
+    container: container,
+    child: const KivoApp(),
+  ));
 }
 
 class KivoApp extends ConsumerWidget {
@@ -32,14 +40,15 @@ class KivoApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bootstrap = ref.watch(bootstrapProvider);
+    final bootstrap   = ref.watch(bootstrapProvider);
+    final themeMode   = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       // Show a branded splash until bootstrap completes.
       builder: (context, child) {
         return bootstrap.when(
