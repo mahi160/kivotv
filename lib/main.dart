@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,6 +11,19 @@ import 'core/router/app_router.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+
+  // Silence all debug logging in production builds.
+  // debugPrint is NOT automatically silent in release mode.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
+  // Cap the Flutter image cache so channel logos don't exhaust RAM.
+  // 200 items / 80 MB is generous for a TV app with many logos visible.
+  PaintingBinding.instance.imageCache
+    ..maximumSize      = 200
+    ..maximumSizeBytes = 80 << 20; // 80 MB
+
   runApp(const ProviderScope(child: KivoApp()));
 }
 
