@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
+import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
 import '../../providers/channel_count_provider.dart';
 import '../../providers/dashboard_provider.dart';
@@ -367,7 +368,12 @@ class _ChannelCardState extends State<_ChannelCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.tv_rounded, color: Colors.white70, size: 28),
+                ChannelLogo(
+                  logoUrl: widget.channel.logo,
+                  size: 40,
+                  borderRadius: 10,
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                ),
                 const Spacer(),
                 Text(
                   widget.channel.name,

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
+import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../services/playlist_repository.dart';
@@ -244,14 +245,10 @@ class _ChannelTileState extends State<_ChannelTile> {
               horizontal: 22,
               vertical: 6,
             ),
-            leading: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.live_tv_rounded),
+            leading: ChannelLogo(
+              logoUrl: widget.channel.logo,
+              size: 48,
+              borderRadius: 14,
             ),
             title: Text(
               widget.channel.name,

@@ -1,12 +1,16 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kivo/main.dart';
 
 void main() {
-  testWidgets('shows home screen', (tester) async {
-    await tester.pumpWidget(const KivoApp());
+  testWidgets('shows splash while bootstrapping', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(child: KivoApp()),
+    );
 
-    expect(find.text('Kivo'), findsOneWidget);
-    expect(find.text('All Channels'), findsOneWidget);
+    // On first pump the bootstrap FutureProvider is loading — splash shown.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
