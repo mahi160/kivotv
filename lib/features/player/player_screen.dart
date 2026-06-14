@@ -8,43 +8,64 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
 import '../../services/playlist_repository.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key, required this.channel, this.query = ''});
 
   final Channel channel;
-  final String query;
+  final String  query;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late final Player _player;
+  // ── media ──────────────────────────────────────────────────────────────────
+  late final Player          _player;
   late final VideoController _controller;
-  final _focusNode = FocusNode();
-  final _playPauseFocusNode = FocusNode();
-  final _previousFocusNode = FocusNode();
-  final _nextFocusNode = FocusNode();
 
-  List<Channel> _channels = const [];
-  final Set<String> _failedUrls = {};
-  late Channel _currentChannel;
-  bool _showOverlay = true;
-  bool _allStreamsFailed = false;
+  // ── channel state ──────────────────────────────────────────────────────────
+  List<Channel>   _channels       = const [];
+  final Set<String> _failedUrls   = {};
+  late Channel    _currentChannel;
+
+  // ── overlay ────────────────────────────────────────────────────────────────
+  bool   _showOverlay     = true;
+  bool   _showChannelList = false;
   Timer? _hideTimer;
+
+  // ── stream error toast ─────────────────────────────────────────────────────
+  String? _streamErrorMsg;
+  Timer?  _streamErrorTimer;
+
+  // ── playback failure detection ─────────────────────────────────────────────
+  bool   _allStreamsFailed = false;
   Timer? _playbackFailureTimer;
-  StreamSubscription<bool>? _playingSubscription;
+
+  // ── subscriptions ──────────────────────────────────────────────────────────
+  StreamSubscription<bool>?   _playingSubscription;
   StreamSubscription<String>? _errorSubscription;
+
+  // ── sidebar scroll ─────────────────────────────────────────────────────────
+  final _sidebarScroll = ScrollController();
+
+  // ── focus ──────────────────────────────────────────────────────────────────
+  final _rootFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _currentChannel = widget.channel;
-    _player = Player();
-    _controller = VideoController(_player);
+    _player         = Player();
+    _controller     = VideoController(_player);
+
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (playing) {
         _playbackFailureTimer?.cancel();
@@ -54,6 +75,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _errorSubscription = _player.stream.error.listen(
       (_) => _handlePlaybackFailure(),
     );
+
     _loadChannels().then((_) => _open(_currentChannel));
     _scheduleOverlayHide();
   }
@@ -62,22 +84,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     _playbackFailureTimer?.cancel();
+    _streamErrorTimer?.cancel();
     _playingSubscription?.cancel();
     _errorSubscription?.cancel();
-    _focusNode.dispose();
-    _playPauseFocusNode.dispose();
-    _previousFocusNode.dispose();
-    _nextFocusNode.dispose();
+    _sidebarScroll.dispose();
+    _rootFocus.dispose();
     _player.dispose();
     super.dispose();
   }
 
-  // Load all channels in pages of 200 to avoid RAM spikes on large IPTV lists.
-  // The player only needs the channel list for prev/next navigation.
+  // ── channel loading ────────────────────────────────────────────────────────
+
   Future<void> _loadChannels() async {
     const pageSize = 200;
     var offset = 0;
-    final all = <Channel>[];
+    final all  = <Channel>[];
     while (true) {
       final page = await PlaylistRepository.instance.channels(
         query: widget.query,
@@ -92,13 +113,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _channels = all);
   }
 
+  // ── playback ───────────────────────────────────────────────────────────────
+
   Future<void> _open(Channel channel) async {
     _playbackFailureTimer?.cancel();
     setState(() {
-      _currentChannel = channel;
-      _allStreamsFailed = false;
+      _currentChannel    = channel;
+      _allStreamsFailed  = false;
     });
-
     try {
       await _player.open(Media(channel.url), play: true);
       _playbackFailureTimer = Timer(
@@ -118,41 +140,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _failedUrls.add(_currentChannel.url);
     await PlaylistRepository.instance.markBroken(_currentChannel);
 
+    _showStreamError('Stream unavailable — switching to next channel');
+
     final next = _nextAvailableChannel();
     if (next == null) {
       if (mounted) setState(() => _allStreamsFailed = true);
       return;
     }
-
     await _open(next);
   }
 
   Channel? _nextAvailableChannel() {
     if (_channels.isEmpty) return null;
-
     final start = _currentIndex == -1 ? 0 : _currentIndex + 1;
-    for (var offset = 0; offset < _channels.length; offset++) {
-      final index = (start + offset) % _channels.length;
-      final channel = _channels[index];
-      if (!_failedUrls.contains(channel.url) && !channel.isBroken) {
-        return channel;
-      }
+    for (var i = 0; i < _channels.length; i++) {
+      final idx = (start + i) % _channels.length;
+      final ch  = _channels[idx];
+      if (!_failedUrls.contains(ch.url) && !ch.isBroken) return ch;
     }
     return null;
   }
 
+  // ── overlay ────────────────────────────────────────────────────────────────
+
   void _showControls() {
     setState(() => _showOverlay = true);
-    _playPauseFocusNode.requestFocus();
     _scheduleOverlayHide();
   }
 
   void _scheduleOverlayHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
+    // Keep overlay visible longer when the channel list is open.
+    final delay = _showChannelList ? 12 : 5;
+    _hideTimer = Timer(Duration(seconds: delay), () {
+      if (mounted && !_showChannelList) {
         setState(() => _showOverlay = false);
-        _focusNode.requestFocus();
+        _rootFocus.requestFocus();
       }
     });
   }
@@ -165,131 +188,228 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _toggleChannelList() {
+    setState(() => _showChannelList = !_showChannelList);
+    if (_showChannelList) {
+      _showControls();
+      // Scroll sidebar to current channel after layout.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final idx = _currentIndex;
+        if (idx > 0 && _sidebarScroll.hasClients) {
+          const itemH = 72.0;
+          _sidebarScroll.jumpTo(
+            ((idx * itemH) - 200).clamp(0, _sidebarScroll.position.maxScrollExtent),
+          );
+        }
+      });
+    }
+  }
+
+  // ── stream error toast ─────────────────────────────────────────────────────
+
+  void _showStreamError(String msg) {
+    setState(() => _streamErrorMsg = msg);
+    _streamErrorTimer?.cancel();
+    _streamErrorTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _streamErrorMsg = null);
+    });
+  }
+
+  // ── navigation ─────────────────────────────────────────────────────────────
+
   void _playPrevious() {
-    final index = _currentIndex;
-    if (index <= 0) return;
-    _open(_channels[index - 1]);
+    final idx = _currentIndex;
+    if (idx <= 0) return;
+    _open(_channels[idx - 1]);
   }
 
   void _playNext() {
-    final index = _currentIndex;
-    if (index == -1 || index >= _channels.length - 1) return;
-    _open(_channels[index + 1]);
+    final idx = _currentIndex;
+    if (idx == -1 || idx >= _channels.length - 1) return;
+    _open(_channels[idx + 1]);
   }
 
   int get _currentIndex =>
-      _channels.indexWhere((channel) => channel.url == _currentChannel.url);
+      _channels.indexWhere((c) => c.url == _currentChannel.url);
 
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+  // ── key handling ───────────────────────────────────────────────────────────
+
+  KeyEventResult _onKeyEvent(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
     final key = event.logicalKey;
 
-    // Select / Enter / A-button → toggle overlay visibility.
-    if (key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.gameButtonA) {
-      _toggleOverlay();
+    // ── Close channel list with Back / Left ──────────────────────────────────
+    if (_showChannelList &&
+        (key == LogicalKeyboardKey.goBack     ||
+         key == LogicalKeyboardKey.escape     ||
+         key == LogicalKeyboardKey.arrowLeft)) {
+      setState(() => _showChannelList = false);
+      _scheduleOverlayHide();
       return KeyEventResult.handled;
     }
 
-    // Back / Escape → return to channel list.
-    if (key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.escape ||
+    // ── Back → exit player ───────────────────────────────────────────────────
+    if (key == LogicalKeyboardKey.goBack    ||
+        key == LogicalKeyboardKey.escape    ||
         key == LogicalKeyboardKey.browserBack) {
       if (mounted) context.go('/channels');
       return KeyEventResult.handled;
     }
 
-    // Media play/pause toggle.
-    if (key == LogicalKeyboardKey.mediaPlay ||
-        key == LogicalKeyboardKey.mediaPause ||
+    // ── Up → previous channel ────────────────────────────────────────────────
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.channelUp) {
+      _playPrevious();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // ── Down → next channel ──────────────────────────────────────────────────
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.channelDown) {
+      _playNext();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // ── Select / Enter → toggle overlay ─────────────────────────────────────
+    if (key == LogicalKeyboardKey.select       ||
+        key == LogicalKeyboardKey.enter        ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      _toggleOverlay();
+      return KeyEventResult.handled;
+    }
+
+    // ── Media keys ───────────────────────────────────────────────────────────
+    if (key == LogicalKeyboardKey.mediaPlay      ||
+        key == LogicalKeyboardKey.mediaPause     ||
         key == LogicalKeyboardKey.mediaPlayPause) {
       _player.playOrPause();
       _showControls();
       return KeyEventResult.handled;
     }
-
-    // Media stop.
     if (key == LogicalKeyboardKey.mediaStop) {
       _player.stop();
       _showControls();
       return KeyEventResult.handled;
     }
 
-    // Channel up/down → next / previous channel.
-    if (key == LogicalKeyboardKey.channelUp ||
-        key == LogicalKeyboardKey.arrowRight) {
-      _playNext();
-      _showControls();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.channelDown ||
-        key == LogicalKeyboardKey.arrowLeft) {
-      _playPrevious();
-      _showControls();
-      return KeyEventResult.handled;
-    }
-
-    // Any other key while overlay is visible → reset the auto-hide timer.
+    // Any other key resets the overlay hide timer.
     if (_showOverlay) _scheduleOverlayHide();
-
     return KeyEventResult.ignored;
   }
+
+  // ── build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
-        focusNode: _focusNode,
+        focusNode: _rootFocus,
         autofocus: true,
         onKeyEvent: _onKeyEvent,
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Video
             Video(controller: _controller, fit: BoxFit.contain),
+
+            // Buffering spinner
+            StreamBuilder<bool>(
+              stream: _player.stream.buffering,
+              builder: (context, snap) => snap.data == true
+                  ? const Center(child: CircularProgressIndicator())
+                  : const SizedBox.shrink(),
+            ),
+
+            // Stream error toast — bottom centre, non-blocking
+            if (_streamErrorMsg != null)
+              Positioned(
+                bottom: 120,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _StreamErrorToast(message: _streamErrorMsg!),
+                ),
+              ),
+
+            // All-streams-failed overlay
             if (_allStreamsFailed)
               Center(
-                child: ColoredBox(
-                  color: Colors.black87,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'All available streams failed',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.signal_wifi_off_rounded,
+                          color: Colors.white54, size: 48),
+                      const SizedBox(height: 16),
+                      Text(
+                        'All available streams failed',
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => context.go('/channels'),
+                        child: const Text('Back to channels',
+                            style: TextStyle(color: AppColors.sandMid)),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            StreamBuilder<bool>(
-              stream: _player.stream.buffering,
-              builder: (context, snapshot) {
-                if (snapshot.data != true) {
-                  return const SizedBox.shrink();
-                }
-                return const Center(child: CircularProgressIndicator());
-              },
-            ),
-            // Animated overlay — fades in/out instead of abrupt show/hide.
+
+            // Main overlay (fades)
             AnimatedOpacity(
               opacity: _showOverlay ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
               child: IgnorePointer(
                 ignoring: !_showOverlay,
                 child: _PlayerOverlay(
-                  channel: _currentChannel,
-                  channelIndex: _currentIndex,
-                  channelTotal: _channels.length,
-                  player: _player,
-                  previousFocusNode: _previousFocusNode,
-                  playPauseFocusNode: _playPauseFocusNode,
-                  nextFocusNode: _nextFocusNode,
-                  onPrevious: _playPrevious,
-                  onNext: _playNext,
+                  channel:       _currentChannel,
+                  channelIndex:  _currentIndex,
+                  channelTotal:  _channels.length,
+                  player:        _player,
+                  showingList:   _showChannelList,
+                  onPrevious:    _playPrevious,
+                  onNext:        _playNext,
                   onInteraction: _scheduleOverlayHide,
-                  onBack: () => context.go('/channels'),
+                  onBack:        () => context.go('/channels'),
+                  onToggleList:  _toggleChannelList,
                 ),
+              ),
+            ),
+
+            // Channel list sidebar — slides in from right
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              top:    0,
+              bottom: 0,
+              right:  _showChannelList ? 0 : -340,
+              child: _ChannelListPanel(
+                channels:       _channels,
+                currentChannel: _currentChannel,
+                scrollController: _sidebarScroll,
+                onSelectChannel: (ch) {
+                  setState(() => _showChannelList = false);
+                  _open(ch);
+                },
+                onToggleFavorite: (ch) async {
+                  await PlaylistRepository.instance
+                      .setFavorite(ch, !ch.isFavorite);
+                  // Reload channels so the star updates.
+                  await _loadChannels();
+                  setState(() {});
+                },
               ),
             ),
           ],
@@ -299,36 +419,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Overlay
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PlayerOverlay extends StatelessWidget {
   const _PlayerOverlay({
     required this.channel,
     required this.channelIndex,
     required this.channelTotal,
     required this.player,
-    required this.previousFocusNode,
-    required this.playPauseFocusNode,
-    required this.nextFocusNode,
+    required this.showingList,
     required this.onPrevious,
     required this.onNext,
     required this.onInteraction,
     required this.onBack,
+    required this.onToggleList,
   });
 
-  final Channel channel;
-  final int channelIndex;   // 0-based; -1 = unknown
-  final int channelTotal;
-  final Player player;
-  final FocusNode previousFocusNode;
-  final FocusNode playPauseFocusNode;
-  final FocusNode nextFocusNode;
+  final Channel      channel;
+  final int          channelIndex;
+  final int          channelTotal;
+  final Player       player;
+  final bool         showingList;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onInteraction;
   final VoidCallback onBack;
+  final VoidCallback onToggleList;
 
   @override
   Widget build(BuildContext context) {
-    final indexLabel = channelIndex >= 0 && channelTotal > 0
+    final chNum = channelIndex >= 0 && channelTotal > 0
         ? '${channelIndex + 1} / $channelTotal'
         : '';
 
@@ -337,102 +459,284 @@ class _PlayerOverlay extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xCC000000), Colors.transparent, Color(0xCC000000)],
-          stops: [0.0, 0.4, 1.0],
+          colors: [Color(0xDD000000), Colors.transparent, Color(0xDD000000)],
+          stops: [0.0, 0.45, 1.0],
         ),
       ),
-      padding: const EdgeInsets.all(AppSpacing.tvEdge),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Top bar: back button + channel info ────────────────────
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 28),
-                tooltip: 'Back to channels',
-                onPressed: () {
-                  onInteraction();
-                  onBack();
-                },
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      channel.name,
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        shadows: [const Shadow(blurRadius: 8)],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (channel.group != null)
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.tvEdge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top bar ────────────────────────────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Back
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded,
+                      color: Colors.white, size: 28),
+                  onPressed: () { onInteraction(); onBack(); },
+                ),
+                const SizedBox(width: 12),
+                // Channel name + group
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        channel.group!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
+                        channel.name,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                          color: Colors.white,
+                          shadows: [const Shadow(blurRadius: 8)],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (channel.group != null && channel.group!.isNotEmpty)
+                        Text(
+                          channel.group!,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                    ],
+                  ),
+                ),
+                // Channel number + clock
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const _LiveClock(),
+                    if (chNum.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.oceanMid.withValues(alpha: 0.85),
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusSm),
+                        ),
+                        child: Text(
+                          chNum,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                    ],
                   ],
                 ),
-              ),
-              if (indexLabel.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                    vertical: AppSpacing.xxs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.oceanMid.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                  ),
-                  child: Text(
-                    indexLabel,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+              ],
+            ),
+
+            const Spacer(),
+
+            // ── Bottom controls ────────────────────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _CtrlBtn(
+                  icon: Icons.skip_previous_rounded,
+                  label: 'Prev',
+                  autofocus: false,
+                  onPressed: () { onInteraction(); onPrevious(); },
                 ),
+                const SizedBox(width: AppSpacing.md),
+                StreamBuilder<bool>(
+                  stream: player.stream.playing,
+                  initialData: false,
+                  builder: (ctx, snap) {
+                    final playing = snap.data ?? false;
+                    return _CtrlBtn(
+                      icon: playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      label: playing ? 'Pause' : 'Play',
+                      autofocus: true,
+                      onPressed: () { onInteraction(); player.playOrPause(); },
+                    );
+                  },
+                ),
+                const SizedBox(width: AppSpacing.md),
+                _CtrlBtn(
+                  icon: Icons.skip_next_rounded,
+                  label: 'Next',
+                  autofocus: false,
+                  onPressed: () { onInteraction(); onNext(); },
+                ),
+                const SizedBox(width: AppSpacing.md),
+                _CtrlBtn(
+                  icon: showingList
+                      ? Icons.playlist_play_rounded
+                      : Icons.format_list_bulleted_rounded,
+                  label: 'Channels',
+                  autofocus: false,
+                  highlighted: showingList,
+                  onPressed: () { onInteraction(); onToggleList(); },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Control button
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CtrlBtn extends StatefulWidget {
+  const _CtrlBtn({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.autofocus   = false,
+    this.highlighted = false,
+  });
+
+  final IconData     icon;
+  final String       label;
+  final bool         autofocus;
+  final bool         highlighted;
+  final VoidCallback onPressed;
+
+  @override
+  State<_CtrlBtn> createState() => _CtrlBtnState();
+}
+
+class _CtrlBtnState extends State<_CtrlBtn> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _focused || widget.highlighted;
+    return FocusableActionDetector(
+      autofocus: widget.autofocus,
+      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          decoration: BoxDecoration(
+            color: active
+                ? Colors.white
+                : Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            border: Border.all(
+              color: active ? AppColors.sandMid : Colors.white24,
+              width: active ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 26,
+                color: active ? Colors.black87 : Colors.white,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.black87 : Colors.white,
+                ),
+              ),
             ],
           ),
-          const Spacer(),
-          // ── Bottom: playback controls ────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ControlButton(
-                focusNode: previousFocusNode,
-                icon: Icons.skip_previous_rounded,
-                label: 'Previous',
-                onPressed: () { onInteraction(); onPrevious(); },
-              ),
-              const SizedBox(width: AppSpacing.md),
-              StreamBuilder<bool>(
-                stream: player.stream.playing,
-                initialData: false,
-                builder: (context, snapshot) {
-                  final playing = snapshot.data ?? false;
-                  return _ControlButton(
-                    focusNode: playPauseFocusNode,
-                    icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    label: playing ? 'Pause' : 'Play',
-                    onPressed: () { onInteraction(); player.playOrPause(); },
-                  );
-                },
-              ),
-              const SizedBox(width: AppSpacing.md),
-              _ControlButton(
-                focusNode: nextFocusNode,
-                icon: Icons.skip_next_rounded,
-                label: 'Next',
-                onPressed: () { onInteraction(); onNext(); },
-              ),
-            ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Live clock
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LiveClock extends StatefulWidget {
+  const _LiveClock();
+
+  @override
+  State<_LiveClock> createState() => _LiveClockState();
+}
+
+class _LiveClockState extends State<_LiveClock> {
+  late Timer _timer;
+  late DateTime _now;
+
+  @override
+  void initState() {
+    super.initState();
+    _now   = DateTime.now();
+    // Update every 30 s — precise enough for HH:MM display.
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = _now.hour.toString().padLeft(2, '0');
+    final m = _now.minute.toString().padLeft(2, '0');
+    return Text(
+      '$h:$m',
+      style: const TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+        shadows: [Shadow(blurRadius: 6)],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Stream error toast
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StreamErrorToast extends StatelessWidget {
+  const _StreamErrorToast({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warning_amber_rounded,
+              color: AppColors.sandMid, size: 22),
+          const SizedBox(width: 10),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -440,40 +744,196 @@ class _PlayerOverlay extends StatelessWidget {
   }
 }
 
-class _ControlButton extends StatefulWidget {
-  const _ControlButton({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.onPressed,
+// ─────────────────────────────────────────────────────────────────────────────
+//  Channel list sidebar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ChannelListPanel extends StatelessWidget {
+  const _ChannelListPanel({
+    required this.channels,
+    required this.currentChannel,
+    required this.scrollController,
+    required this.onSelectChannel,
+    required this.onToggleFavorite,
   });
 
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
+  final List<Channel>           channels;
+  final Channel                 currentChannel;
+  final ScrollController        scrollController;
+  final ValueChanged<Channel>   onSelectChannel;
+  final ValueChanged<Channel>   onToggleFavorite;
 
   @override
-  State<_ControlButton> createState() => _ControlButtonState();
+  Widget build(BuildContext context) {
+    return Container(
+      width: 320,
+      decoration: const BoxDecoration(
+        color: Color(0xEE070B16),          // near-black, slightly transparent
+        border: Border(
+          left: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20, vertical: 16,
+            ),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.darkBorder),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.format_list_bulleted_rounded,
+                    color: AppColors.sandMid, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Channels',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${channels.length}',
+                  style: const TextStyle(
+                    color: Colors.white54, fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // List
+          Expanded(
+            child: channels.isEmpty
+                ? const Center(
+                    child: Text('Loading…',
+                        style: TextStyle(color: Colors.white54)),
+                  )
+                : ListView.builder(
+                    controller: scrollController,
+                    itemCount:  channels.length,
+                    itemExtent: 72,
+                    itemBuilder: (ctx, index) {
+                      final ch        = channels[index];
+                      final isCurrent = ch.url == currentChannel.url;
+                      return _SidebarItem(
+                        channel:     ch,
+                        isCurrent:   isCurrent,
+                        onTap:       () => onSelectChannel(ch),
+                        onLongPress: () => onToggleFavorite(ch),
+                      );
+                    },
+                  ),
+          ),
+
+          // Hint
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Long press to favourite',
+              style: TextStyle(color: Colors.white30, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _ControlButtonState extends State<_ControlButton> {
+class _SidebarItem extends StatefulWidget {
+  const _SidebarItem({
+    required this.channel,
+    required this.isCurrent,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final Channel      channel;
+  final bool         isCurrent;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  State<_SidebarItem> createState() => _SidebarItemState();
+}
+
+class _SidebarItemState extends State<_SidebarItem> {
   bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
+    final ch = widget.channel;
+    final active = _focused || widget.isCurrent;
+
     return FocusableActionDetector(
-      focusNode: widget.focusNode,
-      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _focused ? Colors.white : Colors.black87,
-          foregroundColor: _focused ? Colors.black : Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          color: active
+              ? AppColors.oceanMid.withValues(alpha: 0.6)
+              : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              // Avatar
+              ChannelLogo(
+                logoUrl:      ch.logo,
+                size:         42,
+                borderRadius: 8,
+              ),
+              const SizedBox(width: 12),
+              // Name + group
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      ch.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: widget.isCurrent
+                            ? AppColors.sandMid
+                            : Colors.white,
+                        fontSize:   15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (ch.group != null && ch.group!.isNotEmpty)
+                      Text(
+                        ch.group!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54, fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Favourite indicator
+              if (ch.isFavorite)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(Icons.star_rounded,
+                      size: 16, color: AppColors.sandMid),
+                ),
+            ],
+          ),
         ),
-        icon: Icon(widget.icon),
-        label: Text(widget.label),
-        onPressed: widget.onPressed,
       ),
     );
   }
