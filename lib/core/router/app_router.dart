@@ -1,10 +1,10 @@
 import 'package:go_router/go_router.dart';
 
-import '../models/channel.dart';
-import '../ui/channel_list_screen.dart';
-import '../ui/home_screen.dart';
-import '../ui/player_screen.dart';
-import '../ui/settings_screen.dart';
+import '../../models/channel.dart';
+import '../../features/channels/channel_list_screen.dart';
+import '../../features/home/home_screen.dart';
+import '../../features/player/player_screen.dart';
+import '../../features/settings/settings_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',

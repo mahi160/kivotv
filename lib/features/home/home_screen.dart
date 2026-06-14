@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
-import '../core/theme/gradient_background.dart';
-import '../models/channel.dart';
-import '../providers/channel_count_provider.dart';
-import '../providers/dashboard_provider.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/gradient_background.dart';
+import '../../models/channel.dart';
+import '../../providers/channel_count_provider.dart';
+import '../../providers/dashboard_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});

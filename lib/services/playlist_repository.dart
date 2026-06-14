@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/channel.dart';
 import '../models/playlist.dart';
-import 'database_service.dart';
+import '../core/db/database_service.dart';
 import 'playlist_service.dart';
 
 class PlaylistRepository {

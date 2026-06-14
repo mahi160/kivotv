@@ -5,7 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/bootstrap_provider.dart';
-import 'routes/app_router.dart';
+import 'core/router/app_router.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

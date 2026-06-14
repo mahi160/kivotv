@@ -6,10 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
-import '../models/channel.dart';
-import '../services/playlist_repository.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../models/channel.dart';
+import '../../services/playlist_repository.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key, required this.channel, this.query = ''});

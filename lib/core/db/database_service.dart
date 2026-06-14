@@ -1,8 +1,8 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-import '../models/channel.dart';
-import '../models/playlist.dart';
+import '../../models/channel.dart';
+import '../../models/playlist.dart';
 
 class DatabaseService {
   DatabaseService._();
