@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -24,7 +25,7 @@ class ChannelListScreen extends ConsumerStatefulWidget {
 }
 
 class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
-  static const _pageSize   = 60; // divisible by 3 keeps rows complete
+  static const _pageSize   = 60;
   static const _crossCount = 3;
 
   final _searchController = TextEditingController();
@@ -70,7 +71,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
         query: _query,
         limit: _pageSize,
         offset: _offset,
-        includeBroken: true, // show broken channels grayed out
+        includeBroken: true,
       );
       if (!mounted) return;
       setState(() {
@@ -99,8 +100,13 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   }
 
   void _openPlayer(Channel channel) {
-    if (channel.isBroken) return; // broken — do nothing
+    if (channel.isBroken) return;
     context.go('/player', extra: {'channel': channel, 'query': _query});
+  }
+
+  Future<void> _toggleFavorite(Channel channel) async {
+    await PlaylistRepository.instance.setFavorite(channel, !channel.isFavorite);
+    _resetAndLoad();
   }
 
   @override
@@ -140,7 +146,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Expanded(child: _buildGrid(context)),
+                Expanded(child: _buildGrid()),
               ],
             ),
           ),
@@ -149,7 +155,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     );
   }
 
-  Widget _buildGrid(BuildContext context) {
+  Widget _buildGrid() {
     if (_channels.isEmpty && _loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -162,62 +168,54 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
       );
     }
 
-    // Total items = channels + optional loading footer cell
-    final footerCount = _hasMore ? 1 : 0;
-    final itemCount   = _channels.length + footerCount;
+    final itemCount = _channels.length + (_hasMore ? 1 : 0);
 
     return GridView.builder(
       controller: _scrollController,
+      // Extra padding so focus borders on edge cells are never clipped.
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      clipBehavior: Clip.none,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount:   _crossCount,
-        crossAxisSpacing: AppSpacing.sm,
-        mainAxisSpacing:  AppSpacing.sm,
-        mainAxisExtent:   180,
+        crossAxisSpacing: AppSpacing.md,
+        mainAxisSpacing:  AppSpacing.md,
+        mainAxisExtent:   190,
       ),
       itemCount: itemCount,
       itemBuilder: (context, index) {
-        // Footer spinner occupies one full row (spans via SizedBox width)
         if (index >= _channels.length) {
           return const Center(
             child: SizedBox(
-              width: 32,
-              height: 32,
+              width: 32, height: 32,
               child: CircularProgressIndicator(strokeWidth: 2.5),
             ),
           );
         }
         final ch = _channels[index];
         return _ChannelCard(
+          key: ValueKey(ch.url),
           channel: ch,
           onTap: () => _openPlayer(ch),
-          onToggleFavorite: () async {
-            await PlaylistRepository.instance.setFavorite(ch, !ch.isFavorite);
-            _resetAndLoad();
-          },
-          onTogglePin: () async {
-            await PlaylistRepository.instance.setPinned(ch, !ch.isPinned);
-            _resetAndLoad();
-          },
+          onFavoriteLongPress: () => _toggleFavorite(ch),
         );
       },
     );
   }
 }
 
-// ── Grid card ─────────────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────────
 
 class _ChannelCard extends StatefulWidget {
   const _ChannelCard({
+    super.key,
     required this.channel,
     required this.onTap,
-    required this.onToggleFavorite,
-    required this.onTogglePin,
+    required this.onFavoriteLongPress,
   });
 
   final Channel      channel;
   final VoidCallback onTap;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onTogglePin;
+  final VoidCallback onFavoriteLongPress;
 
   @override
   State<_ChannelCard> createState() => _ChannelCardState();
@@ -230,58 +228,56 @@ class _ChannelCardState extends State<_ChannelCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
-    final isBroken  = ch.isBroken;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final isBroken = ch.isBroken;
 
-    final card = FocusableActionDetector(
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale:    _focused ? 1.04 : 1.0,
-          duration: const Duration(milliseconds: 130),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            decoration: BoxDecoration(
-              color: _focused
-                  ? AppColors.oceanMid
-                  : (isDark
-                      ? Colors.white.withValues(alpha: 0.07)
-                      : Colors.black.withValues(alpha: 0.04)),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              border: Border.all(
-                color: _focused
-                    ? AppColors.sandMid
-                    : (isDark
-                        ? AppColors.darkBorder
-                        : AppColors.lightBorder),
-                width: _focused ? 2 : 1,
-              ),
-              boxShadow: _focused
-                  ? [
-                      BoxShadow(
-                        color: AppColors.sandMid.withValues(alpha: 0.22),
-                        blurRadius: 20,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : null,
-            ),
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            child: Stack(
-              children: [
-                // ── Main content ─────────────────────────────────────────
-                Column(
+    // Surface & border colours adapt to dark / light mode.
+    final surfaceColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.white.withValues(alpha: 0.80);
+
+    Widget card = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      // Outer padding so the focus border never touches the grid cell edge.
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg + 2),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: AppColors.sandMid.withValues(alpha: 0.30),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+        border: Border.all(
+          color: _focused ? AppColors.sandMid : Colors.transparent,
+          width: 2,
+          strokeAlign: BorderSide.strokeAlignOutside,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          color: _focused
+              ? AppColors.oceanDeep
+              : surfaceColor,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // ── Content ────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Logo or letter avatar
-                    _Avatar(
-                      logoUrl: ch.logo,
-                      name:    ch.name,
-                      size:    56,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
+                    // Avatar
+                    _Avatar(logoUrl: ch.logo, name: ch.name, size: 60),
+                    const SizedBox(height: 10),
                     // Channel name
                     Text(
                       ch.name,
@@ -289,87 +285,72 @@ class _ChannelCardState extends State<_ChannelCard> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: isBroken
-                            ? (isDark
-                                ? Colors.white38
-                                : Colors.black38)
-                            : null,
+                        color: _focused
+                            ? Colors.white
+                            : (isBroken
+                                ? (isDark ? Colors.white30 : Colors.black26)
+                                : null),
+                        height: 1.25,
                       ),
                     ),
                     // Provider / group
                     if (ch.group != null && ch.group!.isNotEmpty) ...[
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 4),
                       Text(
                         ch.group!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppColors.darkOnSurfaceVariant
-                              : AppColors.lightOnSurfaceVariant,
+                          color: _focused
+                              ? Colors.white60
+                              : (isDark
+                                  ? AppColors.darkOnSurfaceVariant
+                                  : AppColors.lightOnSurfaceVariant),
                         ),
                       ),
                     ],
                   ],
                 ),
+              ),
 
-                // ── Status badges (top corners) ──────────────────────────
-                if (ch.isFavorite || ch.isPinned)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (ch.isFavorite)
-                          const Icon(
-                            Icons.star_rounded,
-                            size: 16,
-                            color: AppColors.sandMid,
-                          )
-                        else
-                          const SizedBox.shrink(),
-                        if (ch.isPinned)
-                          const Icon(
-                            Icons.push_pin_rounded,
-                            size: 16,
-                            color: AppColors.oceanBright,
-                          )
-                        else
-                          const SizedBox.shrink(),
-                      ],
-                    ),
+              // ── Favourite star badge ────────────────────────────────────
+              if (ch.isFavorite)
+                const Positioned(
+                  top: 8,
+                  right: 10,
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 16,
+                    color: AppColors.sandMid,
                   ),
+                ),
 
-                // ── Broken overlay ───────────────────────────────────────
-                if (isBroken)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
+              // ── Broken badge ────────────────────────────────────────────
+              if (isBroken)
+                Positioned(
+                  bottom: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                        horizontal: 8, vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(6),
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.signal_wifi_off_rounded,
-                            size: 12,
-                            color: Colors.white54,
-                          ),
-                          SizedBox(width: 3),
+                          Icon(Icons.signal_wifi_off_rounded,
+                              size: 11, color: Colors.white54),
+                          SizedBox(width: 4),
                           Text(
                             'Unavailable',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               color: Colors.white54,
                             ),
                           ),
@@ -377,50 +358,37 @@ class _ChannelCardState extends State<_ChannelCard> {
                       ),
                     ),
                   ),
-
-                // ── Action buttons on focus ──────────────────────────────
-                if (_focused && !isBroken)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _ActionBtn(
-                          icon: ch.isFavorite
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          color: AppColors.sandMid,
-                          onTap: widget.onToggleFavorite,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        _ActionBtn(
-                          icon: ch.isPinned
-                              ? Icons.push_pin_rounded
-                              : Icons.push_pin_outlined,
-                          color: AppColors.oceanBright,
-                          onTap: widget.onTogglePin,
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),
     );
 
-    // Reduce opacity for broken streams
-    if (isBroken) {
-      return Opacity(opacity: 0.45, child: card);
-    }
-    return card;
+    // Dim broken channels
+    if (isBroken) card = Opacity(opacity: 0.42, child: card);
+
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onLongPress: widget.onFavoriteLongPress,
+        child: card,
+      ),
+    );
   }
 }
 
-// ── Logo or letter avatar ─────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
   const _Avatar({
@@ -435,26 +403,29 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Try the network logo first
     final url = logoUrl;
     if (url != null && url.isNotEmpty) {
-      return ChannelLogo(logoUrl: url, size: size, borderRadius: size * 0.2);
+      return ChannelLogo(
+        logoUrl: url,
+        size: size,
+        borderRadius: size * 0.18,
+      );
     }
 
-    // Fallback: first letter in a colored circle
+    // Letter fallback
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: _letterColor(name),
-        borderRadius: BorderRadius.circular(size * 0.2),
+        color: _letterBg(name),
+        borderRadius: BorderRadius.circular(size * 0.18),
       ),
       alignment: Alignment.center,
       child: Text(
         letter,
         style: TextStyle(
-          fontSize: size * 0.44,
+          fontSize: size * 0.46,
           fontWeight: FontWeight.w800,
           color: Colors.white,
           height: 1,
@@ -463,50 +434,21 @@ class _Avatar extends StatelessWidget {
     );
   }
 
-  /// Deterministic pastel-ish colour from the channel name so each letter
-  /// gets a consistent, visually distinct background.
-  static Color _letterColor(String name) {
-    const palette = [
-      Color(0xFF1A5276), // deep ocean
+  /// Stable colour derived from the channel name — same channel always
+  /// gets the same colour, different channels get visually distinct ones.
+  static Color _letterBg(String name) {
+    const swatches = [
+      Color(0xFF1A5276), // ocean blue
       Color(0xFF1E8449), // forest green
-      Color(0xFF6E2F8E), // purple
-      Color(0xFF9C4B0A), // amber brown
+      Color(0xFF6E2F8E), // violet
+      Color(0xFF9C4B0A), // amber
       Color(0xFF1A6680), // teal
       Color(0xFF7B241C), // crimson
       Color(0xFF2E4057), // slate
-      Color(0xFF4A235A), // violet
+      Color(0xFF4A5568), // cool grey
     ];
-    if (name.isEmpty) return palette[0];
-    final idx = name.codeUnits.fold(0, (a, b) => a ^ b) % palette.length;
-    return palette[math.max(0, idx)];
-  }
-}
-
-// ── Small action button ───────────────────────────────────────────────────────
-
-class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData     icon;
-  final Color        color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
-    );
+    if (name.isEmpty) return swatches[0];
+    final hash = name.codeUnits.fold(0, (a, b) => a ^ b);
+    return swatches[math.max(0, hash.abs() % swatches.length)];
   }
 }
