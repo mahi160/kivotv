@@ -453,7 +453,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     await PlaylistRepository.instance.setFavorite(
                       _currentChannel, !_currentChannel.isFavorite);
                     await _loadChannels();
-                    setState(() {});
+                    // Bug 3: refresh _currentChannel so the star icon updates.
+                    if (!mounted) return;
+                    final updated = _channels.firstWhere(
+                      (c) => c.url == _currentChannel.url,
+                      orElse: () => _currentChannel,
+                    );
+                    setState(() => _currentChannel = updated);
                   },
                 ),
               ),
@@ -481,7 +487,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   await PlaylistRepository.instance
                       .setFavorite(ch, !ch.isFavorite);
                   await _loadChannels();
-                  setState(() {});
+                  if (!mounted) return;
+                  final updated = _channels.firstWhere(
+                    (c) => c.url == _currentChannel.url,
+                    orElse: () => _currentChannel,
+                  );
+                  setState(() => _currentChannel = updated);
                 },
               ),
               ), // FocusScope
@@ -492,10 +503,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Overlay
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Overlay
@@ -695,10 +702,20 @@ class _CtrlBtnState extends State<_CtrlBtn> {
 
   @override
   Widget build(BuildContext context) {
-    return FocusableActionDetector(
+    return Focus(
       autofocus:  widget.autofocus,
       focusNode:  widget.focusNode,
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
+      onFocusChange: (v) => setState(() => _focused = v),
+      // Consume Select/Enter here so the root key handler never sees it.
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+             event.logicalKey == LogicalKeyboardKey.enter)) {
+          widget.onPressed();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedContainer(
@@ -754,8 +771,18 @@ class _IconActionState extends State<_IconAction> {
     final highlight = _focused || widget.active;
     return Tooltip(
       message: widget.tooltip,
-      child: FocusableActionDetector(
-        onShowFocusHighlight: (v) => setState(() => _focused = v),
+      child: Focus(
+        onFocusChange: (v) => setState(() => _focused = v),
+        // Consume Select/Enter before the root handler can intercept.
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.select ||
+               event.logicalKey == LogicalKeyboardKey.enter)) {
+            widget.onPressed();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
         child: GestureDetector(
           onTap: widget.onPressed,
           child: AnimatedContainer(
