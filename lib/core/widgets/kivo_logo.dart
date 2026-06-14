@@ -10,7 +10,7 @@ import '../theme/app_colors.dart';
 /// - Arms converge at a single right-side point = ▶ play tip
 /// - V-notch on the inner-left edge = K's characteristic indent
 ///
-/// Colour: gradient left (Ocean Deep Blue) → right (Golden Driftwood).
+/// Colour: gradient left (Golden Driftwood) → right (Ocean Deep Blue).
 class KivoLogo extends StatelessWidget {
   const KivoLogo({super.key, this.size = 48});
 

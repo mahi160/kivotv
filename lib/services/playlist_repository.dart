@@ -25,54 +25,69 @@ class PlaylistRepository {
 
   static const _refreshThreshold = Duration(hours: 24);
 
+  // Two built-in sample channels so the app has content on first open.
+  static const _sampleChannels = [
+    Channel(
+      id: 'sample-1live',
+      name: '1LIVE',
+      url: 'http://103.89.248.22:8082/1LIVE/tracks-a1/index.fmp4.m3u8'
+           '?token=c3350d500806be60bc5c9a7859bdfb75e05c9021'
+           '-bd999b1fab19a5867973b1040e73a267-1781457467-1781446667',
+      group: 'Samples',
+    ),
+    Channel(
+      id: 'sample-bpk-1723',
+      name: 'BPK TV',
+      url: 'https://owrcovcrpy.gpcdn.net/bpk-tv/1723/output/index.m3u8',
+      group: 'Samples',
+    ),
+  ];
+
   Future<void> _bootstrap() async {
-    // Ensure the default playlist record exists immediately so Settings
-    // always shows it, even before channels have been fetched.
-    await DatabaseService.instance.upsertPlaylist(
-      name: 'IPTV Org',
-      url: PlaylistService.playlistUrl,
-    );
+    // Store the two built-in sample channels (idempotent — safe on every launch).
+    await _storeSampleChannels();
 
     final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
+    _bumpDashboard();
 
     _bootstrapped = true;
 
-    // Fetch channels in the background (does not block app launch).
-    _seedAndRefresh();
+    // Refresh any user-added playlists that are older than 24 h.
+    _refreshStalePlaylists();
   }
 
-  /// On first launch (no user playlists yet) adds the IPTV Org default and
-  /// fetches its channels in the background.
-  /// On subsequent launches refreshes playlists older than [_refreshThreshold].
-  /// Never blocks bootstrap or the UI.
-  Future<void> _seedAndRefresh() async {
+  Future<void> _storeSampleChannels() async {
+    final playlistId = await DatabaseService.instance.upsertPlaylist(
+      name: 'Samples',
+      url: 'kivo://samples',
+    );
+    await DatabaseService.instance.upsertChannels(
+      playlistId: playlistId,
+      channels: _sampleChannels,
+    );
+  }
+
+  /// Refreshes user-added playlists that are stale (> 24 h old).
+  /// Runs in the background — never blocks bootstrap or the UI.
+  Future<void> _refreshStalePlaylists() async {
     isFetching.value = true;
     try {
       final playlists = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
+      if (userPlaylists.isEmpty) return;
 
-      final storedCount = await DatabaseService.instance.channelCount();
-      if (userPlaylists.isEmpty || storedCount == 0) {
-        // No playlists yet, or playlists exist but channels are empty —
-        // always fetch the default list to guarantee content on first open.
-        await addAndRefreshPlaylist(PlaylistService.playlistUrl);
-        return;
-      }
-
-      final now = DateTime.now();
+      final now   = DateTime.now();
       final stale = userPlaylists.where((p) {
         final last = p.lastRefreshedDateTime;
         if (last == null) return true;
         return now.difference(last) > _refreshThreshold;
       }).toList();
 
-      if (stale.isEmpty) {
-        return;
-      }
+      if (stale.isEmpty) return;
       await refreshAllPlaylists();
     } catch (_) {
-      // Background refresh failures are silent — the UI shows stale data gracefully.
+      // Silent — stale data is shown gracefully.
     } finally {
       isFetching.value = false;
     }

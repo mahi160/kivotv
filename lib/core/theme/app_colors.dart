@@ -86,6 +86,20 @@ abstract final class AppColors {
   /// Pin icon active.
   static const pinActive         = oceanBright;
 
+  // ── Unified D-pad focus affordance ────────────────────────────────────────
+  // SINGLE source of truth for the focus highlight colour. Every focusable
+  // widget (cards, nav, player controls, sidebar, theme picker) MUST use this
+  // so the user always recognises "what is selected" the same way.
+  //
+  // Ocean blue on light backgrounds  → high contrast on ivory.
+  // Golden driftwood on dark backgrounds → high contrast on near-black.
+  /// Focus ring / border / icon highlight colour.
+  static Color focus(bool isDark) => isDark ? goldenDriftwood : oceanDeepBlue;
+
+  /// Translucent focus fill (used by widgets that tint a background on focus).
+  static Color focusFill(bool isDark) =>
+      (isDark ? goldenDriftwood : oceanDeepBlue).withValues(alpha: 0.14);
+
   // ── Gradients ─────────────────────────────────────────────────────────────
   /// Home screen — dark.
   static const homeGradientDark = RadialGradient(

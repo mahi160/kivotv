@@ -208,7 +208,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
         crossAxisCount:   _crossCount,
         crossAxisSpacing: AppSpacing.md,
         mainAxisSpacing:  AppSpacing.md,
-        mainAxisExtent:   190,
+        mainAxisExtent:   AppSpacing.tvGridCardExtent,
       ),
       itemCount: itemCount,
       itemBuilder: (context, index) {

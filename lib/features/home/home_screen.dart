@@ -196,7 +196,7 @@ class _DashboardSection extends StatelessWidget {
                     crossAxisCount:   3,
                     crossAxisSpacing: AppSpacing.md,
                     mainAxisSpacing:  AppSpacing.md,
-                    mainAxisExtent:   190,
+                    mainAxisExtent:   AppSpacing.tvGridCardExtent,
                   ),
                   itemCount: channels.length,
                   itemBuilder: (context, index) => ChannelCard(

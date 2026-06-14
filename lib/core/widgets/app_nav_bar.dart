@@ -142,9 +142,7 @@ class _NavIconState extends State<_NavIcon> {
         ? AppColors.oceanDeepBlue          // consistent on both themes
         : onSurfaceVariant;                // readable on both bg colours
 
-    final focusBg = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
+    final focusBg = AppColors.focusFill(isDark);
     final activeBg = isDark
         ? AppColors.sandMid.withValues(alpha: 0.12)
         : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
@@ -178,7 +176,7 @@ class _NavIconState extends State<_NavIcon> {
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               border: Border.all(
                 color: _focused
-                    ? AppColors.oceanDeepBlue.withValues(alpha: 0.6)
+                    ? AppColors.focus(isDark)
                     : Colors.transparent,
               ),
             ),

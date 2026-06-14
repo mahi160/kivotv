@@ -22,17 +22,15 @@ abstract final class AppSpacing {
   /// Vertical gap below the screen header row.
   static const tvHeaderGap = 28.0;
 
-  /// Height of a channel list tile.
-  static const tvTileHeight = 86.0;
+  /// Fixed row height of a player-sidebar channel tile (must match the
+  /// ListView itemExtent so jump-to-current scrolling stays accurate).
+  static const tvSidebarTile = 72.0;
 
-  /// Width of a horizontal channel card (home dashboard rows).
-  static const tvCardWidth = 250.0;
+  /// Fixed cell height of a channel card in the home + channels grids.
+  static const tvGridCardExtent = 190.0;
 
-  /// Height of a horizontal scroll row on the home dashboard.
-  static const tvRowHeight = 156.0;
-
-  /// Gap between cards inside a horizontal row.
-  static const tvCardGap = 14.0;
+  /// Width of the player channel-list sidebar panel.
+  static const tvSidebarWidth = 320.0;
 
   // ── Border radii ─────────────────────────────────────────────────────────
   static const radiusSm = 16.0;

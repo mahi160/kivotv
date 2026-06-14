@@ -211,7 +211,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Scroll to current channel.
         final idx = _currentIndex;
         if (idx > 0 && _sidebarScroll.hasClients) {
-          const itemH = 72.0;
+          const itemH = AppSpacing.tvSidebarTile;
           _sidebarScroll.jumpTo(
             ((idx * itemH) - 200).clamp(0, _sidebarScroll.position.maxScrollExtent),
           );
@@ -466,7 +466,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               curve: Curves.easeOut,
               top:    0,
               bottom: 0,
-              right:  _showChannelList ? 0 : -340,
+              right:  _showChannelList ? 0 : -(AppSpacing.tvSidebarWidth + 20),
               child: FocusScope(
               node: _sidebarScopeNode,
               child: _ChannelListPanel(
@@ -720,7 +720,7 @@ class _CtrlBtnState extends State<_CtrlBtn> {
                 ? Colors.white
                 : Colors.black.withValues(alpha: 0.55),
             border: Border.all(
-              color: _focused ? AppColors.sandMid : Colors.white30,
+              color: _focused ? AppColors.focus(true) : Colors.white30,
               width: _focused ? 2 : 1,
             ),
           ),
@@ -761,7 +761,10 @@ class _IconActionState extends State<_IconAction> {
 
   @override
   Widget build(BuildContext context) {
+    // Focused → unified golden focus colour; merely-active (list open /
+    // favourited) → sandy accent, so focus stays distinguishable from state.
     final highlight = _focused || widget.active;
+    final hl = _focused ? AppColors.focus(true) : AppColors.sandMid;
     return Tooltip(
       message: widget.tooltip,
       child: Focus(
@@ -783,17 +786,17 @@ class _IconActionState extends State<_IconAction> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: highlight
-                  ? AppColors.sandMid.withValues(alpha: 0.18)
+                  ? hl.withValues(alpha: 0.18)
                   : Colors.black.withValues(alpha: 0.45),
               border: Border.all(
-                color: highlight ? AppColors.sandMid : Colors.white24,
+                color: highlight ? hl : Colors.white24,
                 width: highlight ? 2 : 1,
               ),
             ),
             child: Icon(
               widget.icon,
               size: 24,
-              color: highlight ? AppColors.sandMid : Colors.white70,
+              color: highlight ? hl : Colors.white70,
             ),
           ),
         ),
@@ -908,7 +911,7 @@ class _ChannelListPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 320,
+      width: AppSpacing.tvSidebarWidth,
       decoration: const BoxDecoration(
         color: Color(0xEE070B16),          // near-black, slightly transparent
         border: Border(
@@ -962,7 +965,7 @@ class _ChannelListPanel extends StatelessWidget {
                 : ListView.builder(
                     controller: scrollController,
                     itemCount:  channels.length,
-                    itemExtent: 72,
+                    itemExtent: AppSpacing.tvSidebarTile,
                     itemBuilder: (ctx, index) {
                       final ch        = channels[index];
                       final isCurrent = ch.url == currentChannel.url;
@@ -1014,7 +1017,6 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final ch = widget.channel;
-    final active = _focused || widget.isCurrent;
 
     return Focus(
       onFocusChange: (v) => setState(() => _focused = v),
@@ -1032,9 +1034,13 @@ class _SidebarItemState extends State<_SidebarItem> {
         onLongPress: widget.onLongPress,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          color: active
-              ? AppColors.oceanMid.withValues(alpha: 0.6)
-              : Colors.transparent,
+          // Focused row uses the unified golden focus tint; the
+          // currently-playing row uses an ocean tint so the two read apart.
+          color: _focused
+              ? AppColors.focus(true).withValues(alpha: 0.22)
+              : widget.isCurrent
+                  ? AppColors.oceanMid.withValues(alpha: 0.6)
+                  : Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [

@@ -58,7 +58,7 @@ class _ChannelCardState extends State<ChannelCard> {
         boxShadow: _focused
             ? [
                 BoxShadow(
-                  color: AppColors.warmSandyBeige.withValues(alpha: 0.28),
+                  color: AppColors.focus(isDark).withValues(alpha: 0.28),
                   blurRadius: 16,
                   spreadRadius: 2,
                 ),
@@ -66,7 +66,7 @@ class _ChannelCardState extends State<ChannelCard> {
             : null,
         border: Border.all(
           color: _focused
-              ? AppColors.warmSandyBeige
+              ? AppColors.focus(isDark)
               : (isDark ? AppColors.oceanMid : AppColors.lightBorder),
           width: _focused ? 2 : 1,
           strokeAlign: BorderSide.strokeAlignOutside,

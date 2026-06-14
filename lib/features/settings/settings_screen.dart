@@ -353,6 +353,10 @@ class _ThemeOptionState extends State<_ThemeOption> {
   @override
   Widget build(BuildContext context) {
     final highlight = widget.active || _focused;
+    // Focused options use the unified focus colour; the persistently selected
+    // option uses ocean blue so the two states stay distinguishable.
+    final hlColor =
+        _focused ? AppColors.focus(widget.isDark) : AppColors.oceanDeepBlue;
     return Focus(
       onFocusChange: (v) => setState(() => _focused = v),
       onKeyEvent: (_, event) {
@@ -374,12 +378,12 @@ class _ThemeOptionState extends State<_ThemeOption> {
           ),
           decoration: BoxDecoration(
             color: highlight
-                ? AppColors.oceanDeepBlue.withValues(alpha: 0.12)
+                ? hlColor.withValues(alpha: 0.12)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             border: Border.all(
               color: highlight
-                  ? AppColors.oceanDeepBlue
+                  ? hlColor
                   : (widget.isDark ? AppColors.darkBorder : AppColors.lightBorder),
               width: highlight ? 2 : 1,
             ),
@@ -391,7 +395,7 @@ class _ThemeOptionState extends State<_ThemeOption> {
                 widget.icon,
                 size: 26,
                 color: highlight
-                    ? AppColors.oceanDeepBlue
+                    ? hlColor
                     : (widget.isDark
                         ? AppColors.darkOnSurfaceVariant
                         : AppColors.lightOnSurfaceVariant),
@@ -401,7 +405,7 @@ class _ThemeOptionState extends State<_ThemeOption> {
                 widget.label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: highlight
-                      ? AppColors.oceanDeepBlue
+                      ? hlColor
                       : null,
                   fontWeight: highlight
                       ? FontWeight.w700
