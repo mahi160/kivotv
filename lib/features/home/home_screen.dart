@@ -7,7 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
-import '../../core/widgets/channel_logo.dart';
+import '../../core/widgets/channel_card.dart';
 import '../../models/channel.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
@@ -158,17 +158,22 @@ class _DashboardSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          // Extra vertical space (8px each side) so focus ring never clips.
           SizedBox(
-            height: AppSpacing.tvRowHeight,
+            height: 206, // 190 card + 8 top + 8 bottom
             child: channels.isEmpty
                 ? _EmptyRow(text: emptyText)
                 : ListView.builder(
                     scrollDirection: Axis.horizontal,
+                    // Horizontal padding gives focus ring room on both ends.
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
+                    clipBehavior: Clip.none,
                     itemCount: channels.length,
-                    itemExtent: AppSpacing.tvCardWidth + AppSpacing.tvCardGap,
+                    itemExtent: 210, // card width + inter-card gap
                     itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.tvCardGap),
-                      child: _ChannelCard(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: ChannelCard(
                         channel: channels[index],
                         onTap: () => onOpen(channels[index]),
                       ),
@@ -181,111 +186,27 @@ class _DashboardSection extends StatelessWidget {
   }
 }
 
+
 class _EmptyRow extends StatelessWidget {
   const _EmptyRow({required this.text});
-
   final String text;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyLarge,
-      ),
-    );
-  }
-}
-
-class _ChannelCard extends StatefulWidget {
-  const _ChannelCard({required this.channel, required this.onTap});
-
-  final Channel channel;
-  final VoidCallback onTap;
-
-  @override
-  State<_ChannelCard> createState() => _ChannelCardState();
-}
-
-class _ChannelCardState extends State<_ChannelCard> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return FocusableActionDetector(
-      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(26),
-        child: AnimatedScale(
-          scale: _focused ? 1.06 : 1,
-          duration: const Duration(milliseconds: 130),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: _focused
-                    ? const [AppColors.focusCardStart, AppColors.focusCardEnd]
-                    : [
-                        Colors.white.withValues(alpha: 0.12),
-                        Colors.white.withValues(alpha: 0.05),
-                      ],
-              ),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(
-                color: _focused
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.12),
-                width: _focused ? 2.5 : 1,
-              ),
-              boxShadow: _focused
-                  ? [
-                      BoxShadow(
-                        color: AppColors.focusCardStart.withValues(alpha: 0.35),
-                        blurRadius: 26,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ChannelLogo(
-                  logoUrl: widget.channel.logo,
-                  size: 40,
-                  borderRadius: 10,
-                  backgroundColor: Colors.white.withValues(alpha: 0.12),
-                ),
-                const Spacer(),
-                Text(
-                  widget.channel.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  widget.channel.group ?? 'Ungrouped',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
         ),
       ),
+      child: Text(text, style: Theme.of(context).textTheme.bodyLarge),
     );
   }
 }
