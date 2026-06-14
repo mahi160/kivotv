@@ -146,6 +146,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const AppNavBar(active: NavDestination.settings),
               const SizedBox(height: AppSpacing.md),
               Expanded(
+              child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: Center(
               child: Container(
               width: 760,
@@ -221,14 +223,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onSubmitted: (_) => busy ? null : _addPlaylist(),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Row(
+                  Wrap(
+                    spacing: AppSpacing.xs + 4,
+                    runSpacing: AppSpacing.xs,
                     children: [
                       ElevatedButton.icon(
                         onPressed: busy ? null : _addPlaylist,
                         icon: const Icon(Icons.add_rounded),
                         label: Text(_isAdding ? 'Adding…' : 'Add Playlist'),
                       ),
-                      const SizedBox(width: AppSpacing.xs + 4),
                       ElevatedButton.icon(
                         onPressed: busy ? null : _refreshPlaylist,
                         icon: const Icon(Icons.refresh_rounded),
@@ -254,6 +257,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ),
+        ), // SingleChildScrollView
         ),
       ],
     ),
