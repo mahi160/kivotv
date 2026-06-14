@@ -10,7 +10,7 @@
         android:required="false" />
 
     <application
-        android:label="kivo"
+        android:label="Kivo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/tv_banner">

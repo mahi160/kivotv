@@ -10,6 +10,7 @@ import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
 import '../../providers/channel_count_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../providers/fetch_status_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -57,7 +58,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Scaffold(
       body: GradientBackground(
         variant: GradientVariant.home,
-        child: Padding(
+        child: Column(
+          children: [
+            // Slim progress bar shown while background playlist fetch runs.
+            if (ref.watch(isFetchingProvider).asData?.value == true)
+              LinearProgressIndicator(
+                minHeight: 3,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.sandMid),
+              ),
+            Expanded(
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.tvEdge,
               AppSpacing.tvHeaderGap,
@@ -105,8 +116,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
           ),
-        ),
-      ),
+          ), // Expanded
+          ], // Column children
+        ), // outer Column (GradientBackground child)
+      ), // GradientBackground
+    ), // Scaffold
     );
   }
 }

@@ -11,15 +11,10 @@ class PlaylistRepository {
 
   static final PlaylistRepository instance = PlaylistRepository._();
 
-  static const exampleChannel = Channel(
-    id: 'example-bpk-tv-1711',
-    name: 'Example Channel',
-    url: 'https://owrcovcrpy.gpcdn.net/bpk-tv/1711/output/index.m3u8',
-    group: 'Example',
-  );
-
-  final ValueNotifier<int> channelCount = ValueNotifier<int>(0);
-  final ValueNotifier<int> dashboardVersion = ValueNotifier<int>(0);
+  final ValueNotifier<int>  channelCount     = ValueNotifier<int>(0);
+  final ValueNotifier<int>  dashboardVersion = ValueNotifier<int>(0);
+  /// True while a background playlist fetch is in progress.
+  final ValueNotifier<bool> isFetching       = ValueNotifier<bool>(false);
 
   bool _bootstrapped = false;
   Future<void>? _bootstrapFuture;
@@ -36,11 +31,6 @@ class PlaylistRepository {
     channelCount.value = storedCount;
     debugPrint('Loaded $storedCount channels from SQLite');
 
-    await _storeExampleChannel();
-    storedCount = await DatabaseService.instance.channelCount();
-    channelCount.value = storedCount;
-    _bumpDashboard();
-
     _bootstrapped = true;
 
     // Seed default playlist on first launch, then auto-refresh stale ones.
@@ -52,18 +42,17 @@ class PlaylistRepository {
   /// On subsequent launches refreshes playlists older than [_refreshThreshold].
   /// Never blocks bootstrap or the UI.
   Future<void> _seedAndRefresh() async {
+    isFetching.value = true;
     try {
       final playlists = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
 
       if (userPlaylists.isEmpty) {
-        // First launch: seed and fetch the default IPTV Org playlist.
         debugPrint('First launch — seeding default IPTV Org playlist...');
         await addAndRefreshPlaylist(PlaylistService.playlistUrl);
         return;
       }
 
-      // Subsequent launches: refresh playlists not updated within the threshold.
       final now = DateTime.now();
       final stale = userPlaylists.where((p) {
         final last = p.lastRefreshedDateTime;
@@ -81,6 +70,8 @@ class PlaylistRepository {
     } catch (error, stackTrace) {
       debugPrint('Background seed/refresh failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      isFetching.value = false;
     }
   }
 
@@ -91,8 +82,6 @@ class PlaylistRepository {
     // Default seeding is handled once at first launch by _seedAndRefresh().
     // Re-adding IPTV Org every refresh would silently resurrect it after the
     // user deliberately deletes it from Settings.
-    await _storeExampleChannel();
-
     final playlists = await DatabaseService.instance.playlists();
     for (final playlist in playlists) {
       if (playlist.isBuiltIn) continue;
@@ -143,17 +132,6 @@ class PlaylistRepository {
     channelCount.value = count;
     _bumpDashboard();
     return count;
-  }
-
-  Future<void> _storeExampleChannel() async {
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'Examples',
-      url: 'kivo://examples',
-    );
-    await DatabaseService.instance.upsertChannels(
-      playlistId: playlistId,
-      channels: const [exampleChannel],
-    );
   }
 
   Future<List<Playlist>> playlists() => DatabaseService.instance.playlists();
