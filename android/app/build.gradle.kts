@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.kivo.tv"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -19,8 +19,8 @@ android {
         applicationId = "com.kivo.tv"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 21   // media_kit minimum; covers Android 5+ and all Android TV releases
+        targetSdk = 35 // Android 15
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
