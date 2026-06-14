@@ -87,7 +87,10 @@ class PlaylistRepository {
   Future<int> refreshPlaylist() => refreshAllPlaylists();
 
   Future<int> refreshAllPlaylists() async {
-    await addPlaylist(url: PlaylistService.playlistUrl, name: 'IPTV Org');
+    // Do NOT add any default playlist here.
+    // Default seeding is handled once at first launch by _seedAndRefresh().
+    // Re-adding IPTV Org every refresh would silently resurrect it after the
+    // user deliberately deletes it from Settings.
     await _storeExampleChannel();
 
     final playlists = await DatabaseService.instance.playlists();
