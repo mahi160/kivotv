@@ -96,23 +96,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       children: [
                         _DashboardSection(
                           icon: Icons.star_rounded,
-                          title: 'Favorites',
+                          title: 'Favourites',
                           channels: data.favorites,
-                          emptyText: 'Press ★ on channels you love.',
+                          emptyText: 'Long press any channel to add it here.',
                           onOpen: _open,
                         ),
                         _DashboardSection(
                           icon: Icons.history_rounded,
                           title: 'Recently watched',
                           channels: data.recent,
-                          emptyText: 'Start watching to build your row.',
+                          emptyText: 'Channels you watch will appear here.',
                           onOpen: _open,
                         ),
                         _DashboardSection(
                           icon: Icons.push_pin_rounded,
-                          title: 'Pinned channels',
+                          title: 'Pinned',
                           channels: data.pinned,
-                          emptyText: 'Pin channels from All Channels.',
+                          emptyText: 'Long press a channel in the player to pin it.',
                           onOpen: _open,
                         ),
                       ],
