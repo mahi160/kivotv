@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_spacing.dart';
-import '../../core/utils/focus_utils.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
 import '../../core/widgets/channel_card.dart';
@@ -26,8 +26,10 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   static const _pageSize   = 60;
   static const _crossCount = 3;
 
-  final _searchController = TextEditingController();
-  final _scrollController = ScrollController();
+  final _searchController  = TextEditingController();
+  final _scrollController  = ScrollController();
+  final _searchFocusNode   = FocusNode();
+  final _gridScopeNode     = FocusScopeNode();
   final List<Channel> _channels = [];
   String _query   = '';
   Timer? _searchTimer;
@@ -47,6 +49,8 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     _searchTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
+    _gridScopeNode.dispose();
     super.dispose();
   }
 
@@ -117,8 +121,14 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // If a text field has focus, unfocus it first; second Back navigates.
-        if (dismissKeyboardIfOpen()) return;
+        if (_searchFocusNode.hasFocus) {
+          _searchFocusNode.unfocus();
+          // Move focus into the channel grid so D-pad works immediately.
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) { if (mounted) _gridScopeNode.requestFocus(); },
+          );
+          return;
+        }
         context.go('/');
       },
       child: Scaffold(
@@ -136,19 +146,36 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
               children: [
                 const AppNavBar(active: NavDestination.channels),
                 const SizedBox(height: AppSpacing.md),
-                TextField(
-                  controller: _searchController,
-                  autofocus: false,
-                  onChanged: _onSearchChanged,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                  decoration: const InputDecoration(
-                    filled: true,
-                    hintText: 'Search channels…',
-                    prefixIcon: Icon(Icons.search_rounded),
+                // D-pad Down on the search field jumps straight to the grid.
+                Focus(
+                  onKeyEvent: (_, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _gridScopeNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    autofocus: false,
+                    onChanged: _onSearchChanged,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    decoration: const InputDecoration(
+                      filled: true,
+                      hintText: 'Search channels…',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Expanded(child: _buildGrid()),
+                Expanded(
+                  child: FocusScope(
+                    node: _gridScopeNode,
+                    child: _buildGrid(),
+                  ),
+                ),
               ],
             ),
           ),

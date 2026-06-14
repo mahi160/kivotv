@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/utils/focus_utils.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
 import '../../models/playlist.dart';
@@ -24,6 +23,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _playlistUrlController = TextEditingController();
+  final _urlFocusNode          = FocusNode();
+  final _formScopeNode         = FocusScopeNode();
   bool _isRefreshing = false;
   bool _isAdding = false;
   int? _channelCount;
@@ -39,6 +40,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void dispose() {
     _playlistUrlController.dispose();
+    _urlFocusNode.dispose();
+    _formScopeNode.dispose();
     super.dispose();
   }
 
@@ -127,7 +130,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (dismissKeyboardIfOpen()) return;
+        if (_urlFocusNode.hasFocus) {
+          _urlFocusNode.unfocus();
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) { if (mounted) _formScopeNode.requestFocus(); },
+          );
+          return;
+        }
         context.go('/');
       },
       child: Scaffold(
@@ -211,19 +220,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: AppSpacing.md),
                   ],
                   // ── Add new playlist ──────────────────────────────────
-                  TextField(
-                    controller: _playlistUrlController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      filled: true,
-                      labelText: 'M3U playlist URL',
-                      hintText: 'https://example.com/playlist.m3u',
-                      prefixIcon: Icon(Icons.link_rounded),
+                  Focus(
+                    onKeyEvent: (_, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        _formScopeNode.requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _playlistUrlController,
+                      focusNode: _urlFocusNode,
+                      autofocus: false,
+                      decoration: const InputDecoration(
+                        filled: true,
+                        labelText: 'M3U playlist URL',
+                        hintText: 'https://example.com/playlist.m3u',
+                        prefixIcon: Icon(Icons.link_rounded),
+                      ),
+                      onSubmitted: (_) => busy ? null : _addPlaylist(),
                     ),
-                    onSubmitted: (_) => busy ? null : _addPlaylist(),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Wrap(
+                  FocusScope(
+                    node: _formScopeNode,
+                    child: Wrap(
                     spacing: AppSpacing.xs + 4,
                     runSpacing: AppSpacing.xs,
                     children: [
@@ -241,6 +263,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ), // FocusScope
                   const SizedBox(height: AppSpacing.md),
                   if (_channelCount != null)
                     _MessagePill(
