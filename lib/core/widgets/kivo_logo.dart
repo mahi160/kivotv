@@ -39,8 +39,8 @@ class _KivoLogoPainter extends CustomPainter {
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
       colors: const [
-        AppColors.oceanDeepBlue,   // #5D768B
-        AppColors.goldenDriftwood, // #E3C9A4
+        AppColors.goldenDriftwood, // #E3C9A4 — warm golden at the spine/left
+        AppColors.oceanDeepBlue,   // #5D768B — ocean blue at the play tip/right
       ],
     ).createShader(Rect.fromLTWH(0, 0, w, h));
 

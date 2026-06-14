@@ -78,7 +78,7 @@ class _ChannelCardState extends State<ChannelCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
-          color: _focused ? AppColors.oceanMid : surfaceColor,
+          color: surfaceColor, // no bg colour change on focus — border + glow is enough
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -100,11 +100,9 @@ class _ChannelCardState extends State<ChannelCard> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: _focused
-                            ? (isDark ? Colors.white : AppColors.lightSurface)
-                            : (isBroken
-                                ? (isDark ? Colors.white30 : Colors.black26)
-                                : null),
+                        color: isBroken
+                            ? (isDark ? Colors.white30 : Colors.black26)
+                            : null,
                         height: 1.25,
                       ),
                     ),
@@ -116,9 +114,7 @@ class _ChannelCardState extends State<ChannelCard> {
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: _focused
-                              ? (isDark ? Colors.white60 : AppColors.lightSurface.withValues(alpha: 0.75))
-                              : (isDark
+                          color: (isDark
                                   ? AppColors.darkOnSurfaceVariant
                                   : AppColors.lightOnSurfaceVariant),
                         ),
