@@ -498,14 +498,14 @@ class AppTheme {
 | 19 | [QUAL-2] Stream M3U parsing | ✅ done |
 | 20 | [QUAL-4] + [UX-6] Friendly errors + playlist list/delete in settings | ✅ done |
 | 21 | [QUAL-6] pubspec description | ✅ done |
-| 22 | [ARCH-1] Introduce Riverpod providers (channel, dashboard) | ⬜ next |
-| 23 | [ARCH-2] Bootstrap as FutureProvider + splash screen | ⬜ |
-| 24 | [ARCH-3] Feature-first folder restructure | ⬜ |
-| 25 | [QUAL-3] Cancellable network requests | ⬜ |
-| 26 | [FEAT-2] Channel logos with cached_network_image | ⬜ |
-| 27 | [FEAT-1] Group browser screen | ⬜ |
-| 28 | [FEAT-5] Auto-refresh on startup | ⬜ |
-| 29 | [FEAT-6] Expand test coverage | ⬜ |
+| 22 | [ARCH-1] Riverpod providers: dashboardProvider, channelCountProvider | ✅ done |
+| 23 | [ARCH-2] Bootstrap FutureProvider + splash + error screen | ✅ done |
+| 24 | [ARCH-3] Feature-first folder structure | ✅ done |
+| 25 | [QUAL-3] Cancellable network requests | ✅ done |
+| 26 | [FEAT-2] Channel logos with cached_network_image | ✅ done |
+| 27 | [FEAT-5] Auto-refresh stale playlists on startup | ✅ done |
+| 28 | [FEAT-6] Expand tests: Channel, Playlist, AppColors (22 total) | ✅ done |
+| 29 | [FEAT-1] Group browser screen | ⬜ future |
 
 ---
 
