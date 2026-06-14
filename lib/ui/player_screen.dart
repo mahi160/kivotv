@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../core/theme/app_colors.dart';
+import '../core/theme/app_spacing.dart';
 import '../models/channel.dart';
 import '../services/playlist_repository.dart';
 
@@ -230,17 +233,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 return const Center(child: CircularProgressIndicator());
               },
             ),
-            if (_showOverlay)
-              _PlayerOverlay(
-                channel: _currentChannel,
-                player: _player,
-                previousFocusNode: _previousFocusNode,
-                playPauseFocusNode: _playPauseFocusNode,
-                nextFocusNode: _nextFocusNode,
-                onPrevious: _playPrevious,
-                onNext: _playNext,
-                onInteraction: _scheduleOverlayHide,
+            // Animated overlay — fades in/out instead of abrupt show/hide.
+            AnimatedOpacity(
+              opacity: _showOverlay ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: !_showOverlay,
+                child: _PlayerOverlay(
+                  channel: _currentChannel,
+                  channelIndex: _currentIndex,
+                  channelTotal: _channels.length,
+                  player: _player,
+                  previousFocusNode: _previousFocusNode,
+                  playPauseFocusNode: _playPauseFocusNode,
+                  nextFocusNode: _nextFocusNode,
+                  onPrevious: _playPrevious,
+                  onNext: _playNext,
+                  onInteraction: _scheduleOverlayHide,
+                  onBack: () => context.go('/channels'),
+                ),
               ),
+            ),
           ],
         ),
       ),
@@ -251,6 +264,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 class _PlayerOverlay extends StatelessWidget {
   const _PlayerOverlay({
     required this.channel,
+    required this.channelIndex,
+    required this.channelTotal,
     required this.player,
     required this.previousFocusNode,
     required this.playPauseFocusNode,
@@ -258,9 +273,12 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onInteraction,
+    required this.onBack,
   });
 
   final Channel channel;
+  final int channelIndex;   // 0-based; -1 = unknown
+  final int channelTotal;
   final Player player;
   final FocusNode previousFocusNode;
   final FocusNode playPauseFocusNode;
@@ -268,36 +286,94 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onInteraction;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
+    final indexLabel = channelIndex >= 0 && channelTotal > 0
+        ? '${channelIndex + 1} / $channelTotal'
+        : '';
+
     return Container(
-      color: Colors.black54,
-      padding: const EdgeInsets.all(32),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xCC000000), Colors.transparent, Color(0xCC000000)],
+          stops: [0.0, 0.4, 1.0],
+        ),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.tvEdge),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            channel.name,
-            style: Theme.of(context).textTheme.headlineMedium,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          // ── Top bar: back button + channel info ────────────────────
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 28),
+                tooltip: 'Back to channels',
+                onPressed: () {
+                  onInteraction();
+                  onBack();
+                },
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      channel.name,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                        shadows: [const Shadow(blurRadius: 8)],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (channel.group != null)
+                      Text(
+                        channel.group!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (indexLabel.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xxs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.oceanMid.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  ),
+                  child: Text(
+                    indexLabel,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 24),
+          const Spacer(),
+          // ── Bottom: playback controls ────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _ControlButton(
                 focusNode: previousFocusNode,
-                icon: Icons.skip_previous,
+                icon: Icons.skip_previous_rounded,
                 label: 'Previous',
-                onPressed: () {
-                  onInteraction();
-                  onPrevious();
-                },
+                onPressed: () { onInteraction(); onPrevious(); },
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: AppSpacing.md),
               StreamBuilder<bool>(
                 stream: player.stream.playing,
                 initialData: false,
@@ -305,24 +381,18 @@ class _PlayerOverlay extends StatelessWidget {
                   final playing = snapshot.data ?? false;
                   return _ControlButton(
                     focusNode: playPauseFocusNode,
-                    icon: playing ? Icons.pause : Icons.play_arrow,
+                    icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     label: playing ? 'Pause' : 'Play',
-                    onPressed: () {
-                      onInteraction();
-                      player.playOrPause();
-                    },
+                    onPressed: () { onInteraction(); player.playOrPause(); },
                   );
                 },
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: AppSpacing.md),
               _ControlButton(
                 focusNode: nextFocusNode,
-                icon: Icons.skip_next,
+                icon: Icons.skip_next_rounded,
                 label: 'Next',
-                onPressed: () {
-                  onInteraction();
-                  onNext();
-                },
+                onPressed: () { onInteraction(); onNext(); },
               ),
             ],
           ),
