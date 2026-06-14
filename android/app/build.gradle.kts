@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Load keystore credentials from a local file that is never committed to git.
+// Copy keystore.properties.template → keystore.properties and fill in values.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().also { props ->
+    if (keystorePropertiesFile.exists()) props.load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -14,22 +22,45 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        // Release config: reads from keystore.properties (never in git).
+        // Falls back to debug signing when the file is absent (CI without keystore).
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias     = keystoreProperties["keyAlias"]     as String
+                keyPassword  = keystoreProperties["keyPassword"]  as String
+                storeFile    = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.kivo.tv"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21   // media_kit minimum; covers Android 5+ and all Android TV releases
-        targetSdk = 35 // Android 15
+        minSdk    = 21   // media_kit minimum; covers all Android TV hardware
+        targetSdk = 35   // Android 15
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Use release keystore when available, debug otherwise (local dev / CI).
+            signingConfig = if (keystorePropertiesFile.exists())
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
+
+            // Enable R8 full-mode shrinking + obfuscation for release APK/AAB.
+            isMinifyEnabled   = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 }
