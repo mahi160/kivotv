@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'kivo_logo.dart';
 
 enum NavDestination { home, channels, settings }
 
@@ -69,27 +70,23 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // K-play logo on a rounded ocean-blue tile.
     return Container(
-      width: AppSpacing.logoSize * 0.7,
-      height: AppSpacing.logoSize * 0.7,
+      width:  AppSpacing.logoSize * 0.72,
+      height: AppSpacing.logoSize * 0.72,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppSpacing.logoRadius * 0.7),
-        gradient: const LinearGradient(
-          colors: [AppColors.logoGradientStart, AppColors.logoGradientEnd],
-        ),
+        color: AppColors.oceanDeepBlue,
+        borderRadius: BorderRadius.circular(AppSpacing.logoRadius * 0.6),
         boxShadow: [
           BoxShadow(
-            color: AppColors.logoGradientStart.withValues(alpha: 0.30),
-            blurRadius: 14,
+            color: AppColors.oceanDeepBlue.withValues(alpha: 0.40),
+            blurRadius: 12,
             spreadRadius: 1,
           ),
         ],
       ),
-      child: const Icon(
-        Icons.live_tv_rounded,
-        size: AppSpacing.iconMd,
-        color: Colors.white,
-      ),
+      padding: const EdgeInsets.all(6),
+      child: const KivoLogo(),
     );
   }
 }

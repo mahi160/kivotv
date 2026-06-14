@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/kivo_logo.dart';
 import 'providers/bootstrap_provider.dart';
 import 'core/router/app_router.dart';
 import 'providers/theme_provider.dart';
@@ -84,26 +85,21 @@ class _SplashScreen extends StatelessWidget {
           children: [
             // Logo mark
             Container(
-              width: 96,
-              height: 96,
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
-                gradient: const LinearGradient(
-                  colors: [AppColors.logoGradientStart, AppColors.logoGradientEnd],
-                ),
+                color: AppColors.oceanDeepBlue,
+                borderRadius: BorderRadius.circular(26),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.logoGradientStart.withValues(alpha: 0.35),
+                    color: AppColors.oceanDeepBlue.withValues(alpha: 0.45),
                     blurRadius: 32,
-                    spreadRadius: 2,
+                    spreadRadius: 4,
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.live_tv_rounded,
-                size: 48,
-                color: Colors.white,
-              ),
+              padding: const EdgeInsets.all(14),
+              child: const KivoLogo(),
             ),
             const SizedBox(height: 28),
             Text(
