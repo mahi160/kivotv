@@ -12,13 +12,24 @@ class PlaylistService {
 
   static const playlistUrl = 'https://iptv-org.github.io/iptv/index.m3u';
 
+  /// Currently active HTTP client — cancelled when a new fetch starts.
+  HttpClient? _activeClient;
+
   /// Fetches and parses an M3U playlist without loading it fully into memory.
   ///
-  /// The response body is processed line-by-line via a streaming transformer,
-  /// so even 200 MB playlist files never allocate a single giant String.
+  /// Calling this while a previous fetch is in progress cancels the earlier
+  /// request so bandwidth is never wasted on stale downloads.
+  ///
+  /// The response body is processed line-by-line (streaming), so even
+  /// 200 MB playlist files never allocate a single giant String.
   Future<List<Channel>> fetchChannels({String url = playlistUrl}) async {
+    // Cancel any in-flight request before starting a new one.
+    _activeClient?.close(force: true);
+
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 30);
+    _activeClient = client;
+
     try {
       final request = await client
           .getUrl(Uri.parse(url))
@@ -44,8 +55,16 @@ class PlaylistService {
       debugPrint('Parsed ${channels.length} channels from $url');
       return channels;
     } finally {
+      // Only clear the reference if this client is still the active one.
+      if (identical(_activeClient, client)) _activeClient = null;
       client.close(force: true);
     }
+  }
+
+  /// Cancels any in-progress playlist download immediately.
+  void cancel() {
+    _activeClient?.close(force: true);
+    _activeClient = null;
   }
 }
 
