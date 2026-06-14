@@ -1,3 +1,6 @@
+// Sentinel for nullable copyWith parameters — distinguishes 'omitted' from 'set to null'.
+const Object _sentinel = Object();
+
 class Channel {
   const Channel({
     required this.id,
@@ -32,6 +35,30 @@ class Channel {
       isPinned: (map['is_pinned'] as int? ?? 0) == 1,
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
       isBroken: (map['is_broken'] as int? ?? 0) == 1,
+    );
+  }
+
+  Channel copyWith({
+    String? id,
+    String? name,
+    String? url,
+    Object? logo = _sentinel,
+    Object? group = _sentinel,
+    Object? playlistId = _sentinel,
+    bool? isPinned,
+    bool? isFavorite,
+    bool? isBroken,
+  }) {
+    return Channel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      url: url ?? this.url,
+      logo: logo == _sentinel ? this.logo : logo as String?,
+      group: group == _sentinel ? this.group : group as String?,
+      playlistId: playlistId == _sentinel ? this.playlistId : playlistId as int?,
+      isPinned: isPinned ?? this.isPinned,
+      isFavorite: isFavorite ?? this.isFavorite,
+      isBroken: isBroken ?? this.isBroken,
     );
   }
 
