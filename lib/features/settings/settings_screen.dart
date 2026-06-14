@@ -207,6 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     controller: _playlistUrlController,
                     autofocus: true,
                     decoration: const InputDecoration(
+                      filled: true,
                       labelText: 'M3U playlist URL',
                       hintText: 'https://example.com/playlist.m3u',
                       prefixIcon: Icon(Icons.link_rounded),

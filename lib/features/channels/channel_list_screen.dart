@@ -138,6 +138,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
                   onChanged: _onSearchChanged,
                   style: Theme.of(context).textTheme.bodyLarge,
                   decoration: const InputDecoration(
+                    filled: true,
                     hintText: 'Search channels…',
                     prefixIcon: Icon(Icons.search_rounded),
                   ),

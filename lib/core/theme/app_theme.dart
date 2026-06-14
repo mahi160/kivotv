@@ -92,8 +92,8 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? AppColors.darkSurface
-            : AppColors.softSeashellPink.withValues(alpha: 0.50),
+            ? AppColors.darkSurface          // #1A2B38 — solid ocean dark
+            : AppColors.lightSurface,        // #FFFFFF — solid white
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(
