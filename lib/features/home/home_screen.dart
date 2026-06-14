@@ -87,6 +87,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: Text('Failed to load dashboard: $e'),
                     ),
                     data: (data) => ListView(
+                      // Clip.none + bottom padding so focus rings at the
+                      // bottom of the last section are never cropped.
+                      clipBehavior: Clip.none,
+                      padding: const EdgeInsets.only(
+                        bottom: AppSpacing.xxl,
+                      ),
                       children: [
                         _DashboardSection(
                           icon: Icons.star_rounded,
@@ -142,50 +148,52 @@ class _DashboardSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 34),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.oceanBright),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Extra vertical space (8px each side) so focus ring never clips.
-          SizedBox(
-            height: 206, // 190 card + 8 top + 8 bottom
-            child: channels.isEmpty
-                ? _EmptyRow(text: emptyText)
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    // Horizontal padding gives focus ring room on both ends.
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
-                    clipBehavior: Clip.none,
-                    itemCount: channels.length,
-                    itemExtent: 210, // card width + inter-card gap
-                    itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.sm),
-                      child: ChannelCard(
-                        channel: channels[index],
-                        onTap: () => onOpen(channels[index]),
-                      ),
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Row(
+          children: [
+            Icon(icon, color: AppColors.oceanBright, size: 22),
+            const SizedBox(width: 10),
+            Text(title, style: Theme.of(context).textTheme.headlineMedium),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // 3-column grid — shrinkWrap so it sizes to its content.
+        // NeverScrollableScrollPhysics so the outer ListView drives scrolling.
+        // Clip.none + padding so focus rings never get cropped.
+        channels.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                child: _EmptyRow(text: emptyText),
+              )
+            : Padding(
+                // Extra 8 px on all sides so the focus ring paints fully.
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  clipBehavior: Clip.none,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount:   3,
+                    crossAxisSpacing: AppSpacing.md,
+                    mainAxisSpacing:  AppSpacing.md,
+                    mainAxisExtent:   190,
                   ),
-          ),
-        ],
-      ),
+                  itemCount: channels.length,
+                  itemBuilder: (context, index) => ChannelCard(
+                    channel: channels[index],
+                    onTap: () => onOpen(channels[index]),
+                  ),
+                ),
+              ),
+        const SizedBox(height: AppSpacing.lg),
+      ],
     );
   }
 }
-
 
 class _EmptyRow extends StatelessWidget {
   const _EmptyRow({required this.text});
