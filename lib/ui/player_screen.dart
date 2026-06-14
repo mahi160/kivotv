@@ -69,14 +69,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
+  // Load all channels in pages of 200 to avoid RAM spikes on large IPTV lists.
+  // The player only needs the channel list for prev/next navigation.
   Future<void> _loadChannels() async {
-    final channels = await PlaylistRepository.instance.allChannels(
-      query: widget.query,
-    );
-    if (!mounted) {
-      return;
+    const pageSize = 200;
+    var offset = 0;
+    final all = <Channel>[];
+    while (true) {
+      final page = await PlaylistRepository.instance.channels(
+        query: widget.query,
+        limit: pageSize,
+        offset: offset,
+      );
+      all.addAll(page);
+      if (page.length < pageSize) break;
+      offset += page.length;
     }
-    setState(() => _channels = channels);
+    if (!mounted) return;
+    setState(() => _channels = all);
   }
 
   Future<void> _open(Channel channel) async {

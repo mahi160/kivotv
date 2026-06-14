@@ -14,39 +14,79 @@ class ChannelListScreen extends StatefulWidget {
 }
 
 class _ChannelListScreenState extends State<ChannelListScreen> {
+  static const _pageSize = 50;
+
   final _searchController = TextEditingController();
-  Future<List<Channel>>? _channelsFuture;
+  final _scrollController = ScrollController();
+  final List<Channel> _channels = [];
   String _query = '';
   Timer? _searchTimer;
+  bool _loading = false;
+  bool _hasMore = true;
+  int _offset = 0;
 
   @override
   void initState() {
     super.initState();
-    PlaylistRepository.instance.dashboardVersion.addListener(_loadChannels);
-    _loadChannels();
+    PlaylistRepository.instance.dashboardVersion.addListener(_resetAndLoad);
+    _scrollController.addListener(_onScroll);
+    _loadNextPage();
   }
 
   @override
   void dispose() {
-    PlaylistRepository.instance.dashboardVersion.removeListener(_loadChannels);
+    PlaylistRepository.instance.dashboardVersion.removeListener(_resetAndLoad);
     _searchTimer?.cancel();
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _loadChannels() {
+  void _resetAndLoad() {
     if (!mounted) return;
     setState(() {
-      _channelsFuture = PlaylistRepository.instance.allChannels(query: _query);
+      _channels.clear();
+      _offset = 0;
+      _hasMore = true;
+      _loading = false;
     });
+    _loadNextPage();
+  }
+
+  Future<void> _loadNextPage() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final page = await PlaylistRepository.instance.channels(
+        query: _query,
+        limit: _pageSize,
+        offset: _offset,
+      );
+      if (!mounted) return;
+      setState(() {
+        _channels.addAll(page);
+        _offset += page.length;
+        _hasMore = page.length == _pageSize;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _onScroll() {
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 400) {
+      _loadNextPage();
+    }
   }
 
   void _onSearchChanged(String value) {
     _searchTimer?.cancel();
-    _searchTimer = Timer(const Duration(milliseconds: 80), () {
+    _searchTimer = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       _query = value;
-      _loadChannels();
+      _resetAndLoad();
     });
   }
 
@@ -108,36 +148,36 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                 ),
                 const SizedBox(height: 18),
                 Expanded(
-                  child: FutureBuilder<List<Channel>>(
-                    future: _channelsFuture,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      final channels = snapshot.data!;
-                      if (channels.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'No channels found',
-                            style: TextStyle(fontSize: 22),
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        itemCount: channels.length,
-                        itemExtent: 86,
-                        itemBuilder: (context, index) {
-                          return _ChannelTile(
-                            channel: channels[index],
-                            onTap: () => _openPlayer(channels[index]),
-                            onPinChanged: _loadChannels,
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  child: _channels.isEmpty && _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _channels.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No channels found',
+                                style: TextStyle(fontSize: 22),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: _scrollController,
+                              // +1 for the loading footer
+                              itemCount: _channels.length + (_hasMore ? 1 : 0),
+                              itemExtent: 86,
+                              itemBuilder: (context, index) {
+                                if (index == _channels.length) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                return _ChannelTile(
+                                  channel: _channels[index],
+                                  onTap: () => _openPlayer(_channels[index]),
+                                  onPinChanged: _resetAndLoad,
+                                );
+                              },
+                            ),
                 ),
               ],
             ),
