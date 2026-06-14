@@ -1,6 +1,5 @@
 import 'dart:io';
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
+import '../../core/widgets/focusable_tap.dart';
 import '../../models/playlist.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/playlist_repository.dart';
@@ -328,7 +328,7 @@ class _ThemePicker extends StatelessWidget {
   }
 }
 
-class _ThemeOption extends StatefulWidget {
+class _ThemeOption extends StatelessWidget {
   const _ThemeOption({
     required this.icon,
     required this.label,
@@ -344,36 +344,19 @@ class _ThemeOption extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_ThemeOption> createState() => _ThemeOptionState();
-}
-
-class _ThemeOptionState extends State<_ThemeOption> {
-  bool _focused = false;
-
-  @override
   Widget build(BuildContext context) {
-    final highlight = widget.active || _focused;
-    // Focused options use the unified focus colour; the persistently selected
-    // option uses ocean blue so the two states stay distinguishable.
-    final hlColor =
-        _focused ? AppColors.focus(widget.isDark) : AppColors.oceanDeepBlue;
-    return Focus(
-      onFocusChange: (v) => setState(() => _focused = v),
-      onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
+    return FocusableTap(
+      onTap:   onTap,
+      builder: (_, focused) {
+        final highlight = active || focused;
+        // Focused → unified focus colour; active-but-not-focused → ocean blue
+        // (semantic: this is the currently selected theme).
+        final hlColor =
+            focused ? AppColors.focus(isDark) : AppColors.oceanDeepBlue;
+        return AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sm + 2,
+            vertical:   AppSpacing.sm + 2,
             horizontal: AppSpacing.xs,
           ),
           decoration: BoxDecoration(
@@ -384,7 +367,7 @@ class _ThemeOptionState extends State<_ThemeOption> {
             border: Border.all(
               color: highlight
                   ? hlColor
-                  : (widget.isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                  : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
               width: highlight ? 2 : 1,
             ),
           ),
@@ -392,30 +375,26 @@ class _ThemeOptionState extends State<_ThemeOption> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.icon,
+                icon,
                 size: 26,
                 color: highlight
                     ? hlColor
-                    : (widget.isDark
+                    : (isDark
                         ? AppColors.darkOnSurfaceVariant
                         : AppColors.lightOnSurfaceVariant),
               ),
               const SizedBox(height: 6),
               Text(
-                widget.label,
+                label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: highlight
-                      ? hlColor
-                      : null,
-                  fontWeight: highlight
-                      ? FontWeight.w700
-                      : FontWeight.w400,
+                  color:      highlight ? hlColor : null,
+                  fontWeight: highlight ? FontWeight.w700 : FontWeight.w400,
                 ),
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

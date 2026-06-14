@@ -26,7 +26,9 @@ class DashboardData {
 
 final _dashboardVersionStreamProvider = StreamProvider<int>((ref) {
   final notifier = PlaylistRepository.instance.dashboardVersion;
-  final ctrl = StreamController<int>.broadcast();
+  // Non-broadcast: buffers the seeded version number until StreamProvider
+  // subscribes, so the dashboard rebuilds immediately on first watch.
+  final ctrl = StreamController<int>();
   ctrl.add(notifier.value);
 
   void listener() => ctrl.add(notifier.value);

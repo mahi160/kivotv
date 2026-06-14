@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'focusable_tap.dart';
 import 'kivo_logo.dart';
 
 enum NavDestination { home, channels, settings }
@@ -108,7 +108,7 @@ class _LogoMark extends StatelessWidget {
 
 // ── Single nav icon ───────────────────────────────────────────────────────────
 
-class _NavIcon extends StatefulWidget {
+class _NavIcon extends StatelessWidget {
   const _NavIcon({
     required this.icon,
     required this.label,
@@ -117,16 +117,9 @@ class _NavIcon extends StatefulWidget {
   });
 
   final IconData icon;
-  final String label;
-  final bool isActive;
+  final String   label;
+  final bool     isActive;
   final VoidCallback onTap;
-
-  @override
-  State<_NavIcon> createState() => _NavIconState();
-}
-
-class _NavIconState extends State<_NavIcon> {
-  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -138,53 +131,40 @@ class _NavIconState extends State<_NavIcon> {
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
 
-    final iconColor = widget.isActive
-        ? AppColors.oceanDeepBlue          // consistent on both themes
-        : onSurfaceVariant;                // readable on both bg colours
+    final iconColor = isActive
+        ? AppColors.oceanDeepBlue  // semantic: current destination
+        : onSurfaceVariant;
 
-    final focusBg = AppColors.focusFill(isDark);
     final activeBg = isDark
         ? AppColors.sandMid.withValues(alpha: 0.12)
         : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
 
     return Semantics(
-      label: widget.label,
-      button: true,
-      selected: widget.isActive,
-      child: Focus(
-        autofocus: widget.isActive,
-        onFocusChange: (v) => setState(() => _focused = v),
-        onKeyEvent: (_, event) {
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-               event.logicalKey == LogicalKeyboardKey.enter)) {
-            widget.onTap();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
+      label:    label,
+      button:   true,
+      selected: isActive,
+      child: FocusableTap(
+        autofocus: isActive,
+        onTap:     onTap,
+        builder: (_, focused) => AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical:   AppSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: focused
+                ? AppColors.focusFill(isDark)
+                : isActive ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            border: Border.all(
+              color: focused ? AppColors.focus(isDark) : Colors.transparent,
             ),
-            decoration: BoxDecoration(
-              color: _focused ? focusBg : widget.isActive ? activeBg : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              border: Border.all(
-                color: _focused
-                    ? AppColors.focus(isDark)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Icon(
-              widget.icon,
-              size: AppSpacing.iconLg,
-              color: _focused ? onSurface : iconColor,
-            ),
+          ),
+          child: Icon(
+            icon,
+            size:  AppSpacing.iconLg,
+            color: focused ? onSurface : iconColor,
           ),
         ),
       ),

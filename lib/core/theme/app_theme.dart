@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'app_spacing.dart';
 
 /// Central theme factory for Kivo.
 ///
+/// Uses the bundled Inter font (assets/fonts/) rather than fetching it from
+/// the network at runtime, so the UI is pixel-perfect on first launch even
+/// on TVs with slow or no internet connectivity.
+///
 /// Usage in [MaterialApp.router]:
 /// ```dart
 /// theme:      AppTheme.light(),
 /// darkTheme:  AppTheme.dark(),
-/// themeMode:  ThemeMode.system,   // light is default on most devices
+/// themeMode:  ThemeMode.system,
 /// ```
 abstract final class AppTheme {
   static ThemeData light() => _build(Brightness.light);
@@ -22,7 +25,6 @@ abstract final class AppTheme {
     final colorScheme = ColorScheme.fromSeed(
       seedColor:   AppColors.oceanDeepBlue,
       brightness:  brightness,
-      // Override key surfaces so the brand palette is respected exactly.
       surface:     isDark ? AppColors.darkSurface     : AppColors.lightSurface,
       onSurface:   isDark ? AppColors.darkOnSurface   : AppColors.lightOnSurface,
       primary:     AppColors.oceanDeepBlue,
@@ -49,7 +51,7 @@ abstract final class AppTheme {
         foregroundColor:  isDark
             ? AppColors.darkOnSurface
             : AppColors.lightOnSurface,
-        elevation:             0,
+        elevation:              0,
         scrolledUnderElevation: 0,
       ),
 
@@ -63,6 +65,7 @@ abstract final class AppTheme {
             vertical:   AppSpacing.sm + 4,
           ),
           textStyle: const TextStyle(
+            fontFamily: 'Inter',
             fontSize:   18,
             fontWeight: FontWeight.w700,
           ),
@@ -92,8 +95,8 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? AppColors.darkSurface          // #1A2B38 — solid ocean dark
-            : AppColors.lightSurface,        // #FFFFFF — solid white
+            ? AppColors.darkSurface
+            : AppColors.lightSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(
@@ -108,7 +111,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          borderSide: BorderSide(
+          borderSide: const BorderSide(
             color: AppColors.oceanDeepBlue,
             width: 2,
           ),
@@ -122,11 +125,11 @@ abstract final class AppTheme {
 
       // ── Cards ──────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color:             isDark
+        color:            isDark
             ? AppColors.darkSurface
             : AppColors.lightSurface,
-        surfaceTintColor:  Colors.transparent,
-        elevation:         0,
+        surfaceTintColor: Colors.transparent,
+        elevation:        0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           side: BorderSide(
@@ -150,12 +153,12 @@ abstract final class AppTheme {
         color: AppColors.oceanDeepBlue,
       ),
 
-      // ── Text theme (Inter) ─────────────────────────────────────────────
+      // ── Text theme (Inter, bundled) ────────────────────────────────────
       textTheme:        _buildTextTheme(isDark),
       primaryTextTheme: _buildTextTheme(isDark),
 
-      // ── Focus colour — warm golden, visible on both modes ──────────────
-      focusColor: AppColors.goldenDriftwood.withValues(alpha: 0.20),
+      // ── Focus colour — follows unified focus token ─────────────────────
+      focusColor: AppColors.focusFill(isDark),
     );
   }
 
@@ -167,47 +170,45 @@ abstract final class AppTheme {
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
 
-    return GoogleFonts.interTextTheme().copyWith(
-      displayLarge: GoogleFonts.inter(
-        fontSize: 42, fontWeight: FontWeight.w900,
-        color: onSurface, letterSpacing: -0.5,
-      ),
-      headlineLarge: GoogleFonts.inter(
-        fontSize: 34, fontWeight: FontWeight.w900,
-        color: onSurface, letterSpacing: -0.25,
-      ),
-      headlineMedium: GoogleFonts.inter(
-        fontSize: 26, fontWeight: FontWeight.w800,
-        color: onSurface,
-      ),
-      titleLarge: GoogleFonts.inter(
-        fontSize: 22, fontWeight: FontWeight.w800,
-        color: onSurface,
-      ),
-      titleMedium: GoogleFonts.inter(
-        fontSize: 19, fontWeight: FontWeight.w700,
-        color: onSurface,
-      ),
-      titleSmall: GoogleFonts.inter(
-        fontSize: 16, fontWeight: FontWeight.w600,
-        color: onSurface,
-      ),
-      bodyLarge: GoogleFonts.inter(
-        fontSize: 18, fontWeight: FontWeight.w400,
-        color: onSurface,
-      ),
-      bodyMedium: GoogleFonts.inter(
-        fontSize: 16, fontWeight: FontWeight.w400,
-        color: onSurfaceVariant,
-      ),
-      bodySmall: GoogleFonts.inter(
-        fontSize: 14, fontWeight: FontWeight.w400,
-        color: onSurfaceVariant,
-      ),
-      labelLarge: GoogleFonts.inter(
-        fontSize: 18, fontWeight: FontWeight.w700,
-        color: onSurface,
-      ),
+    // All styles use the bundled Inter family. FontWeight values must match
+    // the weights declared in pubspec.yaml (400/500/600/700/900).
+    TextStyle inter({
+      required double fontSize,
+      required FontWeight fontWeight,
+      required Color color,
+      double? letterSpacing,
+      double? height,
+    }) =>
+        TextStyle(
+          fontFamily:    'Inter',
+          fontSize:      fontSize,
+          fontWeight:    fontWeight,
+          color:         color,
+          letterSpacing: letterSpacing,
+          height:        height,
+        );
+
+    return TextTheme(
+      displayLarge:  inter(fontSize: 42, fontWeight: FontWeight.w900,
+          color: onSurface, letterSpacing: -0.5),
+      headlineLarge: inter(fontSize: 34, fontWeight: FontWeight.w900,
+          color: onSurface, letterSpacing: -0.25),
+      headlineMedium: inter(fontSize: 26, fontWeight: FontWeight.w700,
+          color: onSurface),
+      titleLarge:  inter(fontSize: 22, fontWeight: FontWeight.w700,
+          color: onSurface),
+      titleMedium: inter(fontSize: 19, fontWeight: FontWeight.w700,
+          color: onSurface),
+      titleSmall:  inter(fontSize: 16, fontWeight: FontWeight.w600,
+          color: onSurface),
+      bodyLarge:   inter(fontSize: 18, fontWeight: FontWeight.w400,
+          color: onSurface),
+      bodyMedium:  inter(fontSize: 16, fontWeight: FontWeight.w400,
+          color: onSurfaceVariant),
+      bodySmall:   inter(fontSize: 14, fontWeight: FontWeight.w400,
+          color: onSurfaceVariant),
+      labelLarge:  inter(fontSize: 18, fontWeight: FontWeight.w700,
+          color: onSurface),
     );
   }
 }

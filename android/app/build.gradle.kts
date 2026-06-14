@@ -38,7 +38,7 @@ android {
     defaultConfig {
         applicationId = "com.kivo.tv"
         minSdk = flutter.minSdkVersion   // media_kit minimum; covers all Android TV hardware
-        targetSdk = 35   // Android 15
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

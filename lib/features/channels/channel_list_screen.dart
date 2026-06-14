@@ -10,7 +10,6 @@ import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/app_nav_bar.dart';
 import '../../core/widgets/channel_card.dart';
 import '../../models/channel.dart';
-import '../../providers/dashboard_provider.dart';
 import '../../services/playlist_repository.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -107,15 +106,23 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   }
 
   Future<void> _toggleFavorite(Channel channel) async {
-    await PlaylistRepository.instance.setFavorite(channel, !channel.isFavorite);
-    _resetAndLoad();
+    final newValue = !channel.isFavorite;
+    await PlaylistRepository.instance.setFavorite(channel, newValue);
+    if (!mounted) return;
+    // Patch the single row in-place so scroll position is preserved.
+    final idx = _channels.indexWhere((c) => c.url == channel.url);
+    if (idx != -1) {
+      setState(() {
+        _channels[idx] = _channels[idx].copyWith(isFavorite: newValue);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<DashboardData>>(dashboardProvider, (prev, next) {
-      if (next is AsyncData) _resetAndLoad();
-    });
+    // Intentionally not reloading the grid on dashboard changes.
+    // Favouriting patches the row in-place (see _toggleFavorite) so scroll
+    // position is preserved. A full _resetAndLoad here would jump back to top.
 
     return PopScope(
       canPop: false,

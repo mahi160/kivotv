@@ -19,6 +19,7 @@ class DatabaseService {
     final opened = await openDatabase(
       dbPath,
       version: 3,
+      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
         if (oldVersion < 2) {
@@ -159,11 +160,52 @@ CREATE TABLE recently_watched (
     return rows.map(Playlist.fromDb).toList();
   }
 
+  /// Replaces ALL channels for [playlistId] with the supplied list inside a
+  /// single transaction. Channels removed upstream are deleted; existing
+  /// per-channel user flags (favourite / pinned) are preserved by re-applying
+  /// them after the wipe.
   Future<void> replaceChannels({
     required int playlistId,
     required List<Channel> channels,
-  }) {
-    return upsertChannels(playlistId: playlistId, channels: channels);
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Preserve user flags keyed by url before wiping.
+      final prior = await txn.query(
+        'channels',
+        columns: ['url', 'is_favorite', 'is_pinned'],
+        where: 'playlist_id = ?',
+        whereArgs: [playlistId],
+      );
+      final favorite = <String>{};
+      final pinned   = <String>{};
+      for (final row in prior) {
+        final url = row['url'] as String;
+        if ((row['is_favorite'] as int? ?? 0) == 1) favorite.add(url);
+        if ((row['is_pinned']   as int? ?? 0) == 1) pinned.add(url);
+      }
+
+      await txn.delete(
+        'channels',
+        where: 'playlist_id = ?',
+        whereArgs: [playlistId],
+      );
+
+      final batch = txn.batch();
+      for (final channel in channels) {
+        final data = channel.toDb(playlistId: playlistId);
+        final url  = data['url'] as String;
+        batch.insert('channels', {
+          ...data,
+          'is_favorite': favorite.contains(url) ? 1 : 0,
+          'is_pinned':   pinned.contains(url)   ? 1 : 0,
+          // is_broken reset to 0 on every refresh so transient failures
+          // are cleared when the playlist is next fetched (see audit A3).
+          'is_broken': 0,
+        });
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<void> upsertChannels({

@@ -8,7 +8,9 @@ import '../services/playlist_repository.dart';
 /// True while a background playlist download is in progress.
 final isFetchingProvider = StreamProvider<bool>((ref) {
   final notifier = PlaylistRepository.instance.isFetching;
-  final ctrl = StreamController<bool>.broadcast();
+  // Non-broadcast controller buffers the seeded value until StreamProvider
+  // subscribes, so the initial isFetching=false is never dropped.
+  final ctrl = StreamController<bool>();
   ctrl.add(notifier.value);
 
   void listener() => ctrl.add(notifier.value);
