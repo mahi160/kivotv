@@ -475,35 +475,37 @@ class AppTheme {
 
 ## 📋 Implementation Order (Recommended)
 
-| Priority | Task | Effort |
+| Priority | Task | Status |
 |----------|------|--------|
-| 1 | [TV-1] Add LEANBACK_LAUNCHER to Android manifest | 30 min |
-| 2 | [TV-2] Fix app ID | 5 min |
-| 3 | [TV-3] Set explicit SDK versions | 5 min |
-| 4 | [THEME-1] Create AppColors with oceanic + sandy palette | 1h |
-| 5 | [THEME-2] Create AppSpacing constants | 30 min |
-| 6 | [THEME-3] Create AppTheme dark + light | 2h |
-| 7 | [THEME-4] GradientBackground widget | 30 min |
-| 8 | [THEME-5] Typography with Google Fonts | 1h |
-| 9 | [TV-5] Fix allChannels() pagination (CRITICAL perf) | 2h |
-| 10 | [ARCH-1] Introduce Riverpod providers (channel, dashboard) | 3h |
-| 11 | [ARCH-2] Bootstrap as FutureProvider + splash screen | 1h |
-| 12 | [TV-4] D-pad back handling on all screens | 1h |
-| 13 | [UX-5] Remove SafeArea from TV screens | 15 min |
-| 14 | [UX-2] Fix home cards: GridView → ListView | 30 min |
-| 15 | [UX-3] Player overlay fade + channel info | 1h |
-| 16 | [UX-4] Player media key handling | 45 min |
-| 17 | [ARCH-3] Feature-first folder restructure | 2h |
-| 18 | [ARCH-4] Channel.copyWith() | 15 min |
-| 19 | [ARCH-5] Playlist model | 30 min |
-| 20 | [QUAL-2] Stream M3U parsing | 2h |
-| 21 | [QUAL-3] Cancellable network requests | 1h |
-| 22 | [QUAL-4] User-friendly error messages | 30 min |
-| 23 | [UX-6] Settings: show playlist list + delete | 1h |
-| 24 | [FEAT-2] Channel logos with cached_network_image | 1h |
-| 25 | [FEAT-1] Group browser screen | 2h |
-| 26 | [FEAT-5] Auto-refresh on startup | 1h |
-| 27 | [FEAT-6] Expand test coverage | 3h |
+| 1 | [TV-1] Add LEANBACK_LAUNCHER to Android manifest | ✅ done |
+| 2 | [TV-2] Fix app ID | ✅ done |
+| 3 | [TV-3] Set explicit SDK versions | ✅ done |
+| 4 | [TV-4] D-pad back handling on all screens | ✅ done |
+| 5 | [TV-5] Fix allChannels() pagination (CRITICAL perf) | ✅ done |
+| 6 | [THEME-1] Create AppColors with oceanic + sandy palette | ✅ done |
+| 7 | [THEME-2] Create AppSpacing constants | ✅ done |
+| 8 | [THEME-3] Create AppTheme dark + light | ✅ done |
+| 9 | [THEME-4] GradientBackground widget | ✅ done |
+| 10 | [THEME-bonus] Replace all inline Color() literals with AppColors | ✅ done |
+| 11 | [THEME-5] Typography with Google Fonts | ⬜ next |
+| 12 | [UX-5] Remove SafeArea from TV screens | ⬜ |
+| 13 | [UX-2] Fix home cards: GridView → ListView | ⬜ |
+| 14 | [UX-3] Player overlay fade + channel info | ⬜ |
+| 15 | [UX-4] Player media key handling | ⬜ |
+| 16 | [ARCH-1] Introduce Riverpod providers (channel, dashboard) | ⬜ |
+| 17 | [ARCH-2] Bootstrap as FutureProvider + splash screen | ⬜ |
+| 18 | [ARCH-3] Feature-first folder restructure | ⬜ |
+| 19 | [ARCH-4] Channel.copyWith() | ⬜ |
+| 20 | [ARCH-5] Playlist model | ⬜ |
+| 21 | [QUAL-1] upsertPlaylist single upsert | ⬜ |
+| 22 | [QUAL-2] Stream M3U parsing | ⬜ |
+| 23 | [QUAL-3] Cancellable network requests | ⬜ |
+| 24 | [QUAL-4] User-friendly error messages | ⬜ |
+| 25 | [UX-6] Settings: show playlist list + delete | ⬜ |
+| 26 | [FEAT-2] Channel logos with cached_network_image | ⬜ |
+| 27 | [FEAT-1] Group browser screen | ⬜ |
+| 28 | [FEAT-5] Auto-refresh on startup | ⬜ |
+| 29 | [FEAT-6] Expand test coverage | ⬜ |
 
 ---
 
