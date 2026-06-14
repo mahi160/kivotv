@@ -56,7 +56,12 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.go('/');
+      },
+      child: Scaffold(
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -138,6 +143,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
