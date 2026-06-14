@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/gradient_background.dart';
 
 import '../services/playlist_repository.dart';
 
@@ -82,16 +83,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!didPop) context.go('/');
       },
       child: Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF17223D), Color(0xFF060914)],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
+      body: GradientBackground(
+        variant: GradientVariant.settings,
+        child: Center(
             child: Container(
               width: 760,
               padding: const EdgeInsets.all(34),
@@ -182,7 +176,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-      ),
       ),
     );
   }

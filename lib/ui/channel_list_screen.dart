@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_spacing.dart';
+import '../core/theme/gradient_background.dart';
+
 import '../models/channel.dart';
 import '../services/playlist_repository.dart';
 
@@ -102,17 +105,15 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         if (!didPop) context.go('/');
       },
       child: Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF101B33), Color(0xFF060914)],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(34, 24, 34, 18),
+      body: GradientBackground(
+        variant: GradientVariant.list,
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.tvEdgeSm,
+              AppSpacing.md,
+              AppSpacing.tvEdgeSm,
+              AppSpacing.sm + 4,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -183,7 +184,6 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
             ),
           ),
         ),
-      ),
       ),
     );
   }

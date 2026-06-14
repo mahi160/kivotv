@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_spacing.dart';
+import '../core/theme/gradient_background.dart';
 import '../models/channel.dart';
 import '../services/playlist_repository.dart';
 
@@ -80,18 +82,15 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topLeft,
-            radius: 1.25,
-            colors: [Color(0xFF1B3A6B), Color(0xFF070B16), Color(0xFF02040A)],
-            stops: [0, 0.52, 1],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(40, 28, 40, 24),
+      body: GradientBackground(
+        variant: GradientVariant.home,
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.tvEdge,
+              AppSpacing.tvHeaderGap,
+              AppSpacing.tvEdge,
+              AppSpacing.md,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -137,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-      ),
       ),
     );
   }
