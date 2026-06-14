@@ -43,18 +43,29 @@ class PlaylistRepository {
 
     _bootstrapped = true;
 
-    // Background auto-refresh: if any playlist is stale, refresh silently.
-    _autoRefreshIfStale();
+    // Seed default playlist on first launch, then auto-refresh stale ones.
+    _seedAndRefresh();
   }
 
-  /// Refreshes playlists that haven't been updated in [_refreshThreshold].
-  /// Runs in the background — does not block the UI or bootstrap completion.
-  Future<void> _autoRefreshIfStale() async {
+  /// On first launch (no user playlists yet) adds the IPTV Org default and
+  /// fetches its channels in the background.
+  /// On subsequent launches refreshes playlists older than [_refreshThreshold].
+  /// Never blocks bootstrap or the UI.
+  Future<void> _seedAndRefresh() async {
     try {
       final playlists = await DatabaseService.instance.playlists();
+      final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
+
+      if (userPlaylists.isEmpty) {
+        // First launch: seed and fetch the default IPTV Org playlist.
+        debugPrint('First launch — seeding default IPTV Org playlist...');
+        await addAndRefreshPlaylist(PlaylistService.playlistUrl);
+        return;
+      }
+
+      // Subsequent launches: refresh playlists not updated within the threshold.
       final now = DateTime.now();
-      final stale = playlists.where((p) {
-        if (p.isBuiltIn) return false;
+      final stale = userPlaylists.where((p) {
         final last = p.lastRefreshedDateTime;
         if (last == null) return true;
         return now.difference(last) > _refreshThreshold;
@@ -68,7 +79,7 @@ class PlaylistRepository {
       debugPrint('Auto-refreshing ${stale.length} stale playlist(s)...');
       await refreshAllPlaylists();
     } catch (error, stackTrace) {
-      debugPrint('Auto-refresh failed silently: $error');
+      debugPrint('Background seed/refresh failed: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
   }
