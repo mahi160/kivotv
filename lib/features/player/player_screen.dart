@@ -374,16 +374,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
               child: IgnorePointer(
                 ignoring: !_showOverlay,
                 child: _PlayerOverlay(
-                  channel:       _currentChannel,
-                  channelIndex:  _currentIndex,
-                  channelTotal:  _channels.length,
-                  player:        _player,
-                  showingList:   _showChannelList,
-                  onPrevious:    _playPrevious,
-                  onNext:        _playNext,
-                  onInteraction: _scheduleOverlayHide,
-                  onBack:        () => context.go('/channels'),
-                  onToggleList:  _toggleChannelList,
+                  channel:          _currentChannel,
+                  channelIndex:     _currentIndex,
+                  channelTotal:     _channels.length,
+                  player:           _player,
+                  showingList:      _showChannelList,
+                  onPrevious:       _playPrevious,
+                  onNext:           _playNext,
+                  onInteraction:    _scheduleOverlayHide,
+                  onBack:           () => context.go('/channels'),
+                  onToggleList:     _toggleChannelList,
+                  onToggleFavorite: () async {
+                    await PlaylistRepository.instance.setFavorite(
+                      _currentChannel, !_currentChannel.isFavorite);
+                    await _loadChannels();
+                    setState(() {});
+                  },
                 ),
               ),
             ),
@@ -423,6 +429,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 //  Overlay
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Overlay
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PlayerOverlay extends StatelessWidget {
   const _PlayerOverlay({
     required this.channel,
@@ -435,6 +445,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onInteraction,
     required this.onBack,
     required this.onToggleList,
+    required this.onToggleFavorite,
   });
 
   final Channel      channel;
@@ -447,6 +458,7 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback onInteraction;
   final VoidCallback onBack;
   final VoidCallback onToggleList;
+  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -459,27 +471,28 @@ class _PlayerOverlay extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xDD000000), Colors.transparent, Color(0xDD000000)],
-          stops: [0.0, 0.45, 1.0],
+          colors: [Color(0xCC000000), Colors.transparent, Color(0xCC000000)],
+          stops: [0.0, 0.42, 1.0],
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.tvEdge),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.tvEdge, AppSpacing.md,
+          AppSpacing.tvEdge, AppSpacing.tvEdge,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top bar ────────────────────────────────────────────────────
+            // ── Top bar: back | channel info | clock ──────────────────────
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Back
                 IconButton(
                   icon: const Icon(Icons.arrow_back_rounded,
                       color: Colors.white, size: 28),
                   onPressed: () { onInteraction(); onBack(); },
                 ),
-                const SizedBox(width: 12),
-                // Channel name + group
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,55 +511,43 @@ class _PlayerOverlay extends StatelessWidget {
                         Text(
                           channel.group!,
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.white70),
+                              ?.copyWith(color: Colors.white60),
                         ),
                     ],
                   ),
                 ),
-                // Channel number + clock
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const _LiveClock(),
-                    if (chNum.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.oceanMid.withValues(alpha: 0.85),
-                          borderRadius:
-                              BorderRadius.circular(AppSpacing.radiusSm),
-                        ),
-                        child: Text(
-                          chNum,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                // Time — top right only
+                const _LiveClock(),
               ],
             ),
 
             const Spacer(),
 
-            // ── Bottom controls ────────────────────────────────────────────
+            // ── Bottom bar ─────────────────────────────────────────────────
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Channel number — left
+                if (chNum.isNotEmpty)
+                  Text(
+                    chNum,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      shadows: [Shadow(blurRadius: 6)],
+                    ),
+                  ),
+
+                const Spacer(),
+
+                // Playback controls — centre
                 _CtrlBtn(
                   icon: Icons.skip_previous_rounded,
-                  label: 'Prev',
                   autofocus: false,
                   onPressed: () { onInteraction(); onPrevious(); },
                 ),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.sm),
                 StreamBuilder<bool>(
                   stream: player.stream.playing,
                   initialData: false,
@@ -556,28 +557,37 @@ class _PlayerOverlay extends StatelessWidget {
                       icon: playing
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
-                      label: playing ? 'Pause' : 'Play',
                       autofocus: true,
                       onPressed: () { onInteraction(); player.playOrPause(); },
                     );
                   },
                 ),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.sm),
                 _CtrlBtn(
                   icon: Icons.skip_next_rounded,
-                  label: 'Next',
                   autofocus: false,
                   onPressed: () { onInteraction(); onNext(); },
                 ),
-                const SizedBox(width: AppSpacing.md),
-                _CtrlBtn(
-                  icon: showingList
-                      ? Icons.playlist_play_rounded
-                      : Icons.format_list_bulleted_rounded,
-                  label: 'Channels',
-                  autofocus: false,
-                  highlighted: showingList,
+
+                const Spacer(),
+
+                // Icon actions — right
+                _IconAction(
+                  icon: Icons.format_list_bulleted_rounded,
+                  active: showingList,
+                  tooltip: 'Channel list',
                   onPressed: () { onInteraction(); onToggleList(); },
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                _IconAction(
+                  icon: channel.isFavorite
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  active: channel.isFavorite,
+                  tooltip: channel.isFavorite
+                      ? 'Remove from favourites'
+                      : 'Add to favourites',
+                  onPressed: () { onInteraction(); onToggleFavorite(); },
                 ),
               ],
             ),
@@ -589,22 +599,18 @@ class _PlayerOverlay extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Control button
+//  Playback control button  (circular icon, fills white on focus)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _CtrlBtn extends StatefulWidget {
   const _CtrlBtn({
     required this.icon,
-    required this.label,
     required this.onPressed,
-    this.autofocus   = false,
-    this.highlighted = false,
+    this.autofocus = false,
   });
 
   final IconData     icon;
-  final String       label;
   final bool         autofocus;
-  final bool         highlighted;
   final VoidCallback onPressed;
 
   @override
@@ -616,7 +622,6 @@ class _CtrlBtnState extends State<_CtrlBtn> {
 
   @override
   Widget build(BuildContext context) {
-    final active = _focused || widget.highlighted;
     return FocusableActionDetector(
       autofocus: widget.autofocus,
       onShowFocusHighlight: (v) => setState(() => _focused = v),
@@ -624,35 +629,79 @@ class _CtrlBtnState extends State<_CtrlBtn> {
         onTap: widget.onPressed,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          width: 64, height: 64,
           decoration: BoxDecoration(
-            color: active
+            shape: BoxShape.circle,
+            color: _focused
                 ? Colors.white
                 : Colors.black.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             border: Border.all(
-              color: active ? AppColors.sandMid : Colors.white24,
-              width: active ? 2 : 1,
+              color: _focused ? AppColors.sandMid : Colors.white30,
+              width: _focused ? 2 : 1,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                widget.icon,
-                size: 26,
-                color: active ? Colors.black87 : Colors.white,
+          child: Icon(
+            widget.icon,
+            size: 30,
+            color: _focused ? Colors.black87 : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Icon-only action button  (channel list / favourite)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _IconAction extends StatefulWidget {
+  const _IconAction({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+    this.active = false,
+  });
+
+  final IconData     icon;
+  final String       tooltip;
+  final bool         active;
+  final VoidCallback onPressed;
+
+  @override
+  State<_IconAction> createState() => _IconActionState();
+}
+
+class _IconActionState extends State<_IconAction> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final highlight = _focused || widget.active;
+    return Tooltip(
+      message: widget.tooltip,
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (v) => setState(() => _focused = v),
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: 52, height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: highlight
+                  ? AppColors.sandMid.withValues(alpha: 0.18)
+                  : Colors.black.withValues(alpha: 0.45),
+              border: Border.all(
+                color: highlight ? AppColors.sandMid : Colors.white24,
+                width: highlight ? 2 : 1,
               ),
-              const SizedBox(width: 8),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: active ? Colors.black87 : Colors.white,
-                ),
-              ),
-            ],
+            ),
+            child: Icon(
+              widget.icon,
+              size: 24,
+              color: highlight ? AppColors.sandMid : Colors.white70,
+            ),
           ),
         ),
       ),
