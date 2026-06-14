@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
-
+import '../models/playlist.dart';
 import '../services/playlist_repository.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -20,6 +22,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isAdding = false;
   int? _channelCount;
   String? _error;
+  List<Playlist> _playlists = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlaylists();
+  }
 
   @override
   void dispose() {
@@ -27,53 +36,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _loadPlaylists() async {
+    final list = await PlaylistRepository.instance.playlists();
+    if (mounted) setState(() => _playlists = list);
+  }
+
+  /// Maps raw exceptions to user-readable messages.
+  String _friendlyError(Object error) {
+    if (error is SocketException || error is HttpException && error.message.contains('Failed host lookup')) {
+      return 'No internet connection. Check your network and try again.';
+    }
+    if (error is HttpException) {
+      return 'Server error — check the URL and try again.';
+    }
+    if (error is ArgumentError) {
+      return error.message.toString();
+    }
+    if (error is FormatException) {
+      return 'Invalid playlist format. Make sure the URL points to an M3U file.';
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
   Future<void> _refreshPlaylist() async {
-    await _runBusy(() => PlaylistRepository.instance.refreshAllPlaylists());
+    setState(() { _isRefreshing = true; _error = null; });
+    try {
+      final count = await PlaylistRepository.instance.refreshAllPlaylists();
+      if (mounted) setState(() { _channelCount = count; });
+    } catch (error, stackTrace) {
+      debugPrint('Refresh failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) setState(() => _error = _friendlyError(error));
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+        await _loadPlaylists();
+      }
+    }
   }
 
   Future<void> _addPlaylist() async {
     final url = _playlistUrlController.text.trim();
     if (url.isEmpty) {
-      setState(() => _error = 'Enter playlist URL');
+      setState(() => _error = 'Enter a playlist URL first.');
       return;
     }
 
-    setState(() => _isAdding = true);
+    setState(() { _isAdding = true; _error = null; });
     try {
-      final count = await PlaylistRepository.instance.addAndRefreshPlaylist(
-        url,
-      );
+      final count = await PlaylistRepository.instance.addAndRefreshPlaylist(url);
       if (!mounted) return;
       _playlistUrlController.clear();
-      setState(() {
-        _channelCount = count;
-        _error = null;
-      });
+      setState(() => _channelCount = count);
     } catch (error, stackTrace) {
-      debugPrint('Failed to add playlist: $error');
+      debugPrint('Add playlist failed: $error');
       debugPrintStack(stackTrace: stackTrace);
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
-      if (mounted) setState(() => _isAdding = false);
+      if (mounted) {
+        setState(() => _isAdding = false);
+        await _loadPlaylists();
+      }
     }
   }
 
-  Future<void> _runBusy(Future<int> Function() action) async {
-    setState(() {
-      _isRefreshing = true;
-      _error = null;
-    });
-
-    try {
-      final count = await action();
-      if (mounted) setState(() => _channelCount = count);
-    } catch (error, stackTrace) {
-      debugPrint('Failed to refresh playlist: $error');
-      debugPrintStack(stackTrace: stackTrace);
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _isRefreshing = false);
-    }
+  Future<void> _deletePlaylist(Playlist playlist) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove playlist?'),
+        content: Text('"${playlist.name}" and all its channels will be removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await PlaylistRepository.instance.deletePlaylist(playlist.id);
+    await _loadPlaylists();
   }
 
   @override
@@ -119,17 +160,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: AppSpacing.lg),
                   Text(
                     'Playlist sources',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Add any M3U URL. Channels merge into one TV guide.',
+                    'Add any M3U URL. Channels from all playlists merge into one guide.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: AppSpacing.md),
+                  // ── Existing playlists ──────────────────────────────────
+                  if (_playlists.isNotEmpty) ...[
+                    ..._playlists
+                        .where((p) => !p.isBuiltIn)
+                        .map((p) => _PlaylistTile(
+                              playlist: p,
+                              onDelete: busy ? null : () => _deletePlaylist(p),
+                              onRefresh: busy ? null : _refreshPlaylist,
+                            )),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  // ── Add new playlist ──────────────────────────────────
                   TextField(
                     controller: _playlistUrlController,
                     autofocus: true,
@@ -140,25 +193,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     onSubmitted: (_) => busy ? null : _addPlaylist(),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: AppSpacing.md),
                   Row(
                     children: [
                       ElevatedButton.icon(
                         onPressed: busy ? null : _addPlaylist,
                         icon: const Icon(Icons.add_rounded),
-                        label: Text(_isAdding ? 'Adding...' : 'Add Playlist'),
+                        label: Text(_isAdding ? 'Adding…' : 'Add Playlist'),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.xs + 4),
                       ElevatedButton.icon(
                         onPressed: busy ? null : _refreshPlaylist,
                         icon: const Icon(Icons.refresh_rounded),
                         label: Text(
-                          _isRefreshing ? 'Refreshing...' : 'Refresh All',
+                          _isRefreshing ? 'Refreshing…' : 'Refresh All',
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: AppSpacing.md),
                   if (_channelCount != null)
                     _MessagePill(
                       icon: Icons.check_circle_rounded,
@@ -167,7 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (_error != null)
                     _MessagePill(
                       icon: Icons.error_rounded,
-                      text: 'Error: $_error',
+                      text: _error!,
                       error: true,
                     ),
                 ],
@@ -177,6 +230,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+}
+
+class _PlaylistTile extends StatelessWidget {
+  const _PlaylistTile({
+    required this.playlist,
+    this.onDelete,
+    this.onRefresh,
+  });
+
+  final Playlist playlist;
+  final VoidCallback? onDelete;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final refreshed = playlist.lastRefreshedDateTime;
+    final subtitle = refreshed == null
+        ? playlist.url
+        : '${playlist.url}  \u00b7  Refreshed ${_timeAgo(refreshed)}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.playlist_play_rounded, size: AppSpacing.iconMd),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(playlist.name, style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Delete playlist',
+            icon: const Icon(Icons.delete_outline_rounded),
+            color: AppColors.error,
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 
