@@ -57,7 +57,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _sidebarScroll = ScrollController();
 
   // ── focus ──────────────────────────────────────────────────────────────────
-  final _rootFocus = FocusNode();
+  final _rootFocus         = FocusNode();
+  final _playFocusNode     = FocusNode(); // Bug 6: re-focus play btn on overlay show
+  final _sidebarScopeNode  = FocusScopeNode(); // Bug 4/5: sidebar focus management
 
   @override
   void initState() {
@@ -89,6 +91,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _errorSubscription?.cancel();
     _sidebarScroll.dispose();
     _rootFocus.dispose();
+    _playFocusNode.dispose();
+    _sidebarScopeNode.dispose();
     _player.dispose();
     super.dispose();
   }
@@ -166,6 +170,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _showControls() {
     setState(() => _showOverlay = true);
     _scheduleOverlayHide();
+    // Bug 6: move focus to the play button so left/right traversal works immediately.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) { if (mounted) _playFocusNode.requestFocus(); },
+    );
   }
 
   void _scheduleOverlayHide() {
@@ -192,8 +200,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _showChannelList = !_showChannelList);
     if (_showChannelList) {
       _showControls();
-      // Scroll sidebar to current channel after layout.
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Bug 4: move focus into the sidebar so D-pad up/down works in the list.
+        _sidebarScopeNode.requestFocus();
+        // Scroll to current channel.
         final idx = _currentIndex;
         if (idx > 0 && _sidebarScroll.hasClients) {
           const itemH = 72.0;
@@ -202,6 +213,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           );
         }
       });
+    } else {
+      // Bug 5: return focus to the overlay play button when sidebar closes.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) { if (mounted) _playFocusNode.requestFocus(); },
+      );
     }
   }
 
@@ -238,14 +254,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
 
-    // ── Close channel list with Back / Left ──────────────────────────────────
-    if (_showChannelList &&
-        (key == LogicalKeyboardKey.goBack     ||
-         key == LogicalKeyboardKey.escape     ||
-         key == LogicalKeyboardKey.arrowLeft)) {
-      setState(() => _showChannelList = false);
-      _scheduleOverlayHide();
-      return KeyEventResult.handled;
+    // ── Sidebar is open ─────────────────────────────────────────────────────────
+    if (_showChannelList) {
+      // Back / Left → close sidebar, return focus to overlay.
+      if (key == LogicalKeyboardKey.goBack  ||
+          key == LogicalKeyboardKey.escape  ||
+          key == LogicalKeyboardKey.arrowLeft) {
+        setState(() => _showChannelList = false);
+        _scheduleOverlayHide();
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) { if (mounted) _playFocusNode.requestFocus(); },
+        );
+        return KeyEventResult.handled;
+      }
+      // Bug 3: Up/Down while sidebar is open → let sidebar ListView traverse.
+      // Do NOT intercept — returning ignored lets Flutter move focus between items.
+      if (key == LogicalKeyboardKey.arrowUp   ||
+          key == LogicalKeyboardKey.arrowDown ||
+          key == LogicalKeyboardKey.channelUp ||
+          key == LogicalKeyboardKey.channelDown) {
+        return KeyEventResult.ignored;
+      }
     }
 
     // ── Back → exit player ───────────────────────────────────────────────────
@@ -384,6 +413,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onInteraction:    _scheduleOverlayHide,
                   onBack:           () => context.go('/channels'),
                   onToggleList:     _toggleChannelList,
+                  playFocusNode:    _playFocusNode,
                   onToggleFavorite: () async {
                     await PlaylistRepository.instance.setFavorite(
                       _currentChannel, !_currentChannel.isFavorite);
@@ -395,12 +425,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
 
             // Channel list sidebar — slides in from right
+            // Bug 4: FocusScope gives the sidebar its own focus group.
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
               top:    0,
               bottom: 0,
               right:  _showChannelList ? 0 : -340,
+              child: FocusScope(
+              node: _sidebarScopeNode,
               child: _ChannelListPanel(
                 channels:       _channels,
                 currentChannel: _currentChannel,
@@ -412,11 +445,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 onToggleFavorite: (ch) async {
                   await PlaylistRepository.instance
                       .setFavorite(ch, !ch.isFavorite);
-                  // Reload channels so the star updates.
                   await _loadChannels();
                   setState(() {});
                 },
               ),
+              ), // FocusScope
             ),
           ],
         ),
@@ -446,6 +479,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onBack,
     required this.onToggleList,
     required this.onToggleFavorite,
+    required this.playFocusNode,
   });
 
   final Channel      channel;
@@ -459,6 +493,7 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onToggleList;
   final VoidCallback onToggleFavorite;
+  final FocusNode    playFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +593,7 @@ class _PlayerOverlay extends StatelessWidget {
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
                       autofocus: true,
+                      focusNode: playFocusNode,
                       onPressed: () { onInteraction(); player.playOrPause(); },
                     );
                   },
@@ -606,11 +642,13 @@ class _CtrlBtn extends StatefulWidget {
   const _CtrlBtn({
     required this.icon,
     required this.onPressed,
-    this.autofocus = false,
+    this.autofocus  = false,
+    this.focusNode,
   });
 
   final IconData     icon;
   final bool         autofocus;
+  final FocusNode?   focusNode;
   final VoidCallback onPressed;
 
   @override
@@ -623,7 +661,8 @@ class _CtrlBtnState extends State<_CtrlBtn> {
   @override
   Widget build(BuildContext context) {
     return FocusableActionDetector(
-      autofocus: widget.autofocus,
+      autofocus:  widget.autofocus,
+      focusNode:  widget.focusNode,
       onShowFocusHighlight: (v) => setState(() => _focused = v),
       child: GestureDetector(
         onTap: widget.onPressed,
@@ -923,8 +962,18 @@ class _SidebarItemState extends State<_SidebarItem> {
     final ch = widget.channel;
     final active = _focused || widget.isCurrent;
 
-    return FocusableActionDetector(
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      // Bug 2: handle D-pad select/enter so channel can be chosen without pointer.
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+             event.logicalKey == LogicalKeyboardKey.enter)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: GestureDetector(
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,

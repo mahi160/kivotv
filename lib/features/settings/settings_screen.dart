@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -322,6 +323,16 @@ class _ThemeOptionState extends State<_ThemeOption> {
     final highlight = widget.active || _focused;
     return Focus(
       onFocusChange: (v) => setState(() => _focused = v),
+      // Bug 1 fix: handle D-pad select/enter so theme tiles work without a pointer
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+             event.logicalKey == LogicalKeyboardKey.enter)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
