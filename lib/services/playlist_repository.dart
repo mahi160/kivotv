@@ -147,11 +147,13 @@ class PlaylistRepository {
     String query = '',
     int limit = 100,
     int offset = 0,
+    bool includeBroken = false,
   }) {
     return DatabaseService.instance.channels(
       query: query,
       limit: limit,
       offset: offset,
+      includeBroken: includeBroken,
     );
   }
 
