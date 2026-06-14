@@ -28,6 +28,8 @@ class PlaylistRepository {
     return _bootstrapFuture ??= _bootstrap();
   }
 
+  static const _refreshThreshold = Duration(hours: 24);
+
   Future<void> _bootstrap() async {
     var storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
@@ -39,6 +41,35 @@ class PlaylistRepository {
     _bumpDashboard();
 
     _bootstrapped = true;
+
+    // Background auto-refresh: if any playlist is stale, refresh silently.
+    _autoRefreshIfStale();
+  }
+
+  /// Refreshes playlists that haven't been updated in [_refreshThreshold].
+  /// Runs in the background — does not block the UI or bootstrap completion.
+  Future<void> _autoRefreshIfStale() async {
+    try {
+      final playlists = await DatabaseService.instance.playlists();
+      final now = DateTime.now();
+      final stale = playlists.where((p) {
+        if (p.isBuiltIn) return false;
+        final last = p.lastRefreshedDateTime;
+        if (last == null) return true;
+        return now.difference(last) > _refreshThreshold;
+      }).toList();
+
+      if (stale.isEmpty) {
+        debugPrint('All playlists are fresh — skipping auto-refresh');
+        return;
+      }
+
+      debugPrint('Auto-refreshing ${stale.length} stale playlist(s)...');
+      await refreshAllPlaylists();
+    } catch (error, stackTrace) {
+      debugPrint('Auto-refresh failed silently: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   Future<int> refreshPlaylist() => refreshAllPlaylists();
