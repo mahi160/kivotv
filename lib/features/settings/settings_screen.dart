@@ -129,8 +129,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Scaffold(
       body: GradientBackground(
         variant: GradientVariant.settings,
-        child: Center(
-            child: Container(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.tvEdgeSm,
+            AppSpacing.md,
+            AppSpacing.tvEdgeSm,
+            AppSpacing.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppNavBar(active: NavDestination.settings),
+              const SizedBox(height: AppSpacing.md),
+              Expanded(
+              child: Center(
+              child: Container(
               width: 760,
               padding: const EdgeInsets.all(34),
               decoration: BoxDecoration(
@@ -148,8 +161,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AppNavBar(active: NavDestination.settings),
-                  const SizedBox(height: AppSpacing.md),
                   Text(
                     'Settings',
                     style: Theme.of(context).textTheme.headlineLarge,
@@ -222,11 +233,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-      ),
-    );
+      ],
+    ),
+  ),
+),
+),
+);
   }
 }
-
 class _PlaylistTile extends StatelessWidget {
   const _PlaylistTile({
     required this.playlist,

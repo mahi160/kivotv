@@ -7,40 +7,43 @@ import '../theme/app_spacing.dart';
 
 enum NavDestination { home, channels, settings }
 
-/// Persistent top-left icon navigation bar used on all main screens.
+/// Persistent top bar used on every main screen.
 ///
-/// [active] highlights the current destination.
-/// [trailing] is placed at the far right (e.g. a search field).
+/// Left  — Kivo logo mark + wordmark (always).
+/// Right — Home / Channels / Settings icon buttons.
+///
+/// [active] highlights the current destination icon.
 class AppNavBar extends StatelessWidget {
-  const AppNavBar({
-    super.key,
-    required this.active,
-    this.trailing,
-  });
+  const AppNavBar({super.key, required this.active});
 
   final NavDestination active;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // ── Branding ───────────────────────────────────────────────────────
+        const _LogoMark(),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          'Kivo',
+          style: Theme.of(context).textTheme.headlineLarge,
+        ),
+        // ── Spacer pushes icons to the right ───────────────────────────────
+        const Spacer(),
+        // ── Nav icons ──────────────────────────────────────────────────────
         _NavIcon(
           icon: Icons.home_rounded,
           label: 'Home',
           isActive: active == NavDestination.home,
-          autofocus: active == NavDestination.home,
-          onTap: () {
-            if (active != NavDestination.home) context.go('/');
-          },
+          onTap: () { if (active != NavDestination.home) context.go('/'); },
         ),
         const SizedBox(width: AppSpacing.xs),
         _NavIcon(
           icon: Icons.live_tv_rounded,
           label: 'Channels',
           isActive: active == NavDestination.channels,
-          autofocus: active == NavDestination.channels,
           onTap: () {
             if (active != NavDestination.channels) context.go('/channels');
           },
@@ -50,16 +53,43 @@ class AppNavBar extends StatelessWidget {
           icon: Icons.settings_rounded,
           label: 'Settings',
           isActive: active == NavDestination.settings,
-          autofocus: active == NavDestination.settings,
           onTap: () {
             if (active != NavDestination.settings) context.go('/settings');
           },
         ),
-        if (trailing != null) ...[
-          const Spacer(),
-          trailing!,
-        ],
       ],
+    );
+  }
+}
+
+// ── Logo mark ─────────────────────────────────────────────────────────────────
+
+class _LogoMark extends StatelessWidget {
+  const _LogoMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: AppSpacing.logoSize * 0.7,
+      height: AppSpacing.logoSize * 0.7,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppSpacing.logoRadius * 0.7),
+        gradient: const LinearGradient(
+          colors: [AppColors.logoGradientStart, AppColors.logoGradientEnd],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.logoGradientStart.withValues(alpha: 0.30),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.live_tv_rounded,
+        size: AppSpacing.iconMd,
+        color: Colors.white,
+      ),
     );
   }
 }
@@ -72,13 +102,11 @@ class _NavIcon extends StatefulWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
-    this.autofocus = false,
   });
 
   final IconData icon;
   final String label;
   final bool isActive;
-  final bool autofocus;
   final VoidCallback onTap;
 
   @override
@@ -90,16 +118,16 @@ class _NavIconState extends State<_NavIcon> {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor  = AppColors.sandMid;
-    final defaultColor = Colors.white.withValues(alpha: 0.65);
-    final iconColor    = widget.isActive ? activeColor : defaultColor;
+    final iconColor = widget.isActive
+        ? AppColors.sandMid
+        : Colors.white.withValues(alpha: 0.65);
 
     return Semantics(
       label: widget.label,
       button: true,
       selected: widget.isActive,
       child: Focus(
-        autofocus: widget.autofocus,
+        autofocus: widget.isActive,
         onFocusChange: (v) => setState(() => _focused = v),
         onKeyEvent: (_, event) {
           if (event is KeyDownEvent &&

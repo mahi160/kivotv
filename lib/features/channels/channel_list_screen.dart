@@ -124,27 +124,19 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    AppNavBar(
-                      active: NavDestination.channels,
-                      trailing: SizedBox(
-                        width: 460,
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: false,
-                          onChanged: _onSearchChanged,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          decoration: const InputDecoration(
-                            hintText: 'Search name or group',
-                            prefixIcon: Icon(Icons.search_rounded),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                const AppNavBar(active: NavDestination.channels),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _searchController,
+                  autofocus: false,
+                  onChanged: _onSearchChanged,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  decoration: const InputDecoration(
+                    hintText: 'Search channels…',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: AppSpacing.md),
                 Expanded(
                   child: _channels.isEmpty && _loading
                       ? const Center(child: CircularProgressIndicator())
