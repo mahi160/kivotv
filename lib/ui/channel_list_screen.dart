@@ -1,23 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
-
 import '../models/channel.dart';
+import '../providers/dashboard_provider.dart';
 import '../services/playlist_repository.dart';
 
-class ChannelListScreen extends StatefulWidget {
+class ChannelListScreen extends ConsumerStatefulWidget {
   const ChannelListScreen({super.key});
 
   @override
-  State<ChannelListScreen> createState() => _ChannelListScreenState();
+  ConsumerState<ChannelListScreen> createState() => _ChannelListScreenState();
 }
 
-class _ChannelListScreenState extends State<ChannelListScreen> {
+class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   static const _pageSize = 50;
 
   final _searchController = TextEditingController();
@@ -32,14 +33,12 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   @override
   void initState() {
     super.initState();
-    PlaylistRepository.instance.dashboardVersion.addListener(_resetAndLoad);
     _scrollController.addListener(_onScroll);
     _loadNextPage();
   }
 
   @override
   void dispose() {
-    PlaylistRepository.instance.dashboardVersion.removeListener(_resetAndLoad);
     _searchTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
@@ -100,6 +99,11 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Re-load list whenever a pin/favourite/refresh happens in the repository.
+    ref.listen<AsyncValue<DashboardData>>(dashboardProvider, (prev, next) {
+      if (next is AsyncData) _resetAndLoad();
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

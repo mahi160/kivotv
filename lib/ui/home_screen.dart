@@ -1,52 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
 import '../models/channel.dart';
-import '../services/playlist_repository.dart';
+import '../providers/channel_count_provider.dart';
+import '../providers/dashboard_provider.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  late Future<_DashboardData> _dashboardFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _dashboardFuture = _loadDashboard();
-    PlaylistRepository.instance.dashboardVersion.addListener(_reload);
-  }
-
-  @override
-  void dispose() {
-    PlaylistRepository.instance.dashboardVersion.removeListener(_reload);
-    super.dispose();
-  }
-
-  void _reload() {
-    if (mounted) {
-      setState(() {
-        _dashboardFuture = _loadDashboard();
-      });
-    }
-  }
-
-  Future<_DashboardData> _loadDashboard() async {
-    return _DashboardData(
-      favorites: await PlaylistRepository.instance.favoriteChannels(),
-      recent: await PlaylistRepository.instance.recentlyWatched(),
-      pinned: await PlaylistRepository.instance.pinnedChannels(),
-    );
-  }
-
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _open(Channel channel) {
     context.go('/player', extra: {'channel': channel});
   }
@@ -98,39 +69,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 const _HomeHeader(),
                 const SizedBox(height: AppSpacing.lg),
                 Expanded(
-                  child: FutureBuilder<_DashboardData>(
-                    future: _dashboardFuture,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final data = snapshot.data!;
-                      return ListView(
-                        children: [
-                          _DashboardSection(
-                            icon: Icons.star_rounded,
-                            title: 'Favorites',
-                            channels: data.favorites,
-                            emptyText: 'Press ★ on channels you love.',
-                            onOpen: _open,
-                          ),
-                          _DashboardSection(
-                            icon: Icons.history_rounded,
-                            title: 'Recently watched',
-                            channels: data.recent,
-                            emptyText: 'Start watching to build your row.',
-                            onOpen: _open,
-                          ),
-                          _DashboardSection(
-                            icon: Icons.push_pin_rounded,
-                            title: 'Pinned channels',
-                            channels: data.pinned,
-                            emptyText: 'Pin channels from All Channels.',
-                            onOpen: _open,
-                          ),
-                        ],
-                      );
-                    },
+                  child: ref.watch(dashboardProvider).when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(
+                      child: Text('Failed to load dashboard: $e'),
+                    ),
+                    data: (data) => ListView(
+                      children: [
+                        _DashboardSection(
+                          icon: Icons.star_rounded,
+                          title: 'Favorites',
+                          channels: data.favorites,
+                          emptyText: 'Press ★ on channels you love.',
+                          onOpen: _open,
+                        ),
+                        _DashboardSection(
+                          icon: Icons.history_rounded,
+                          title: 'Recently watched',
+                          channels: data.recent,
+                          emptyText: 'Start watching to build your row.',
+                          onOpen: _open,
+                        ),
+                        _DashboardSection(
+                          icon: Icons.push_pin_rounded,
+                          title: 'Pinned channels',
+                          channels: data.pinned,
+                          emptyText: 'Pin channels from All Channels.',
+                          onOpen: _open,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -142,23 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _DashboardData {
-  const _DashboardData({
-    required this.favorites,
-    required this.recent,
-    required this.pinned,
-  });
+// _DashboardData moved to lib/providers/dashboard_provider.dart as DashboardData.
 
-  final List<Channel> favorites;
-  final List<Channel> recent;
-  final List<Channel> pinned;
-}
-
-class _HomeHeader extends StatelessWidget {
+class _HomeHeader extends ConsumerWidget {
   const _HomeHeader();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final left = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -183,9 +141,9 @@ class _HomeHeader extends StatelessWidget {
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ValueListenableBuilder<int>(
-          valueListenable: PlaylistRepository.instance.channelCount,
-          builder: (_, count, _) => _StatPill(label: 'Channels', value: '$count'),
+        _StatPill(
+          label: 'Channels',
+          value: '${ref.watch(channelCountProvider).asData?.value ?? 0}',
         ),
         const SizedBox(width: AppSpacing.sm),
         ElevatedButton.icon(
