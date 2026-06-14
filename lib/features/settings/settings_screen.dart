@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
+import '../../core/widgets/app_nav_bar.dart';
 import '../../models/playlist.dart';
 import '../../services/playlist_repository.dart';
 
@@ -147,18 +148,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: () => context.go('/'),
-                        icon: const Icon(Icons.arrow_back_rounded),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Settings',
-                        style: Theme.of(context).textTheme.headlineLarge,
-                      ),
-                    ],
+                  const AppNavBar(active: NavDestination.settings),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'Settings',
+                    style: Theme.of(context).textTheme.headlineLarge,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(

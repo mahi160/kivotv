@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
+import '../../core/widgets/app_nav_bar.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
 import '../../providers/dashboard_provider.dart';
@@ -125,26 +126,19 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
               children: [
                 Row(
                   children: [
-                    IconButton.filledTonal(
-                      onPressed: () => context.go('/'),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      'All Channels',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      width: 460,
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: false,
-                        onChanged: _onSearchChanged,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                        decoration: const InputDecoration(
-                          hintText: 'Search name or group',
-                          prefixIcon: Icon(Icons.search_rounded),
+                    AppNavBar(
+                      active: NavDestination.channels,
+                      trailing: SizedBox(
+                        width: 460,
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: false,
+                          onChanged: _onSearchChanged,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          decoration: const InputDecoration(
+                            hintText: 'Search name or group',
+                            prefixIcon: Icon(Icons.search_rounded),
+                          ),
                         ),
                       ),
                     ),

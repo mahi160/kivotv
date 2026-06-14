@@ -6,9 +6,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
+import '../../core/widgets/app_nav_bar.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../models/channel.dart';
-import '../../providers/channel_count_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
 
@@ -78,7 +78,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _HomeHeader(),
+                const AppNavBar(active: NavDestination.home),
                 const SizedBox(height: AppSpacing.lg),
                 Expanded(
                   child: ref.watch(dashboardProvider).when(
@@ -121,127 +121,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ), // outer Column (GradientBackground child)
       ), // GradientBackground
     ), // Scaffold
-    );
-  }
-}
-
-// _DashboardData moved to lib/providers/dashboard_provider.dart as DashboardData.
-
-class _HomeHeader extends ConsumerWidget {
-  const _HomeHeader();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final left = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _LogoMark(),
-        const SizedBox(width: 18),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Kivo',
-              style: Theme.of(context).textTheme.displayLarge,
-            ),
-            Text(
-              'Live TV launcher',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ],
-    );
-
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _StatPill(
-          label: 'Channels',
-          value: '${ref.watch(channelCountProvider).asData?.value ?? 0}',
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        ElevatedButton.icon(
-          autofocus: true,
-          onPressed: () => context.go('/channels'),
-          icon: const Icon(Icons.grid_view_rounded),
-          label: const Text('All Channels'),
-        ),
-        const SizedBox(width: AppSpacing.xs + 4),
-        ElevatedButton.icon(
-          onPressed: () => context.go('/settings'),
-          icon: const Icon(Icons.settings_rounded),
-          label: const Text('Settings'),
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 1100) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [left, const SizedBox(width: 36), actions]),
-          );
-        }
-
-        return Row(children: [left, const Spacer(), actions]);
-      },
-    );
-  }
-}
-
-class _LogoMark extends StatelessWidget {
-  const _LogoMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 68,
-      height: 68,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [AppColors.logoGradientStart, AppColors.logoGradientEnd],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.logoGradientStart.withValues(alpha: 0.35),
-            blurRadius: 28,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: const Icon(Icons.live_tv_rounded, size: 34, color: Colors.white),
-    );
-  }
-}
-
-class _StatPill extends StatelessWidget {
-  const _StatPill({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ),
     );
   }
 }
