@@ -115,9 +115,24 @@ class _NavIconState extends State<_NavIcon> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = isDark
+        ? AppColors.darkOnSurface
+        : AppColors.lightOnSurface;
+    final onSurfaceVariant = isDark
+        ? AppColors.darkOnSurfaceVariant
+        : AppColors.lightOnSurfaceVariant;
+
     final iconColor = widget.isActive
-        ? AppColors.sandMid
-        : Colors.white.withValues(alpha: 0.65);
+        ? AppColors.oceanDeepBlue          // consistent on both themes
+        : onSurfaceVariant;                // readable on both bg colours
+
+    final focusBg = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
+    final activeBg = isDark
+        ? AppColors.sandMid.withValues(alpha: 0.12)
+        : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
 
     return Semantics(
       label: widget.label,
@@ -144,22 +159,18 @@ class _NavIconState extends State<_NavIcon> {
               vertical: AppSpacing.xs,
             ),
             decoration: BoxDecoration(
-              color: _focused
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : widget.isActive
-                      ? AppColors.sandMid.withValues(alpha: 0.12)
-                      : Colors.transparent,
+              color: _focused ? focusBg : widget.isActive ? activeBg : Colors.transparent,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               border: Border.all(
                 color: _focused
-                    ? AppColors.sandMid.withValues(alpha: 0.6)
+                    ? AppColors.oceanDeepBlue.withValues(alpha: 0.6)
                     : Colors.transparent,
               ),
             ),
             child: Icon(
               widget.icon,
               size: AppSpacing.iconLg,
-              color: _focused ? Colors.white : iconColor,
+              color: _focused ? onSurface : iconColor,
             ),
           ),
         ),

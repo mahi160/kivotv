@@ -123,7 +123,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final busy = _isRefreshing || _isAdding;
+    final busy   = _isRefreshing || _isAdding;
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -150,9 +151,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               width: 760,
               padding: const EdgeInsets.all(34),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : AppColors.lightSurface,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-                border: Border.all(color: AppColors.darkBorder),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                ),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x38000000),
@@ -349,9 +354,7 @@ class _ThemeOptionState extends State<_ThemeOption> {
             border: Border.all(
               color: highlight
                   ? AppColors.oceanDeepBlue
-                  : (widget.isDark
-                      ? AppColors.darkBorder
-                      : AppColors.lightBorder),
+                  : (widget.isDark ? AppColors.darkBorder : AppColors.lightBorder),
               width: highlight ? 2 : 1,
             ),
           ),
@@ -405,6 +408,7 @@ class _PlaylistTile extends StatelessWidget {
         ? playlist.url
         : '${playlist.url}  \u00b7  Refreshed ${_timeAgo(refreshed)}';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.xs),
       padding: const EdgeInsets.symmetric(
@@ -412,9 +416,13 @@ class _PlaylistTile extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : AppColors.lightSurfaceVariant.withValues(alpha: 0.60),
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+        ),
       ),
       child: Row(
         children: [

@@ -61,12 +61,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           children: [
             // Slim progress bar shown while background playlist fetch runs.
-            if (ref.watch(isFetchingProvider).asData?.value == true)
+            if (ref.watch(isFetchingProvider).asData?.value == true) ...([
               LinearProgressIndicator(
                 minHeight: 3,
                 backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.sandMid),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.oceanDeepBlue),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.tvEdge, 4, AppSpacing.tvEdge, 0,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.downloading_rounded,
+                      size: 13,
+                      color: AppColors.oceanDeepBlue.withValues(alpha: 0.70),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Fetching channels…',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.oceanDeepBlue.withValues(alpha: 0.70),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ]),
             Expanded(
             child: Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -154,7 +176,7 @@ class _DashboardSection extends StatelessWidget {
         // Section header
         Row(
           children: [
-            Icon(icon, color: AppColors.oceanBright, size: 22),
+            Icon(icon, color: AppColors.oceanDeepBlue, size: 22),
             const SizedBox(width: 10),
             Text(title, style: Theme.of(context).textTheme.headlineMedium),
           ],

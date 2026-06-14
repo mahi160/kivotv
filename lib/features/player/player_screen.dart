@@ -165,6 +165,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return null;
   }
 
+  /// Clears the failed-URL set and retries the originally requested channel.
+  void _retryFromStart() {
+    _failedUrls.clear();
+    _open(widget.channel);
+  }
+
   // ── overlay ────────────────────────────────────────────────────────────────
 
   void _showControls() {
@@ -368,28 +374,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
               Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 32, vertical: 20,
+                    horizontal: 40, vertical: 28,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.black87,
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(color: Colors.white12),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.signal_wifi_off_rounded,
-                          color: Colors.white54, size: 48),
+                          color: Colors.white38, size: 52),
                       const SizedBox(height: 16),
                       Text(
-                        'All available streams failed',
+                        'All streams unavailable',
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(color: Colors.white),
                       ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => context.go('/channels'),
-                        child: const Text('Back to channels',
-                            style: TextStyle(color: AppColors.sandMid)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'The streams for this channel are currently unreachable.',
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: Colors.white60),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Retry — clears failed list and tries the original channel
+                          ElevatedButton.icon(
+                            autofocus: true,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.oceanDeepBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 14),
+                            ),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Retry'),
+                            onPressed: _retryFromStart,
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () => context.go('/channels'),
+                            child: const Text(
+                              'Back to channels',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

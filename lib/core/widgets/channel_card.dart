@@ -98,7 +98,7 @@ class _ChannelCardState extends State<ChannelCard> {
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         color: _focused
-                            ? Colors.white
+                            ? (isDark ? Colors.white : AppColors.lightSurface)
                             : (isBroken
                                 ? (isDark ? Colors.white30 : Colors.black26)
                                 : null),
@@ -114,7 +114,7 @@ class _ChannelCardState extends State<ChannelCard> {
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: _focused
-                              ? Colors.white60
+                              ? (isDark ? Colors.white60 : AppColors.lightSurface.withValues(alpha: 0.75))
                               : (isDark
                                   ? AppColors.darkOnSurfaceVariant
                                   : AppColors.lightOnSurfaceVariant),
