@@ -24,7 +24,10 @@ class DashboardData {
 // Every time the repository bumps dashboardVersion (after pin/fav/refresh),
 // this stream emits a new value, which causes dashboardProvider to rebuild.
 
-final _dashboardVersionStreamProvider = StreamProvider<int>((ref) {
+// autoDispose so the controller + ValueNotifier listener are cleaned up
+// when dashboardProvider (also autoDispose) leaves the tree.
+final _dashboardVersionStreamProvider =
+    StreamProvider.autoDispose<int>((ref) {
   final notifier = PlaylistRepository.instance.dashboardVersion;
   // Non-broadcast: buffers the seeded version number until StreamProvider
   // subscribes, so the dashboard rebuilds immediately on first watch.

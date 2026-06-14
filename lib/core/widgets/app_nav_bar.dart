@@ -27,20 +27,9 @@ class AppNavBar extends StatelessWidget {
         // ── Branding ───────────────────────────────────────────────────────
         const _LogoMark(),
         const SizedBox(width: AppSpacing.sm),
-        RichText(
-          text: TextSpan(
-            style: Theme.of(context).textTheme.headlineLarge,
-            children: const [
-              TextSpan(text: 'Kivo '),
-              TextSpan(
-                text: 'TV',
-                style: TextStyle(
-                  color: AppColors.oceanDeepBlue,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
+        Text(
+          'Kivo',
+          style: Theme.of(context).textTheme.headlineLarge,
         ),
         // ── Spacer pushes icons to the right ───────────────────────────────
         const Spacer(),

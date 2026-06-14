@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -160,49 +162,81 @@ CREATE TABLE recently_watched (
     return rows.map(Playlist.fromDb).toList();
   }
 
-  /// Replaces ALL channels for [playlistId] with the supplied list inside a
-  /// single transaction. Channels removed upstream are deleted; existing
-  /// per-channel user flags (favourite / pinned) are preserved by re-applying
-  /// them after the wipe.
+  /// Reconciles stored channels for [playlistId] with the new [channels] list.
+  ///
+  /// Strategy: diff-then-upsert, never delete-then-insert.
+  /// - Channels whose URL vanished from the payload are deleted (their
+  ///   `recently_watched` rows cascade away correctly).
+  /// - Surviving and new channels are upserted via ON CONFLICT(url) DO UPDATE,
+  ///   which updates the row IN PLACE — no row deletion, no cascade, so
+  ///   `is_favorite`, `is_pinned`, and `recently_watched` history are all
+  ///   preserved automatically. `is_broken` is cleared on every refresh.
+  /// - Duplicate URLs within the payload (common in real IPTV playlists)
+  ///   and URLs that already belong to another playlist are handled by the
+  ///   upsert instead of throwing a UNIQUE violation.
   Future<void> replaceChannels({
     required int playlistId,
     required List<Channel> channels,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
-      // Preserve user flags keyed by url before wiping.
-      final prior = await txn.query(
+      final newUrls = {for (final c in channels) c.url};
+
+      // Find URLs that disappeared upstream so only those rows get deleted.
+      final existing = await txn.query(
         'channels',
-        columns: ['url', 'is_favorite', 'is_pinned'],
+        columns: ['url'],
         where: 'playlist_id = ?',
         whereArgs: [playlistId],
       );
-      final favorite = <String>{};
-      final pinned   = <String>{};
-      for (final row in prior) {
-        final url = row['url'] as String;
-        if ((row['is_favorite'] as int? ?? 0) == 1) favorite.add(url);
-        if ((row['is_pinned']   as int? ?? 0) == 1) pinned.add(url);
+      final toDelete = [
+        for (final row in existing)
+          if (!newUrls.contains(row['url'] as String)) row['url'] as String,
+      ];
+
+      // Delete in chunks — SQLite variable limit is 999 by default.
+      const chunkSize = 500;
+      for (var i = 0; i < toDelete.length; i += chunkSize) {
+        final slice = toDelete.sublist(
+            i, math.min(i + chunkSize, toDelete.length));
+        final placeholders = List.filled(slice.length, '?').join(',');
+        await txn.rawDelete(
+          'DELETE FROM channels WHERE url IN ($placeholders)',
+          slice,
+        );
       }
 
-      await txn.delete(
-        'channels',
-        where: 'playlist_id = ?',
-        whereArgs: [playlistId],
-      );
-
+      // Upsert: DO UPDATE never deletes the row, so no cascade fires.
+      // is_favorite / is_pinned are left untouched; is_broken is cleared.
       final batch = txn.batch();
       for (final channel in channels) {
         final data = channel.toDb(playlistId: playlistId);
-        final url  = data['url'] as String;
-        batch.insert('channels', {
-          ...data,
-          'is_favorite': favorite.contains(url) ? 1 : 0,
-          'is_pinned':   pinned.contains(url)   ? 1 : 0,
-          // is_broken reset to 0 on every refresh so transient failures
-          // are cleared when the playlist is next fetched (see audit A3).
-          'is_broken': 0,
-        });
+        batch.rawInsert(
+          '''
+INSERT INTO channels
+  (id, playlist_id, name, url, logo, group_name, search_text, is_pinned, is_favorite, is_broken)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+ON CONFLICT(url) DO UPDATE SET
+  id          = excluded.id,
+  playlist_id = excluded.playlist_id,
+  name        = excluded.name,
+  logo        = excluded.logo,
+  group_name  = excluded.group_name,
+  search_text = excluded.search_text,
+  is_broken   = 0
+''',
+          [
+            data['id'],
+            data['playlist_id'],
+            data['name'],
+            data['url'],
+            data['logo'],
+            data['group_name'],
+            data['search_text'],
+            data['is_pinned'],
+            data['is_favorite'],
+          ],
+        );
       }
       await batch.commit(noResult: true);
     });
@@ -221,12 +255,13 @@ CREATE TABLE recently_watched (
 INSERT INTO channels (id, playlist_id, name, url, logo, group_name, search_text, is_pinned, is_favorite, is_broken)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(url) DO UPDATE SET
-  id = excluded.id,
+  id          = excluded.id,
   playlist_id = excluded.playlist_id,
-  name = excluded.name,
-  logo = excluded.logo,
-  group_name = excluded.group_name,
-  search_text = excluded.search_text
+  name        = excluded.name,
+  logo        = excluded.logo,
+  group_name  = excluded.group_name,
+  search_text = excluded.search_text,
+  is_broken   = 0
 ''',
         [
           data['id'],

@@ -52,7 +52,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Maps raw exceptions to user-readable messages.
   String _friendlyError(Object error) {
-    if (error is SocketException || error is HttpException && error.message.contains('Failed host lookup')) {
+    if (error is SocketException || (error is HttpException && error.message.contains('Failed host lookup'))) {
       return 'No internet connection. Check your network and try again.';
     }
     if (error is HttpException) {

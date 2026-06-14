@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show compute;
+
 import '../models/channel.dart';
 
 class PlaylistService {
@@ -13,13 +15,14 @@ class PlaylistService {
   /// Currently active HTTP client — cancelled when a new fetch starts.
   HttpClient? _activeClient;
 
-  /// Fetches and parses an M3U playlist without loading it fully into memory.
+  /// Fetches and parses an M3U playlist from [url].
   ///
-  /// Calling this while a previous fetch is in progress cancels the earlier
-  /// request so bandwidth is never wasted on stale downloads.
+  /// Cancelling an in-flight fetch before starting a new one avoids wasting
+  /// bandwidth on a stale download.
   ///
-  /// The response body is processed line-by-line (streaming), so even
-  /// 200 MB playlist files never allocate a single giant String.
+  /// The full response body is read into a single String, then passed to
+  /// [parseM3u] running in a background isolate via [compute] so the UI
+  /// thread is never blocked by the regex-heavy parse (10k+ entries ≈ 200 ms).
   Future<List<Channel>> fetchChannels({String url = playlistUrl}) async {
     // Cancel any in-flight request before starting a new one.
     _activeClient?.close(force: true);
@@ -43,15 +46,16 @@ class PlaylistService {
         );
       }
 
-      // Stream-decode into lines then parse synchronously.
-      // compute() with 150k strings causes isolate message failures in
-      // release builds — sync parse is safer; brief UI block is acceptable.
-      final lines = await response
+      // Read the body with a hard timeout so a stalled CDN doesn't leave
+      // the "Fetching channels…" indicator running forever.
+      final body = await response
           .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .toList();
+          .join()
+          .timeout(const Duration(seconds: 90));
 
-      return parseM3uLines(lines);
+      // Parse on a background isolate — the regex loop over 10k+ lines
+      // would jank the UI for ~200 ms on a low-end TV SoC if run here.
+      return compute(parseM3u, body);
     } finally {
       // Only clear the reference if this client is still the active one.
       if (identical(_activeClient, client)) _activeClient = null;

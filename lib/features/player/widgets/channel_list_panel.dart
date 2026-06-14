@@ -132,8 +132,10 @@ class _SidebarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FocusableTap(
-      onTap:      onTap,
-      onLongPress: onLongPress,
+      onTap:       onTap,
+      onLongPress:  onLongPress,
+      // TV remotes can't long-press — MENU key triggers the same action.
+      onMenu:       onLongPress,
       builder: (_, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         // Focused → gold tint; current-but-not-focused → ocean tint.

@@ -104,6 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SizedBox(height: AppSpacing.lg),
                 Expanded(
                   child: ref.watch(dashboardProvider).when(
+                    skipLoadingOnReload: true,
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(
                       child: Text('Failed to load dashboard: $e'),
@@ -120,7 +121,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           icon: Icons.star_rounded,
                           title: 'Favourites',
                           channels: data.favorites,
-                          emptyText: 'Long press any channel to add it here.',
+                          emptyText: 'Press MENU on any channel to add it to favourites.',
                           onOpen: _open,
                         ),
                         _DashboardSection(

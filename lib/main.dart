@@ -16,11 +16,11 @@ void main() async {
 
   if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
 
-  // Cap the Flutter image cache so channel logos don't exhaust RAM.
-  // 200 items / 80 MB is generous for a TV app with many logos visible.
+  // Cap the Flutter image cache so channel logos don't exhaust RAM on
+  // low-end Android TV boxes (1 GB RAM) that also buffer video.
   PaintingBinding.instance.imageCache
-    ..maximumSize      = 200
-    ..maximumSizeBytes = 80 << 20; // 80 MB
+    ..maximumSize      = 150
+    ..maximumSizeBytes = 48 << 20; // 48 MB
 
   // Build a temporary container just to hydrate theme before first frame.
   final container = ProviderContainer();

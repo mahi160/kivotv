@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -28,7 +29,10 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+/// [WidgetsBindingObserver] lets us pause playback when the app is backgrounded
+/// (e.g. user presses TV Home) and resume when it returns to the foreground.
+class _PlayerScreenState extends State<PlayerScreen>
+    with WidgetsBindingObserver {
   // ── media ──────────────────────────────────────────────────────────────────
   late final Player          _player;
   late final VideoController _controller;
@@ -37,6 +41,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<Channel>     _channels       = const [];
   final Set<String> _failedUrls     = {};
   late Channel      _currentChannel;
+
+  // ── cached index — avoids O(n) scan on every overlay rebuild ───────────────
+  int _currentIndexCache = -1;
 
   // ── overlay ────────────────────────────────────────────────────────────────
   bool   _showOverlay     = true;
@@ -69,21 +76,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WakelockPlus.enable(); // keep screen on during playback
+
     _currentChannel = widget.channel;
-    _player         = Player();
+
+    _player = Player();
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(
-        // SW decode: avoids hardware surface-attach failures on Android TV
-        // where the GPU texture view is not ready when Player.open() fires.
-        // CPU usage is acceptable for 1080p IPTV on modern TV SoCs.
-        enableHardwareAcceleration: false,
+        // Hardware acceleration ON — Impeller is disabled in AndroidManifest
+        // (see V1), which is the real fix for the black-video-with-audio bug.
+        // If a specific old/low-end box still shows black after that, flip
+        // this to false (software decode fallback, higher CPU use).
+        enableHardwareAcceleration: true,
       ),
     );
 
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (playing) {
-        // Stream is actually playing — cancel the failure watchdog.
+        // Stream is actually rendering — cancel the failure watchdog.
         _playbackFailureTimer?.cancel();
         if (!_markedWatched) {
           _markedWatched = true;
@@ -92,18 +104,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
 
-    // Do NOT subscribe to _player.stream.error for failure detection.
-    // media_kit emits errors for non-fatal events (codec messages, CDN
-    // retries, seek errors) — using it as a failure signal causes healthy
-    // live streams to be marked broken immediately.
-    // The _playbackFailureTimer (25 s) is the sole failure detector.
-
-    // Load the channel list in the background (prev/next navigation).
+    // Load the channel list in the background so prev/next navigation works.
     _loadChannels();
 
-    // Open media AFTER the first frame so the Video surface is attached
-    // to the widget tree. Calling _player.open() before the platform
-    // texture is created results in audio-only playback (black screen).
+    // Open media AFTER the first frame so the Video surface is attached to
+    // the widget tree. Calling Player.open() before the platform texture is
+    // created results in audio-only playback (black screen).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _open(_currentChannel);
     });
@@ -113,6 +119,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    WakelockPlus.disable();
     _hideTimer?.cancel();
     _playbackFailureTimer?.cancel();
     _streamErrorTimer?.cancel();
@@ -124,6 +132,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _player.dispose();
     super.dispose();
   }
+
+  // ── lifecycle — pause when backgrounded, resume on foreground ──────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _player.pause();
+      case AppLifecycleState.resumed:
+        _player.play();
+      default:
+        break;
+    }
+  }
+
+  // ── index cache ────────────────────────────────────────────────────────────
+
+  void _recomputeIndex() {
+    _currentIndexCache =
+        _channels.indexWhere((c) => c.url == _currentChannel.url);
+  }
+
+  int get _currentIndex => _currentIndexCache;
 
   // ── channel loading ────────────────────────────────────────────────────────
 
@@ -143,6 +175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (!mounted) return;
     setState(() => _channels = all);
+    _recomputeIndex();
   }
 
   // ── playback ───────────────────────────────────────────────────────────────
@@ -154,11 +187,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _currentChannel   = channel;
       _allStreamsFailed = false;
     });
+    _recomputeIndex();
     try {
       await _player.open(Media(channel.url), play: true);
-      // Generous timeout — low-end TVs on slow IPTV CDNs need time to buffer
-      // before we declare a stream dead. 9 s caused healthy channels to be
-      // permanently flagged broken on first open.
+      // Generous timeout — low-end TVs on slow CDNs need time to buffer.
       _playbackFailureTimer = Timer(
         const Duration(seconds: 25),
         _handlePlaybackFailure,
@@ -172,6 +204,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _handlePlaybackFailure() async {
     _playbackFailureTimer?.cancel();
     if (_failedUrls.contains(_currentChannel.url)) return;
+
+    // Channel list not yet loaded — retry the current channel in 5 s rather
+    // than showing "All streams unavailable" with no fallbacks to try.
+    if (_channels.isEmpty) {
+      _playbackFailureTimer =
+          Timer(const Duration(seconds: 5), _handlePlaybackFailure);
+      return;
+    }
 
     _failedUrls.add(_currentChannel.url);
     await PlaylistRepository.instance.markBroken(_currentChannel);
@@ -197,10 +237,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return null;
   }
 
-  /// Clears the failed-URL set and retries the originally requested channel.
   void _retryFromStart() {
     _failedUrls.clear();
     _open(widget.channel);
+  }
+
+  // ── favourite helpers — patch in place, no full reload ────────────────────
+
+  Future<void> _toggleCurrentFavorite() async {
+    final newValue = !_currentChannel.isFavorite;
+    await PlaylistRepository.instance.setFavorite(_currentChannel, newValue);
+    if (!mounted) return;
+    final updated = _currentChannel.copyWith(isFavorite: newValue);
+    setState(() {
+      _currentChannel = updated;
+      final i = _channels.indexWhere((c) => c.url == updated.url);
+      if (i != -1) _channels[i] = updated;
+    });
+  }
+
+  Future<void> _toggleSidebarFavorite(Channel ch) async {
+    final newValue = !ch.isFavorite;
+    await PlaylistRepository.instance.setFavorite(ch, newValue);
+    if (!mounted) return;
+    setState(() {
+      final i = _channels.indexWhere((c) => c.url == ch.url);
+      if (i != -1) _channels[i] = _channels[i].copyWith(isFavorite: newValue);
+      if (ch.url == _currentChannel.url) {
+        _currentChannel = _currentChannel.copyWith(isFavorite: newValue);
+      }
+    });
   }
 
   // ── overlay ────────────────────────────────────────────────────────────────
@@ -215,7 +281,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _scheduleOverlayHide() {
     _hideTimer?.cancel();
-    // Keep overlay visible longer when the channel list is open.
     final delay = _showChannelList ? 12 : 5;
     _hideTimer = Timer(Duration(seconds: delay), () {
       if (mounted && !_showChannelList) {
@@ -240,7 +305,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _sidebarScopeNode.requestFocus();
-        // Scroll to current channel.
         final idx = _currentIndex;
         if (idx > 0 && _sidebarScroll.hasClients) {
           const itemH = AppSpacing.tvSidebarTile;
@@ -281,9 +345,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _open(_channels[idx + 1]);
   }
 
-  int get _currentIndex =>
-      _channels.indexWhere((c) => c.url == _currentChannel.url);
-
   // ── key handling ───────────────────────────────────────────────────────────
 
   KeyEventResult _onKeyEvent(FocusNode _, KeyEvent event) {
@@ -302,9 +363,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.arrowUp   ||
-          key == LogicalKeyboardKey.arrowDown  ||
-          key == LogicalKeyboardKey.channelUp  ||
+      // Pass up/down through so Flutter can move focus between sidebar items.
+      if (key == LogicalKeyboardKey.arrowUp    ||
+          key == LogicalKeyboardKey.arrowDown   ||
+          key == LogicalKeyboardKey.channelUp   ||
           key == LogicalKeyboardKey.channelDown) {
         return KeyEventResult.ignored;
       }
@@ -330,6 +392,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.channelDown) {
       _playNext();
+      _showControls();
+      return KeyEventResult.handled;
+    }
+
+    // ── Left / Right: when overlay is hidden, any direction brings it back.
+    // When overlay IS shown, these keys are ignored here so FocusTraversalGroup
+    // inside the overlay can move focus between the control buttons.
+    if (!_showOverlay &&
+        (key == LogicalKeyboardKey.arrowLeft ||
+         key == LogicalKeyboardKey.arrowRight)) {
       _showControls();
       return KeyEventResult.handled;
     }
@@ -377,7 +449,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             Video(
               controller: _controller,
               fit: BoxFit.contain,
-              // Disable media_kit's built-in controls — we render our own overlay.
+              // Disable media_kit built-in controls; we draw our own overlay.
               controls: NoVideoControls,
             ),
 
@@ -389,7 +461,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   : const SizedBox.shrink(),
             ),
 
-            // ── Stream error toast — bottom centre ────────────────────────────
+            // ── Stream error toast ────────────────────────────────────────────
             if (_streamErrorMsg != null)
               Positioned(
                 bottom: 120, left: 0, right: 0,
@@ -459,66 +531,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
 
-            // ── Main overlay (fades) ──────────────────────────────────────────
+            // ── Main overlay (fades in/out) ───────────────────────────────────
+            // ExcludeFocus prevents D-pad traversal from entering the overlay
+            // while it is invisible, so focus can never "disappear".
+            // FocusTraversalGroup contains left/right movement inside the
+            // control row, preventing it from escaping to the sidebar.
             AnimatedOpacity(
               opacity:  _showOverlay ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
-              child: IgnorePointer(
-                ignoring: !_showOverlay,
-                child: PlayerOverlay(
-                  channel:          _currentChannel,
-                  channelIndex:     _currentIndex,
-                  channelTotal:     _channels.length,
-                  player:           _player,
-                  showingList:      _showChannelList,
-                  onPrevious:       _playPrevious,
-                  onNext:           _playNext,
-                  onInteraction:    _scheduleOverlayHide,
-                  onBack:           () => context.go('/channels'),
-                  onToggleList:     _toggleChannelList,
-                  playFocusNode:    _playFocusNode,
-                  onToggleFavorite: () async {
-                    await PlaylistRepository.instance.setFavorite(
-                      _currentChannel, !_currentChannel.isFavorite);
-                    await _loadChannels();
-                    if (!mounted) return;
-                    final updated = _channels.firstWhere(
-                      (c) => c.url == _currentChannel.url,
-                      orElse: () => _currentChannel,
-                    );
-                    setState(() => _currentChannel = updated);
-                  },
+              child: ExcludeFocus(
+                excluding: !_showOverlay,
+                child: IgnorePointer(
+                  ignoring: !_showOverlay,
+                  child: FocusTraversalGroup(
+                    child: PlayerOverlay(
+                      channel:          _currentChannel,
+                      channelIndex:     _currentIndex,
+                      channelTotal:     _channels.length,
+                      player:           _player,
+                      showingList:      _showChannelList,
+                      onPrevious:       _playPrevious,
+                      onNext:           _playNext,
+                      onInteraction:    _scheduleOverlayHide,
+                      onBack:           () => context.go('/channels'),
+                      onToggleList:     _toggleChannelList,
+                      playFocusNode:    _playFocusNode,
+                      onToggleFavorite: _toggleCurrentFavorite,
+                    ),
+                  ),
                 ),
               ),
             ),
 
             // ── Channel list sidebar (slides in from right) ───────────────────
+            // ExcludeFocus prevents the off-screen sidebar from absorbing D-pad
+            // focus when it is hidden (translated off-screen but still mounted).
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve:    Curves.easeOut,
               top: 0, bottom: 0,
               right: _showChannelList ? 0 : -(AppSpacing.tvSidebarWidth + 20),
-              child: FocusScope(
-                node: _sidebarScopeNode,
-                child: ChannelListPanel(
-                  channels:         _channels,
-                  currentChannel:   _currentChannel,
-                  scrollController: _sidebarScroll,
-                  onSelectChannel: (ch) {
-                    setState(() => _showChannelList = false);
-                    _open(ch);
-                  },
-                  onToggleFavorite: (ch) async {
-                    await PlaylistRepository.instance
-                        .setFavorite(ch, !ch.isFavorite);
-                    await _loadChannels();
-                    if (!mounted) return;
-                    final updated = _channels.firstWhere(
-                      (c) => c.url == _currentChannel.url,
-                      orElse: () => _currentChannel,
-                    );
-                    setState(() => _currentChannel = updated);
-                  },
+              child: ExcludeFocus(
+                excluding: !_showChannelList,
+                child: FocusScope(
+                  node: _sidebarScopeNode,
+                  child: ChannelListPanel(
+                    channels:         _channels,
+                    currentChannel:   _currentChannel,
+                    scrollController: _sidebarScroll,
+                    onSelectChannel: (ch) {
+                      setState(() => _showChannelList = false);
+                      _open(ch);
+                    },
+                    onToggleFavorite: _toggleSidebarFavorite,
+                  ),
                 ),
               ),
             ),

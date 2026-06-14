@@ -41,6 +41,8 @@ class ChannelCard extends StatelessWidget {
     return FocusableTap(
       onTap:       isBroken ? () {} : onTap,
       onLongPress: onFavoriteLongPress,
+      // TV remotes can't long-press — wire MENU key to the same action.
+      onMenu:      onFavoriteLongPress,
       builder: (context, focused) {
         Widget card = AnimatedContainer(
           duration: const Duration(milliseconds: 150),
