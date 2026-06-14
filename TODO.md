@@ -487,21 +487,21 @@ class AppTheme {
 | 8 | [THEME-3] Create AppTheme dark + light | ✅ done |
 | 9 | [THEME-4] GradientBackground widget | ✅ done |
 | 10 | [THEME-bonus] Replace all inline Color() literals with AppColors | ✅ done |
-| 11 | [THEME-5] Typography with Google Fonts | ⬜ next |
-| 12 | [UX-5] Remove SafeArea from TV screens | ⬜ |
-| 13 | [UX-2] Fix home cards: GridView → ListView | ⬜ |
-| 14 | [UX-3] Player overlay fade + channel info | ⬜ |
-| 15 | [UX-4] Player media key handling | ⬜ |
-| 16 | [ARCH-1] Introduce Riverpod providers (channel, dashboard) | ⬜ |
-| 17 | [ARCH-2] Bootstrap as FutureProvider + splash screen | ⬜ |
-| 18 | [ARCH-3] Feature-first folder restructure | ⬜ |
-| 19 | [ARCH-4] Channel.copyWith() | ⬜ |
-| 20 | [ARCH-5] Playlist model | ⬜ |
-| 21 | [QUAL-1] upsertPlaylist single upsert | ⬜ |
-| 22 | [QUAL-2] Stream M3U parsing | ⬜ |
-| 23 | [QUAL-3] Cancellable network requests | ⬜ |
-| 24 | [QUAL-4] User-friendly error messages | ⬜ |
-| 25 | [UX-6] Settings: show playlist list + delete | ⬜ |
+| 11 | [THEME-5] Typography with Google Fonts (Inter) | ✅ done |
+| 12 | [UX-5] Remove SafeArea from TV screens | ✅ done (via GradientBackground step) |
+| 13 | [UX-2] Fix home cards: GridView → ListView | ✅ done |
+| 14 | [UX-3] Player overlay fade + channel info | ✅ done |
+| 15 | [UX-4] Player media key handling | ✅ done |
+| 16 | [ARCH-4] Channel.copyWith() | ✅ done |
+| 17 | [ARCH-5] Playlist model | ✅ done |
+| 18 | [QUAL-1] upsertPlaylist single upsert | ✅ done |
+| 19 | [QUAL-2] Stream M3U parsing | ✅ done |
+| 20 | [QUAL-4] + [UX-6] Friendly errors + playlist list/delete in settings | ✅ done |
+| 21 | [QUAL-6] pubspec description | ✅ done |
+| 22 | [ARCH-1] Introduce Riverpod providers (channel, dashboard) | ⬜ next |
+| 23 | [ARCH-2] Bootstrap as FutureProvider + splash screen | ⬜ |
+| 24 | [ARCH-3] Feature-first folder restructure | ⬜ |
+| 25 | [QUAL-3] Cancellable network requests | ⬜ |
 | 26 | [FEAT-2] Channel logos with cached_network_image | ⬜ |
 | 27 | [FEAT-1] Group browser screen | ⬜ |
 | 28 | [FEAT-5] Auto-refresh on startup | ⬜ |
