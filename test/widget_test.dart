@@ -11,6 +11,6 @@ void main() {
     );
 
     // On first pump the bootstrap FutureProvider is loading — splash shown.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
   });
 }

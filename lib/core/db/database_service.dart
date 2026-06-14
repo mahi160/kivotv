@@ -125,22 +125,32 @@ CREATE TABLE recently_watched (
     required String name,
     required String url,
   }) async {
-    final db = await database;
-    final refreshedAt = DateTime.now().millisecondsSinceEpoch;
-    // Single upsert: insert or update name + timestamp on url conflict.
-    // RETURNING id avoids a separate SELECT query.
-    final result = await db.rawQuery(
-      '''
-INSERT INTO playlists (name, url, last_refreshed_at)
-VALUES (?, ?, ?)
-ON CONFLICT(url) DO UPDATE SET
-  name = excluded.name,
-  last_refreshed_at = excluded.last_refreshed_at
-RETURNING id
-''',
-      [name, url, refreshedAt],
+    final db    = await database;
+    final now   = DateTime.now().millisecondsSinceEpoch;
+    // INSERT IGNORE keeps existing row intact (preserves foreign-key channels).
+    // UPDATE sets the new name + timestamp.
+    // Separate SELECT reads back the id.
+    // Avoids RETURNING which requires SQLite >= 3.35 (not guaranteed on all
+    // Android TV firmware versions).
+    await db.insert(
+      'playlists',
+      {'name': name, 'url': url, 'last_refreshed_at': now},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
-    return result.single['id'] as int;
+    await db.update(
+      'playlists',
+      {'name': name, 'last_refreshed_at': now},
+      where: 'url = ?',
+      whereArgs: [url],
+    );
+    final rows = await db.query(
+      'playlists',
+      columns: ['id'],
+      where: 'url = ?',
+      whereArgs: [url],
+      limit: 1,
+    );
+    return rows.single['id'] as int;
   }
 
   Future<List<Playlist>> playlists() async {

@@ -108,12 +108,24 @@ class _SplashScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 48),
-            const SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(
-                strokeWidth: 3,
-                color: AppColors.oceanBright,
+            // Progress bar — wide, thin, and clearly visible on TV.
+            SizedBox(
+              width: 280,
+              child: LinearProgressIndicator(
+                backgroundColor:
+                    AppColors.oceanDeepBlue.withValues(alpha: 0.20),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.goldenDriftwood,
+                ),
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Starting up…',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.oceanDeepBlue.withValues(alpha: 0.60),
               ),
             ),
           ],
