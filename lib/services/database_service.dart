@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/channel.dart';
+import '../models/playlist.dart';
 
 class DatabaseService {
   DatabaseService._();
@@ -148,9 +149,10 @@ CREATE TABLE recently_watched (
     return rows.single['id'] as int;
   }
 
-  Future<List<Map<String, Object?>>> playlists() async {
+  Future<List<Playlist>> playlists() async {
     final db = await database;
-    return db.query('playlists', orderBy: 'name COLLATE NOCASE ASC');
+    final rows = await db.query('playlists', orderBy: 'name COLLATE NOCASE ASC');
+    return rows.map(Playlist.fromDb).toList();
   }
 
   Future<void> replaceChannels({

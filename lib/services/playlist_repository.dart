@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/channel.dart';
+import '../models/playlist.dart';
 import 'database_service.dart';
 import 'playlist_service.dart';
 
@@ -48,18 +49,18 @@ class PlaylistRepository {
 
     final playlists = await DatabaseService.instance.playlists();
     for (final playlist in playlists) {
-      final url = playlist['url'] as String;
-      if (url.startsWith('kivo://')) continue;
+      if (playlist.isBuiltIn) continue;
 
       try {
-        final playlistId = playlist['id'] as int;
-        final channels = await PlaylistService.instance.fetchChannels(url: url);
+        final channels = await PlaylistService.instance.fetchChannels(
+          url: playlist.url,
+        );
         await DatabaseService.instance.replaceChannels(
-          playlistId: playlistId,
+          playlistId: playlist.id,
           channels: channels,
         );
       } catch (error, stackTrace) {
-        debugPrint('Failed to refresh playlist $url: $error');
+        debugPrint('Failed to refresh playlist ${playlist.url}: $error');
         debugPrintStack(stackTrace: stackTrace);
       }
     }
@@ -107,6 +108,16 @@ class PlaylistRepository {
       playlistId: playlistId,
       channels: const [exampleChannel],
     );
+  }
+
+  Future<List<Playlist>> playlists() => DatabaseService.instance.playlists();
+
+  Future<void> deletePlaylist(int playlistId) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete('playlists', where: 'id = ?', whereArgs: [playlistId]);
+    final count = await DatabaseService.instance.channelCount();
+    channelCount.value = count;
+    _bumpDashboard();
   }
 
   Future<List<Channel>> channels({
