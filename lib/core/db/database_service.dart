@@ -2,7 +2,6 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/channel.dart';
-import '../../models/channel_group.dart';
 import '../../models/playlist.dart';
 
 class DatabaseService {
@@ -204,7 +203,6 @@ ON CONFLICT(url) DO UPDATE SET
 
   Future<List<Channel>> channels({
     String query = '',
-    String? group,
     int limit = 100,
     int offset = 0,
     bool includeBroken = false,
@@ -218,10 +216,6 @@ ON CONFLICT(url) DO UPDATE SET
       where.add(r"search_text LIKE ? ESCAPE '\'");
       args.add('%${_escapeLike(normalizedQuery)}%');
     }
-    if (group != null) {
-      where.add('group_name = ?');
-      args.add(group);
-    }
     final rows = await db.query(
       'channels',
       where: where.isEmpty ? null : where.join(' AND '),
@@ -231,20 +225,6 @@ ON CONFLICT(url) DO UPDATE SET
       offset: offset,
     );
     return rows.map(Channel.fromDb).toList();
-  }
-
-  /// Returns all non-broken groups with their channel counts,
-  /// sorted alphabetically.
-  Future<List<ChannelGroup>> groups() async {
-    final db = await database;
-    final rows = await db.rawQuery('''
-SELECT group_name, COUNT(*) AS count
-FROM channels
-WHERE is_broken = 0 AND group_name IS NOT NULL
-GROUP BY group_name
-ORDER BY group_name COLLATE NOCASE ASC
-''');
-    return rows.map(ChannelGroup.fromDb).toList();
   }
 
   Future<List<Channel>> pinnedChannels({int limit = 12}) async {

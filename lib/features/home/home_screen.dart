@@ -169,12 +169,6 @@ class _HomeHeader extends ConsumerWidget {
         ),
         const SizedBox(width: AppSpacing.xs + 4),
         ElevatedButton.icon(
-          onPressed: () => context.go('/groups'),
-          icon: const Icon(Icons.folder_rounded),
-          label: const Text('Browse Groups'),
-        ),
-        const SizedBox(width: AppSpacing.xs + 4),
-        ElevatedButton.icon(
           onPressed: () => context.go('/settings'),
           icon: const Icon(Icons.settings_rounded),
           label: const Text('Settings'),
