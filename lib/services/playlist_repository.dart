@@ -28,7 +28,6 @@ class PlaylistRepository {
   Future<void> _bootstrap() async {
     var storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
-    debugPrint('Loaded $storedCount channels from SQLite');
 
     _bootstrapped = true;
 
@@ -47,7 +46,6 @@ class PlaylistRepository {
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
 
       if (userPlaylists.isEmpty) {
-        debugPrint('First launch — seeding default IPTV Org playlist...');
         await addAndRefreshPlaylist(PlaylistService.playlistUrl);
         return;
       }
@@ -60,15 +58,11 @@ class PlaylistRepository {
       }).toList();
 
       if (stale.isEmpty) {
-        debugPrint('All playlists are fresh — skipping auto-refresh');
         return;
       }
-
-      debugPrint('Auto-refreshing ${stale.length} stale playlist(s)...');
       await refreshAllPlaylists();
-    } catch (error, stackTrace) {
-      debugPrint('Background seed/refresh failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (_) {
+      // Background refresh failures are silent — the UI shows stale data gracefully.
     } finally {
       isFetching.value = false;
     }
@@ -93,16 +87,14 @@ class PlaylistRepository {
           playlistId: playlist.id,
           channels: channels,
         );
-      } catch (error, stackTrace) {
-        debugPrint('Failed to refresh playlist ${playlist.url}: $error');
-        debugPrintStack(stackTrace: stackTrace);
+      } catch (_) {
+        // Individual playlist failures are non-fatal — continue refreshing others.
       }
     }
 
     final count = await DatabaseService.instance.channelCount();
     channelCount.value = count;
     _bumpDashboard();
-    debugPrint('Stored $count channels in SQLite');
     return count;
   }
 

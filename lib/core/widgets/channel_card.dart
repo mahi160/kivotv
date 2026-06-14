@@ -43,7 +43,6 @@ class _ChannelCardState extends State<ChannelCard> {
     final isDark   = Theme.of(context).brightness == Brightness.dark;
     final isBroken = widget.channel.isBroken;
 
-    // Solid surface so cards have clear contrast against the gradient bg.
     final surfaceColor = isDark
         ? AppColors.oceanDeep          // #1A2B38 — clearly above the near-black bg
         : AppColors.lightSurface;      // white — clear on ivory/seashell light bg
@@ -78,7 +77,7 @@ class _ChannelCardState extends State<ChannelCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
-          color: surfaceColor, // no bg colour change on focus — border + glow is enough
+          color: surfaceColor,
           child: Stack(
             fit: StackFit.expand,
             children: [

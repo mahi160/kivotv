@@ -67,9 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final count = await PlaylistRepository.instance.refreshAllPlaylists();
       if (mounted) setState(() { _channelCount = count; });
-    } catch (error, stackTrace) {
-      debugPrint('Refresh failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
       if (mounted) {
@@ -92,9 +90,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       _playlistUrlController.clear();
       setState(() => _channelCount = count);
-    } catch (error, stackTrace) {
-      debugPrint('Add playlist failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (error) {
       if (mounted) setState(() => _error = _friendlyError(error));
     } finally {
       if (mounted) {
@@ -332,7 +328,6 @@ class _ThemeOptionState extends State<_ThemeOption> {
     final highlight = widget.active || _focused;
     return Focus(
       onFocusChange: (v) => setState(() => _focused = v),
-      // Bug 1 fix: handle D-pad select/enter so theme tiles work without a pointer
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||

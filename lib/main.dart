@@ -14,11 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
 
-  // Silence all debug logging in production builds.
-  // debugPrint is NOT automatically silent in release mode.
-  if (kReleaseMode) {
-    debugPrint = (String? message, {int? wrapWidth}) {};
-  }
+  if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
 
   // Cap the Flutter image cache so channel logos don't exhaust RAM.
   // 200 items / 80 MB is generous for a TV app with many logos visible.

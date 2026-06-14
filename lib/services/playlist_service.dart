@@ -54,7 +54,6 @@ class PlaylistService {
       // Parse on a background isolate — 50 k+ lines with RegExp matching
       // would ANR the UI thread if left on the main isolate.
       final channels = await compute(parseM3uLines, lines);
-      debugPrint('Parsed ${channels.length} channels from $url');
       return channels;
     } finally {
       // Only clear the reference if this client is still the active one.

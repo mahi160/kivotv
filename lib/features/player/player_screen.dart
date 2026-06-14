@@ -58,8 +58,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── focus ──────────────────────────────────────────────────────────────────
   final _rootFocus         = FocusNode();
-  final _playFocusNode     = FocusNode(); // Bug 6: re-focus play btn on overlay show
-  final _sidebarScopeNode  = FocusScopeNode(); // Bug 4/5: sidebar focus management
+  final _playFocusNode    = FocusNode();
+  final _sidebarScopeNode = FocusScopeNode();
 
   @override
   void initState() {
@@ -176,7 +176,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _showControls() {
     setState(() => _showOverlay = true);
     _scheduleOverlayHide();
-    // Bug 6: move focus to the play button so left/right traversal works immediately.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) { if (mounted) _playFocusNode.requestFocus(); },
     );
@@ -208,7 +207,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _showControls();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        // Bug 4: move focus into the sidebar so D-pad up/down works in the list.
         _sidebarScopeNode.requestFocus();
         // Scroll to current channel.
         final idx = _currentIndex;
@@ -220,7 +218,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       });
     } else {
-      // Bug 5: return focus to the overlay play button when sidebar closes.
       WidgetsBinding.instance.addPostFrameCallback(
         (_) { if (mounted) _playFocusNode.requestFocus(); },
       );
@@ -273,8 +270,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
         return KeyEventResult.handled;
       }
-      // Bug 3: Up/Down while sidebar is open → let sidebar ListView traverse.
-      // Do NOT intercept — returning ignored lets Flutter move focus between items.
+      // Up/Down lets Flutter move focus between sidebar items naturally.
       if (key == LogicalKeyboardKey.arrowUp   ||
           key == LogicalKeyboardKey.arrowDown ||
           key == LogicalKeyboardKey.channelUp ||
@@ -453,7 +449,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     await PlaylistRepository.instance.setFavorite(
                       _currentChannel, !_currentChannel.isFavorite);
                     await _loadChannels();
-                    // Bug 3: refresh _currentChannel so the star icon updates.
                     if (!mounted) return;
                     final updated = _channels.firstWhere(
                       (c) => c.url == _currentChannel.url,
@@ -466,7 +461,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
 
             // Channel list sidebar — slides in from right
-            // Bug 4: FocusScope gives the sidebar its own focus group.
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
@@ -706,7 +700,6 @@ class _CtrlBtnState extends State<_CtrlBtn> {
       autofocus:  widget.autofocus,
       focusNode:  widget.focusNode,
       onFocusChange: (v) => setState(() => _focused = v),
-      // Consume Select/Enter here so the root key handler never sees it.
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -773,7 +766,6 @@ class _IconActionState extends State<_IconAction> {
       message: widget.tooltip,
       child: Focus(
         onFocusChange: (v) => setState(() => _focused = v),
-        // Consume Select/Enter before the root handler can intercept.
         onKeyEvent: (_, event) {
           if (event is KeyDownEvent &&
               (event.logicalKey == LogicalKeyboardKey.select ||
@@ -1026,7 +1018,6 @@ class _SidebarItemState extends State<_SidebarItem> {
 
     return Focus(
       onFocusChange: (v) => setState(() => _focused = v),
-      // Bug 2: handle D-pad select/enter so channel can be chosen without pointer.
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
