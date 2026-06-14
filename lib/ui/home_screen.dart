@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
 import '../models/channel.dart';
@@ -232,11 +233,11 @@ class _LogoMark extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
-          colors: [Color(0xFF6EA8FF), Color(0xFF8E5CFF)],
+          colors: [AppColors.logoGradientStart, AppColors.logoGradientEnd],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6EA8FF).withValues(alpha: 0.35),
+            color: AppColors.logoGradientStart.withValues(alpha: 0.35),
             blurRadius: 28,
             spreadRadius: 2,
           ),
@@ -300,7 +301,7 @@ class _DashboardSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF8AB4FF)),
+              Icon(icon, color: AppColors.oceanBright),
               const SizedBox(width: 10),
               Text(
                 title,
@@ -391,7 +392,7 @@ class _ChannelCardState extends State<_ChannelCard> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: _focused
-                    ? const [Color(0xFF3B82F6), Color(0xFF5B21B6)]
+                    ? const [AppColors.focusCardStart, AppColors.focusCardEnd]
                     : [
                         Colors.white.withValues(alpha: 0.12),
                         Colors.white.withValues(alpha: 0.05),
@@ -407,7 +408,7 @@ class _ChannelCardState extends State<_ChannelCard> {
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        color: AppColors.focusCardStart.withValues(alpha: 0.35),
                         blurRadius: 26,
                         spreadRadius: 2,
                       ),

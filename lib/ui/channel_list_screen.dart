@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
 
@@ -276,7 +277,7 @@ class _ChannelTileState extends State<_ChannelTile> {
                         : Icons.star_border_rounded,
                   ),
                   color: widget.channel.isFavorite
-                      ? const Color(0xFFFFD166)
+                      ? AppColors.favActive
                       : Colors.white70,
                   onPressed: () async {
                     await PlaylistRepository.instance.setFavorite(
@@ -294,7 +295,7 @@ class _ChannelTileState extends State<_ChannelTile> {
                         : Icons.push_pin_outlined,
                   ),
                   color: widget.channel.isPinned
-                      ? const Color(0xFF8AB4FF)
+                      ? AppColors.pinActive
                       : Colors.white70,
                   onPressed: () async {
                     await PlaylistRepository.instance.setPinned(

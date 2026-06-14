@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_colors.dart';
+import '../core/theme/app_spacing.dart';
 import '../core/theme/gradient_background.dart';
 
 import '../services/playlist_repository.dart';
@@ -91,11 +93,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(34),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                boxShadow: [
+                borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+                border: Border.all(color: AppColors.darkBorder),
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.22),
+                    color: Color(0x38000000),
                     blurRadius: 32,
                   ),
                 ],
@@ -198,10 +200,10 @@ class _MessagePill extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: (error ? Colors.red : Colors.green).withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(16),
+        color: (error ? AppColors.error : AppColors.success).withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
         border: Border.all(
-          color: (error ? Colors.red : Colors.green).withValues(alpha: 0.35),
+          color: (error ? AppColors.error : AppColors.success).withValues(alpha: 0.35),
         ),
       ),
       child: Row(

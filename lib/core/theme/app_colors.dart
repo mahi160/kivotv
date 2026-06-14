@@ -64,6 +64,21 @@ abstract final class AppColors {
   static const warning = Color(0xFFF59E0B);
   static const warningContainer = Color(0x1FF59E0B);
 
+  // ── UI component colours ─────────────────────────────────────────────────
+  /// Logo mark gradient: bright blue → violet.
+  static const logoGradientStart = Color(0xFF6EA8FF);
+  static const logoGradientEnd   = Color(0xFF8E5CFF);
+
+  /// Focused card / tile gradient: primary → deep ocean.
+  static const focusCardStart = oceanPrimary;
+  static const focusCardEnd   = oceanDeep;
+
+  /// Favourite-star active colour (sandy amber).
+  static const favActive = sandMid;
+
+  /// Pin-icon active colour.
+  static const pinActive = oceanBright;
+
   // ── Gradients ────────────────────────────────────────────────────────────
   /// Home screen radial gradient (dark).
   static const homeGradientDark = RadialGradient(
