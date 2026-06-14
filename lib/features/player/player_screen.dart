@@ -71,7 +71,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     _currentChannel = widget.channel;
     _player         = Player();
-    _controller     = VideoController(_player);
+    _controller = VideoController(
+      _player,
+      configuration: const VideoControllerConfiguration(
+        // SW decode: avoids hardware surface-attach failures on Android TV
+        // where the GPU texture view is not ready when Player.open() fires.
+        // CPU usage is acceptable for 1080p IPTV on modern TV SoCs.
+        enableHardwareAcceleration: false,
+      ),
+    );
 
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (playing) {
@@ -366,7 +374,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           fit: StackFit.expand,
           children: [
             // ── Video ─────────────────────────────────────────────────────────
-            Video(controller: _controller, fit: BoxFit.contain),
+            Video(
+              controller: _controller,
+              fit: BoxFit.contain,
+              // Disable media_kit's built-in controls — we render our own overlay.
+              controls: NoVideoControls,
+            ),
 
             // ── Buffering spinner ─────────────────────────────────────────────
             StreamBuilder<bool>(
