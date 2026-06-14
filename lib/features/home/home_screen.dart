@@ -130,13 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           emptyText: 'Channels you watch will appear here.',
                           onOpen: _open,
                         ),
-                        _DashboardSection(
-                          icon: Icons.push_pin_rounded,
-                          title: 'Pinned',
-                          channels: data.pinned,
-                          emptyText: 'Long press a channel in the player to pin it.',
-                          onOpen: _open,
-                        ),
+
                       ],
                     ),
                   ),

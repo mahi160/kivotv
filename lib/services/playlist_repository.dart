@@ -45,7 +45,10 @@ class PlaylistRepository {
       final playlists = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
 
-      if (userPlaylists.isEmpty) {
+      final storedCount = await DatabaseService.instance.channelCount();
+      if (userPlaylists.isEmpty || storedCount == 0) {
+        // No playlists yet, or playlists exist but channels are empty —
+        // always fetch the default list to guarantee content on first open.
         await addAndRefreshPlaylist(PlaylistService.playlistUrl);
         return;
       }
@@ -149,19 +152,11 @@ class PlaylistRepository {
     );
   }
 
-  Future<List<Channel>> pinnedChannels() =>
-      DatabaseService.instance.pinnedChannels();
-
   Future<List<Channel>> favoriteChannels() =>
       DatabaseService.instance.favoriteChannels();
 
   Future<List<Channel>> recentlyWatched() =>
       DatabaseService.instance.recentlyWatched();
-
-  Future<void> setPinned(Channel channel, bool pinned) async {
-    await DatabaseService.instance.setPinned(channel.url, pinned);
-    _bumpDashboard();
-  }
 
   Future<void> setFavorite(Channel channel, bool favorite) async {
     await DatabaseService.instance.setFavorite(channel.url, favorite);

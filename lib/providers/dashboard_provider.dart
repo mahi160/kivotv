@@ -11,14 +11,12 @@ class DashboardData {
   const DashboardData({
     required this.favorites,
     required this.recent,
-    required this.pinned,
   });
 
   final List<Channel> favorites;
   final List<Channel> recent;
-  final List<Channel> pinned;
 
-  bool get isEmpty => favorites.isEmpty && recent.isEmpty && pinned.isEmpty;
+  bool get isEmpty => favorites.isEmpty && recent.isEmpty;
 }
 
 // ── Bridge: PlaylistRepository.dashboardVersion ValueNotifier → Riverpod ─────
@@ -55,12 +53,10 @@ final dashboardProvider =
   final results = await Future.wait([
     repo.favoriteChannels(),
     repo.recentlyWatched(),
-    repo.pinnedChannels(),
   ]);
 
   return DashboardData(
     favorites: results[0],
     recent: results[1],
-    pinned: results[2],
   );
 });
