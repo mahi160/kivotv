@@ -96,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _HomeHeader(),
-                const SizedBox(height: 34),
+                const SizedBox(height: AppSpacing.lg),
                 Expanded(
                   child: FutureBuilder<_DashboardData>(
                     future: _dashboardFuture,
@@ -187,14 +187,14 @@ class _HomeHeader extends StatelessWidget {
           valueListenable: PlaylistRepository.instance.channelCount,
           builder: (_, count, _) => _StatPill(label: 'Channels', value: '$count'),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: AppSpacing.sm),
         ElevatedButton.icon(
           autofocus: true,
           onPressed: () => context.go('/channels'),
           icon: const Icon(Icons.grid_view_rounded),
           label: const Text('All Channels'),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: AppSpacing.xs + 4),
         ElevatedButton.icon(
           onPressed: () => context.go('/settings'),
           icon: const Icon(Icons.settings_rounded),
@@ -307,21 +307,19 @@ class _DashboardSection extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 156,
+            height: AppSpacing.tvRowHeight,
             child: channels.isEmpty
                 ? _EmptyRow(text: emptyText)
-                : GridView.builder(
+                : ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: channels.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 1,
-                          mainAxisExtent: 250,
-                          mainAxisSpacing: 14,
-                        ),
-                    itemBuilder: (context, index) => _ChannelCard(
-                      channel: channels[index],
-                      onTap: () => onOpen(channels[index]),
+                    itemExtent: AppSpacing.tvCardWidth + AppSpacing.tvCardGap,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.tvCardGap),
+                      child: _ChannelCard(
+                        channel: channels[index],
+                        onTap: () => onOpen(channels[index]),
+                      ),
                     ),
                   ),
           ),
