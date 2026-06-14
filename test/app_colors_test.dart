@@ -10,10 +10,11 @@ void main() {
       expect(hsl.lightness, lessThan(0.6));
     });
 
-    test('sandMid is a warm amber (hue 30–50)', () {
+    test('sandMid is a warm sandy tone (hue 20–50, low-medium saturation)', () {
       final hsl = HSLColor.fromColor(AppColors.sandMid);
-      expect(hsl.hue, inInclusiveRange(30, 55));
-      expect(hsl.saturation, greaterThan(0.5));
+      expect(hsl.hue, inInclusiveRange(20, 50));
+      // Warm Sandy Beige is desaturated — saturation > 0.15 is sufficient.
+      expect(hsl.saturation, greaterThan(0.15));
     });
 
     test('error is distinctly red', () {

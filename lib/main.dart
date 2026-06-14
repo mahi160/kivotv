@@ -64,8 +64,11 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.darkBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -81,9 +84,9 @@ class _SplashScreen extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.logoGradientStart.withValues(alpha: 0.4),
-                    blurRadius: 40,
-                    spreadRadius: 4,
+                    color: AppColors.logoGradientStart.withValues(alpha: 0.35),
+                    blurRadius: 32,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
@@ -96,16 +99,12 @@ class _SplashScreen extends StatelessWidget {
             const SizedBox(height: 28),
             Text(
               'Kivo',
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                color: Colors.white,
-              ),
+              style: Theme.of(context).textTheme.displayLarge,
             ),
             const SizedBox(height: 8),
             Text(
               'Live TV launcher',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.darkOnSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 48),
             const SizedBox(

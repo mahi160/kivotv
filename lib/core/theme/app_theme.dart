@@ -10,38 +10,34 @@ import 'app_spacing.dart';
 /// ```dart
 /// theme:      AppTheme.light(),
 /// darkTheme:  AppTheme.dark(),
-/// themeMode:  ThemeMode.system,
+/// themeMode:  ThemeMode.system,   // light is default on most devices
 /// ```
 abstract final class AppTheme {
-  // ── Public factories ─────────────────────────────────────────────────────
-
-  static ThemeData dark() => _build(Brightness.dark);
   static ThemeData light() => _build(Brightness.light);
-
-  // ── Private builder ──────────────────────────────────────────────────────
+  static ThemeData dark()  => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
 
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.oceanPrimary,
-      brightness: brightness,
-      // Override key surfaces so the oceanic palette is respected exactly.
-      surface: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      onSurface: isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
-      primary: AppColors.oceanPrimary,
-      onPrimary: Colors.white,
-      secondary: AppColors.sandMid,
-      onSecondary: AppColors.oceanAbyss,
-      tertiary: AppColors.sandLight,
-      onTertiary: AppColors.oceanDeep,
-      error: AppColors.error,
+      seedColor:   AppColors.oceanDeepBlue,
+      brightness:  brightness,
+      // Override key surfaces so the brand palette is respected exactly.
+      surface:     isDark ? AppColors.darkSurface     : AppColors.lightSurface,
+      onSurface:   isDark ? AppColors.darkOnSurface   : AppColors.lightOnSurface,
+      primary:     AppColors.oceanDeepBlue,
+      onPrimary:   Colors.white,
+      secondary:   AppColors.warmSandyBeige,
+      onSecondary: AppColors.lightOnSurface,
+      tertiary:    AppColors.goldenDriftwood,
+      onTertiary:  AppColors.lightOnSurface,
+      error:       AppColors.error,
     );
 
     return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      colorScheme: colorScheme,
+      useMaterial3:  true,
+      brightness:    brightness,
+      colorScheme:   colorScheme,
 
       // ── Scaffold ───────────────────────────────────────────────────────
       scaffoldBackgroundColor:
@@ -49,25 +45,25 @@ abstract final class AppTheme {
 
       // ── AppBar ─────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor:
-            isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
-        elevation: 0,
+        backgroundColor:  Colors.transparent,
+        foregroundColor:  isDark
+            ? AppColors.darkOnSurface
+            : AppColors.lightOnSurface,
+        elevation:             0,
         scrolledUnderElevation: 0,
       ),
 
       // ── Elevated buttons ───────────────────────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-              isDark ? AppColors.oceanMid : AppColors.oceanPrimary,
+          backgroundColor: AppColors.oceanDeepBlue,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm + 4,
+            vertical:   AppSpacing.sm + 4,
           ),
           textStyle: const TextStyle(
-            fontSize: 18,
+            fontSize:   18,
             fontWeight: FontWeight.w700,
           ),
           shape: RoundedRectangleBorder(
@@ -79,16 +75,16 @@ abstract final class AppTheme {
       // ── Text buttons ───────────────────────────────────────────────────
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor:
-              isDark ? AppColors.oceanBright : AppColors.oceanPrimary,
+          foregroundColor: AppColors.oceanDeepBlue,
         ),
       ),
 
       // ── Icon buttons ───────────────────────────────────────────────────
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          foregroundColor:
-              isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
+          foregroundColor: isDark
+              ? AppColors.darkOnSurface
+              : AppColors.lightOnSurface,
         ),
       ),
 
@@ -96,8 +92,8 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : AppColors.lightSurfaceVariant,
+            ? AppColors.darkSurface
+            : AppColors.softSeashellPink.withValues(alpha: 0.50),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(
@@ -113,7 +109,7 @@ abstract final class AppTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(
-            color: isDark ? AppColors.oceanBright : AppColors.oceanPrimary,
+            color: AppColors.oceanDeepBlue,
             width: 2,
           ),
         ),
@@ -126,9 +122,11 @@ abstract final class AppTheme {
 
       // ── Cards ──────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
+        color:             isDark
+            ? AppColors.darkSurface
+            : AppColors.lightSurface,
+        surfaceTintColor:  Colors.transparent,
+        elevation:         0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           side: BorderSide(
@@ -139,8 +137,9 @@ abstract final class AppTheme {
 
       // ── Dialogs ────────────────────────────────────────────────────────
       dialogTheme: DialogThemeData(
-        backgroundColor:
-            isDark ? AppColors.darkSurfaceVariant : AppColors.lightSurface,
+        backgroundColor: isDark
+            ? AppColors.darkSurfaceVariant
+            : AppColors.lightSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
         ),
@@ -148,89 +147,67 @@ abstract final class AppTheme {
 
       // ── Progress indicator ─────────────────────────────────────────────
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.oceanBright,
+        color: AppColors.oceanDeepBlue,
       ),
 
-      // ── Text theme ─────────────────────────────────────────────────────
-      // Inter via Google Fonts — TV-legible, weight range 100–900.
-      textTheme: _buildTextTheme(isDark),
+      // ── Text theme (Inter) ─────────────────────────────────────────────
+      textTheme:        _buildTextTheme(isDark),
       primaryTextTheme: _buildTextTheme(isDark),
 
-      // ── Focus ──────────────────────────────────────────────────────────
-      // Sandy accent for focus highlights — visible on both dark/light.
-      focusColor: AppColors.sandMid.withValues(alpha: 0.18),
+      // ── Focus colour — warm golden, visible on both modes ──────────────
+      focusColor: AppColors.goldenDriftwood.withValues(alpha: 0.20),
     );
   }
 
   static TextTheme _buildTextTheme(bool isDark) {
-    final onSurface =
-        isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final onSurfaceVariant =
-        isDark ? AppColors.darkOnSurfaceVariant : AppColors.lightOnSurfaceVariant;
+    final onSurface = isDark
+        ? AppColors.darkOnSurface
+        : AppColors.lightOnSurface;
+    final onSurfaceVariant = isDark
+        ? AppColors.darkOnSurfaceVariant
+        : AppColors.lightOnSurfaceVariant;
 
-    // Inter: excellent TV legibility, strong weight range (100–900).
-    // GoogleFonts.interTextTheme() returns a full TextTheme with Inter applied.
-    final inter = GoogleFonts.interTextTheme().copyWith(
-      // Display / hero (app title, big numbers)
+    return GoogleFonts.interTextTheme().copyWith(
       displayLarge: GoogleFonts.inter(
-        fontSize: 42,
-        fontWeight: FontWeight.w900,
-        color: onSurface,
-        letterSpacing: -0.5,
+        fontSize: 42, fontWeight: FontWeight.w900,
+        color: onSurface, letterSpacing: -0.5,
       ),
-      // Screen headings
       headlineLarge: GoogleFonts.inter(
-        fontSize: 34,
-        fontWeight: FontWeight.w900,
-        color: onSurface,
-        letterSpacing: -0.25,
+        fontSize: 34, fontWeight: FontWeight.w900,
+        color: onSurface, letterSpacing: -0.25,
       ),
       headlineMedium: GoogleFonts.inter(
-        fontSize: 26,
-        fontWeight: FontWeight.w800,
+        fontSize: 26, fontWeight: FontWeight.w800,
         color: onSurface,
       ),
-      // Section / card labels
       titleLarge: GoogleFonts.inter(
-        fontSize: 22,
-        fontWeight: FontWeight.w800,
+        fontSize: 22, fontWeight: FontWeight.w800,
         color: onSurface,
       ),
-      // List tile primary text
       titleMedium: GoogleFonts.inter(
-        fontSize: 19,
-        fontWeight: FontWeight.w700,
+        fontSize: 19, fontWeight: FontWeight.w700,
         color: onSurface,
       ),
       titleSmall: GoogleFonts.inter(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
+        fontSize: 16, fontWeight: FontWeight.w600,
         color: onSurface,
       ),
-      // Body
       bodyLarge: GoogleFonts.inter(
-        fontSize: 18,
-        fontWeight: FontWeight.w400,
+        fontSize: 18, fontWeight: FontWeight.w400,
         color: onSurface,
       ),
       bodyMedium: GoogleFonts.inter(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
+        fontSize: 16, fontWeight: FontWeight.w400,
         color: onSurfaceVariant,
       ),
-      // Captions / metadata
       bodySmall: GoogleFonts.inter(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
+        fontSize: 14, fontWeight: FontWeight.w400,
         color: onSurfaceVariant,
       ),
       labelLarge: GoogleFonts.inter(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
+        fontSize: 18, fontWeight: FontWeight.w700,
         color: onSurface,
       ),
     );
-
-    return inter;
   }
 }
