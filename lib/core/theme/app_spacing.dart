@@ -26,12 +26,21 @@ abstract final class AppSpacing {
   /// ListView itemExtent so jump-to-current scrolling stays accurate).
   static const tvSidebarTile = 72.0;
 
-  /// Fixed cell height of a channel card in the home + channels grids.
-  static const tvGridCardExtent = 168.0;
+  /// Fixed cell height of a channel card in the channels grid.
+  static const tvGridCardExtent = 188.0;
 
   /// Max width of a grid card. Grids size cards by this (not a fixed column
   /// count), so the layout stays responsive across 720p/1080p/4K panels.
-  static const tvGridCardMaxExtent = 220.0;
+  static const tvGridCardMaxExtent = 240.0;
+
+  /// Home carousel ("Netflix row") card footprint. Cards are a fixed size in
+  /// a horizontal ListView so the row reads as one clean band of equal tiles.
+  static const tvRowCardWidth  = 196.0;
+  static const tvRowCardHeight = 196.0;
+  /// Gap between cards inside a home row.
+  static const tvRowGap = 20.0;
+  /// Vertical gap between one home section and the next.
+  static const tvSectionGap = 40.0;
 
   /// Width of the player channel-list sidebar panel.
   static const tvSidebarWidth = 320.0;

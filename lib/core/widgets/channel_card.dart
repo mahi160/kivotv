@@ -12,22 +12,28 @@ import '../../models/channel.dart';
 
 /// Focusable channel card used in both the grid and home dashboard rows.
 ///
-/// Focus border uses [BorderSide.strokeAlignOutside] with outer padding so
-/// the ring never clips against a parent scroll view.
-/// Wrap the parent [ListView] / [GridView] with
-/// [clipBehavior: Clip.none] and [padding: EdgeInsets.all(AppSpacing.xs)]
-/// to guarantee the shadow and ring paint fully.
+/// On focus it scales up (1.08 — within the surrounding gap so it never
+/// overlaps a neighbour) and lifts on an accent glow.
+///
+/// Parent scroll views should CLIP (default) so scrolled cards slide under
+/// surrounding chrome instead of bleeding over it, and add a little internal
+/// padding (e.g. top [AppSpacing.md]) so the edge row's focus glow has room.
+/// A purely horizontal row may use [Clip.none] when its outer scrollable clips.
 class ChannelCard extends StatelessWidget {
   const ChannelCard({
     super.key,
     required this.channel,
     required this.onTap,
     this.onFavoriteLongPress,
+    this.autofocus = false,
   });
 
   final Channel      channel;
   final VoidCallback  onTap;
   final VoidCallback? onFavoriteLongPress;
+  /// Grabs D-pad focus on first build (used for the first Home card so the
+  /// remote always starts on something the user can press OK on).
+  final bool         autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -36,42 +42,48 @@ class ChannelCard extends StatelessWidget {
     final accent       = AppColors.focus(isDark);
 
     return FocusableTap(
+      autofocus:   autofocus,
       onTap:       onTap,
       onLongPress: onFavoriteLongPress,
       // TV remotes can't long-press — wire MENU key to the same action.
       onMenu:      onFavoriteLongPress,
       builder: (context, focused) {
-        // Focus = motion + accent glow, not heavy chrome. The card scales up
-        // (well within the grid gap so it never overlaps neighbours) and lifts
-        // on an accent halo.
+        // Focus = motion + accent glow, not heavy chrome. The card lifts and
+        // grows on an accent halo so it is unmistakable, from across the room,
+        // which tile is selected — the single most important cue on a TV.
         return AnimatedScale(
-          scale:    focused ? 1.06 : 1.0,
-          duration: const Duration(milliseconds: 160),
+          // 1.08 keeps the grown card inside the grid/row gap so a later-painted
+          // neighbour never clips the focused card's ring or glow.
+          scale:    focused ? 1.08 : 1.0,
+          duration: const Duration(milliseconds: 170),
           curve:    Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
+            duration: const Duration(milliseconds: 170),
             curve:    Curves.easeOut,
             decoration: BoxDecoration(
-              color:        surfaceColor,
+              // Surface lifts a touch on focus so the tile reads as raised.
+              color: focused
+                  ? (isDark ? AppColors.oceanMid : AppColors.lightSurface)
+                  : surfaceColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
               border: Border.all(
                 color: focused
                     ? accent
                     : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                width:       focused ? 2 : 1,
+                width:       focused ? 3 : 1,
                 strokeAlign: BorderSide.strokeAlignOutside,
               ),
               boxShadow: focused
                   ? [
                       BoxShadow(
-                        color:        accent.withValues(alpha: 0.45),
-                        blurRadius:   28,
-                        spreadRadius: 1,
+                        color:        accent.withValues(alpha: 0.55),
+                        blurRadius:   40,
+                        spreadRadius: 2,
                       ),
                       const BoxShadow(
-                        color:      Color(0x66000000),
-                        blurRadius: 18,
-                        offset:     Offset(0, 10),
+                        color:      Color(0x80000000),
+                        blurRadius: 24,
+                        offset:     Offset(0, 14),
                       ),
                     ]
                   : null,
@@ -82,23 +94,24 @@ class ChannelCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+                    padding: const EdgeInsets.fromLTRB(14, 20, 14, 16),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         ChannelAvatar(
                           logoUrl: channel.logo,
                           name:    channel.name,
-                          size:    60,
+                          size:    72,
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
                         Text(
                           channel.name,
                           maxLines:  2,
                           overflow:  TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            height: 1.2,
+                            height:        1.2,
+                            fontWeight:    FontWeight.w700,
                             color: focused
                                 ? (isDark
                                     ? AppColors.darkOnSurface
@@ -114,15 +127,15 @@ class ChannelCard extends StatelessWidget {
                   // logo and stays distinct from the focus affordance.
                   if (channel.isFavorite)
                     Positioned(
-                      top: 8, right: 8,
+                      top: 10, right: 10,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(5),
                         decoration: const BoxDecoration(
-                          color: Color(0x99000000),
+                          color: Color(0xB3000000),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.star_rounded,
-                            size: 15, color: AppColors.favActive),
+                            size: 18, color: AppColors.favActive),
                       ),
                     ),
                 ],

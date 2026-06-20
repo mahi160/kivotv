@@ -138,18 +138,31 @@ class _SidebarItem extends StatelessWidget {
       onMenu:       onLongPress,
       builder: (_, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        // Focused → gold tint; current-but-not-focused → ocean tint.
-        color: focused
-            ? AppColors.focus(true).withValues(alpha: 0.22)
-            : isCurrent
-                ? AppColors.oceanMid.withValues(alpha: 0.6)
-                : Colors.transparent,
+        // Focused → bright accent fill; current-but-not-focused → soft tint.
+        // A leading accent bar marks focus/current so the eye finds it instantly.
+        decoration: BoxDecoration(
+          color: focused
+              ? AppColors.accent.withValues(alpha: 0.30)
+              : isCurrent
+                  ? AppColors.oceanMid.withValues(alpha: 0.6)
+                  : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: focused
+                  ? AppColors.accentBright
+                  : isCurrent
+                      ? AppColors.accent
+                      : Colors.transparent,
+              width: 4,
+            ),
+          ),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
             ChannelLogo(
               logoUrl:      channel.logo,
-              size:         42,
+              size:         44,
               borderRadius: 8,
             ),
             const SizedBox(width: 12),

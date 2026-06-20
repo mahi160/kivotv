@@ -38,6 +38,10 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   bool   _loading = false;
   bool   _hasMore = true;
   int    _offset  = 0;
+  // Autofocus the first grid card on initial load only, so the remote lands
+  // on a channel (not the search box, which would pop the keyboard). Cleared
+  // once the user starts searching so a list reset can't yank focus mid-type.
+  bool   _autofocusGrid = true;
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
 
@@ -114,6 +118,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   }
 
   void _onSearchChanged(String value) {
+    _autofocusGrid = false;
     _searchTimer?.cancel();
     _searchTimer = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
@@ -190,11 +195,15 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
                     focusNode:   _searchFocusNode,
                     autofocus:   false,
                     onChanged:   _onSearchChanged,
-                    style:       Theme.of(context).textTheme.bodyLarge,
+                    style:       Theme.of(context).textTheme.titleMedium,
                     decoration: const InputDecoration(
-                      filled:     true,
-                      hintText:   'Search channels…',
-                      prefixIcon: Icon(Icons.search_rounded),
+                      filled:        true,
+                      hintText:      'Search channels…',
+                      prefixIcon:    Icon(Icons.search_rounded, size: 26),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical:   AppSpacing.sm + 2,
+                      ),
                     ),
                   ),
                 ),
@@ -230,9 +239,13 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     final itemCount = _channels.length + (_hasMore ? 1 : 0);
 
     return GridView.builder(
-      controller:    _scrollController,
-      padding:       const EdgeInsets.all(AppSpacing.xs),
-      clipBehavior:  Clip.none,
+      controller: _scrollController,
+      // Hard-edge clip (default) so scrolled cards slide cleanly UNDER the
+      // search bar instead of bleeding over it. Generous L/R/top padding keeps
+      // the edge-column focus glow inside the clipped viewport so it isn't
+      // cropped against the grid's left/right edge.
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxl),
       gridDelegate:  const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: AppSpacing.tvGridCardMaxExtent,
         crossAxisSpacing:   AppSpacing.md,
@@ -253,6 +266,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
         return ChannelCard(
           key:                 ValueKey(ch.url),
           channel:             ch,
+          autofocus:           _autofocusGrid && index == 0,
           onTap:               () => _openPlayer(ch),
           onFavoriteLongPress: () => _toggleFavorite(ch),
         );

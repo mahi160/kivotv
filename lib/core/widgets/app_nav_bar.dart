@@ -31,17 +31,17 @@ class AppNavBar extends StatelessWidget {
           'Kivo',
           style: Theme.of(context).textTheme.headlineLarge,
         ),
-        // ── Spacer pushes icons to the right ───────────────────────────────
+        // ── Spacer pushes the nav pills to the right ───────────────────────
         const Spacer(),
-        // ── Nav icons ──────────────────────────────────────────────────────
-        _NavIcon(
+        // ── Nav pills ──────────────────────────────────────────────────────
+        _NavPill(
           icon: Icons.home_rounded,
           label: 'Home',
           isActive: active == NavDestination.home,
           onTap: () { if (active != NavDestination.home) context.go('/'); },
         ),
-        const SizedBox(width: AppSpacing.xs),
-        _NavIcon(
+        const SizedBox(width: AppSpacing.sm),
+        _NavPill(
           icon: Icons.live_tv_rounded,
           label: 'Channels',
           isActive: active == NavDestination.channels,
@@ -49,7 +49,6 @@ class AppNavBar extends StatelessWidget {
             if (active != NavDestination.channels) context.go('/channels');
           },
         ),
-
       ],
     );
   }
@@ -87,10 +86,14 @@ class _LogoMark extends StatelessWidget {
   }
 }
 
-// ── Single nav icon ───────────────────────────────────────────────────────────
+// ── Single nav pill (icon + label) ──────────────────────────────────────────────
 
-class _NavIcon extends StatelessWidget {
-  const _NavIcon({
+/// A labelled pill so the destination is unmistakable — icons alone are easy
+/// to misread. The current destination is filled with an accent tint; the
+/// focused pill gets a bold accent ring + glow so D-pad position is obvious.
+/// Only the label of the active/focused pill is shown, keeping the bar minimal.
+class _NavPill extends StatelessWidget {
+  const _NavPill({
     required this.icon,
     required this.label,
     required this.isActive,
@@ -105,49 +108,78 @@ class _NavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onSurface = isDark
-        ? AppColors.darkOnSurface
-        : AppColors.lightOnSurface;
     final onSurfaceVariant = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
-
-    final iconColor = isActive
-        ? AppColors.oceanDeepBlue  // semantic: current destination
-        : onSurfaceVariant;
-
-    final activeBg = isDark
-        ? AppColors.sandMid.withValues(alpha: 0.12)
-        : AppColors.oceanDeepBlue.withValues(alpha: 0.08);
+    final accent = AppColors.focus(isDark);
 
     return Semantics(
       label:    label,
       button:   true,
       selected: isActive,
       child: FocusableTap(
-        autofocus: isActive,
-        onTap:     onTap,
-        builder: (_, focused) => AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm,
-            vertical:   AppSpacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: focused
-                ? AppColors.focusFill(isDark)
-                : isActive ? activeBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(
-              color: focused ? AppColors.focus(isDark) : Colors.transparent,
+        onTap: onTap,
+        builder: (_, focused) {
+          final highlighted = focused || isActive;
+          // The label shows only when this pill is active or focused, so the
+          // bar stays clean but the meaning is always legible where it counts.
+          final showLabel = highlighted;
+          final fg = focused
+              ? (isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface)
+              : isActive ? accent : onSurfaceVariant;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve:    Curves.easeOut,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical:   AppSpacing.xs + 2,
             ),
-          ),
-          child: Icon(
-            icon,
-            size:  AppSpacing.iconLg,
-            color: focused ? onSurface : iconColor,
-          ),
-        ),
+            decoration: BoxDecoration(
+              color: focused
+                  ? AppColors.focusFill(isDark)
+                  : isActive
+                      ? accent.withValues(alpha: 0.12)
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+              border: Border.all(
+                color: focused ? accent : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: focused
+                  ? [
+                      BoxShadow(
+                        color:      accent.withValues(alpha: 0.45),
+                        blurRadius: 22,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: AppSpacing.iconMd, color: fg),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 160),
+                  curve:    Curves.easeOut,
+                  child: showLabel
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: 8, right: 2),
+                          child: Text(
+                            label,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(color: fg, fontWeight: FontWeight.w700),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../models/channel.dart';
 import 'ctrl_btn.dart';
@@ -69,29 +70,40 @@ class PlayerOverlay extends StatelessWidget {
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back_rounded,
-                      color: Colors.white, size: 28),
+                      color: Colors.white, size: 32),
                   onPressed: () { onInteraction(); onBack(); },
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        channel.name,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                          color: Colors.white,
-                          shadows: [const Shadow(blurRadius: 8)],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          const _LiveBadge(),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              channel.name,
+                              style: Theme.of(context).textTheme.headlineMedium
+                                  ?.copyWith(
+                                color: Colors.white,
+                                shadows: [const Shadow(blurRadius: 8)],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                       if (channel.group != null && channel.group!.isNotEmpty)
-                        Text(
-                          channel.group!,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.white60),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            channel.group!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: Colors.white60),
+                          ),
                         ),
                     ],
                   ),
@@ -106,28 +118,19 @@ class PlayerOverlay extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Channel number — left
+                // Channel number — left, in a legible pill
                 if (chNum.isNotEmpty)
-                  Text(
-                    chNum,
-                    style: const TextStyle(
-                      fontFamily:  'Inter',
-                      color:       Colors.white70,
-                      fontSize:    16,
-                      fontWeight:  FontWeight.w600,
-                      shadows:     [Shadow(blurRadius: 6)],
-                    ),
-                  ),
+                  _ChannelNumberPill(text: chNum),
 
                 const Spacer(),
 
-                // Playback controls — centre
+                // Playback controls — centre. Play/pause is the big primary.
                 CtrlBtn(
                   icon:      Icons.skip_previous_rounded,
                   autofocus: false,
                   onPressed: () { onInteraction(); onPrevious(); },
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.md),
                 StreamBuilder<bool>(
                   stream:      player.stream.playing,
                   initialData: false,
@@ -138,12 +141,13 @@ class PlayerOverlay extends StatelessWidget {
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
                       autofocus: true,
+                      primary:   true,
                       focusNode: playFocusNode,
                       onPressed: () { onInteraction(); player.playOrPause(); },
                     );
                   },
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.md),
                 CtrlBtn(
                   icon:      Icons.skip_next_rounded,
                   autofocus: false,
@@ -159,7 +163,7 @@ class PlayerOverlay extends StatelessWidget {
                   tooltip:   'Channel list',
                   onPressed: () { onInteraction(); onToggleList(); },
                 ),
-                const SizedBox(width: AppSpacing.xs),
+                const SizedBox(width: AppSpacing.sm),
                 IconAction(
                   icon: channel.isFavorite
                       ? Icons.star_rounded
@@ -173,6 +177,79 @@ class PlayerOverlay extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── LIVE badge ──────────────────────────────────────────────────────────────
+
+/// Small "LIVE" chip shown beside the channel name — a universally understood
+/// cue that this is a live broadcast, not a recording.
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.error,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(
+            width: 8, height: 8,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white, shape: BoxShape.circle),
+            ),
+          ),
+          SizedBox(width: 7),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              fontFamily:    'Inter',
+              color:         Colors.white,
+              fontSize:      13,
+              fontWeight:    FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Channel-number pill ───────────────────────────────────────────────────────
+
+/// "12 / 155" position indicator in a soft pill so it stays legible over any
+/// video frame.
+class _ChannelNumberPill extends StatelessWidget {
+  const _ChannelNumberPill({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily:    'Inter',
+          color:         Colors.white,
+          fontSize:      18,
+          fontWeight:    FontWeight.w700,
+          letterSpacing: 0.5,
         ),
       ),
     );

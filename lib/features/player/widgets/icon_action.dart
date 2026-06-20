@@ -30,25 +30,37 @@ class IconAction extends StatelessWidget {
         onTap:   onPressed,
         builder: (_, focused) {
           final highlight = focused || active;
-          // Focused → gold; active-but-not-focused → sandy.
-          final hl = focused ? AppColors.focus(true) : AppColors.sandMid;
+          // Focused → bright accent fill; active-but-not-focused → accent tint.
+          final hl = focused ? AppColors.accentBright : AppColors.accent;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            width: 52, height: 52,
+            curve:    Curves.easeOut,
+            width: 60, height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: highlight
-                  ? hl.withValues(alpha: 0.18)
-                  : Colors.black.withValues(alpha: 0.45),
+              color: focused
+                  ? Colors.white
+                  : highlight
+                      ? hl.withValues(alpha: 0.20)
+                      : Colors.black.withValues(alpha: 0.45),
               border: Border.all(
                 color: highlight ? hl : Colors.white24,
-                width: highlight ? 2 : 1,
+                width: focused ? 3 : highlight ? 2 : 1,
               ),
+              boxShadow: focused
+                  ? [
+                      BoxShadow(
+                        color:        AppColors.accent.withValues(alpha: 0.55),
+                        blurRadius:   24,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
             ),
             child: Icon(
               icon,
-              size:  24,
-              color: highlight ? hl : Colors.white70,
+              size:  28,
+              color: focused ? Colors.black87 : highlight ? hl : Colors.white70,
             ),
           );
         },
