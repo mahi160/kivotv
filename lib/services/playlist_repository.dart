@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
 import '../core/db/database_service.dart';
+import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
 
 class PlaylistRepository {
@@ -35,12 +36,9 @@ class PlaylistRepository {
     ),
   ];
 
-  // No local sample channels — the seeded playlist provides content.
-  static const _sampleChannels = <Channel>[];
-
   Future<void> _bootstrap() async {
-    // Store built-in sample channel (idempotent — safe on every launch).
-    await _storeSampleChannels();
+    // Seed the built-in iptvidn channels (idempotent — safe on every launch).
+    await _storeBuiltInChannels();
 
     final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
@@ -52,14 +50,17 @@ class PlaylistRepository {
     _seedAndRefresh();
   }
 
-  Future<void> _storeSampleChannels() async {
+  /// The iptvidn channels are a hardcoded, built-in playlist (kivo:// URL, so
+  /// the refresh logic never tries to HTTP-fetch it). Their `url` is an
+  /// `iptvidn://<slug>` reference resolved at play time.
+  Future<void> _storeBuiltInChannels() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'Samples',
-      url: 'kivo://samples',
+      name: 'IPTV IDN',
+      url:  'kivo://iptvidn',
     );
     await DatabaseService.instance.upsertChannels(
       playlistId: playlistId,
-      channels: _sampleChannels,
+      channels:   iptvidnChannels,
     );
   }
 

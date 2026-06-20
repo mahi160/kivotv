@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
+import '../../services/iptvidn_resolver.dart';
 import '../../services/playlist_repository.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
@@ -48,12 +49,23 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── playback-failure handling ───────────────────────────────────────────────
   // How long to wait for a stream to start before giving up and skipping.
-  static const _streamTimeout = Duration(seconds: 10);
+  // Live IPTV on a low-power box legitimately takes up to ~10s to first frame
+  // (resolve + playlist + segment fill), so this is generous to avoid killing
+  // a stream that was about to play. A genuinely dead link errors out far
+  // sooner via the player's error stream; this only backstops a silent stall.
+  static const _streamTimeout = Duration(seconds: 20);
   Timer?  _loadWatchdog;
   String? _error;
   // Consecutive auto-skips since the last successful play. Bounded so an
   // all-dead playlist can't loop forever.
   int  _autoSkipCount = 0;
+  // True once the current channel has actually played. Distinguishes a dead
+  // channel (never played → auto-skip) from a mid-watch token expiry
+  // (played, then failed → re-resolve the same channel).
+  bool _hasPlayed = false;
+  // Re-resolves the current channel ~60s before its token expires, so a long
+  // watch never hits a 403. Scoped to the playing channel only — not a cron.
+  Timer? _expiryTimer;
   // Remembers whether playback was active when the app went to background,
   // so we don't force-play a stream the user had manually paused.
   bool _wasPlayingBeforePause = false;
@@ -102,6 +114,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (!playing) return;
       _loadWatchdog?.cancel();
       _autoSkipCount = 0;
+      _hasPlayed     = true;
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
@@ -153,6 +166,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     WakelockPlus.disable();
     _hideTimer?.cancel();
     _loadWatchdog?.cancel();
+    _expiryTimer?.cancel();
     _playingSubscription?.cancel();
     _errorSubscription?.cancel();
     _sidebarScroll.dispose();
@@ -212,8 +226,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── playback ───────────────────────────────────────────────────────────────
 
-  /// Opens [channel]. [resetSkipBudget] is false only for auto-skips so the
-  /// loop guard keeps counting; any user-initiated open resets it.
+  /// Switches to [channel]. [resetSkipBudget] is false only for auto-skips so
+  /// the loop guard keeps counting; any user-initiated switch resets it.
   Future<void> _open(Channel channel, {bool resetSkipBudget = true}) async {
     // Skip re-opening the same stream that's already loaded.
     if (channel.url == _currentChannel.url &&
@@ -221,15 +235,50 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     if (resetSkipBudget) _autoSkipCount = 0;
-    _markedWatched = false;
-    setState(() {
-      _currentChannel = channel;
-      _error = null;
-    });
+    setState(() => _currentChannel = channel);
     _recomputeIndex();
+    await _load();
+    if (mounted) _showControls();
+  }
+
+  /// Resolves (if needed) and opens the *current* channel. Used both for a
+  /// user switch (via [_open]) and for re-resolution when a token expires
+  /// mid-watch — which is why it always reopens and never short-circuits.
+  Future<void> _load() async {
+    _markedWatched = false;
+    _hasPlayed     = false;
+    _expiryTimer?.cancel();
+    if (_error != null) setState(() => _error = null);
     _startWatchdog();
-    await _player.open(Media(channel.url), play: true);
-    _showControls();
+
+    final reference = _currentChannel.url;
+    final String playable;
+    try {
+      if (IptvidnResolver.isResolvable(reference)) {
+        final resolved = await IptvidnResolver.instance.resolve(reference);
+        if (!mounted) return;
+        playable = resolved.url;
+        _scheduleExpiryRefresh(resolved.expiresAt);
+      } else {
+        playable = reference;
+      }
+    } catch (_) {
+      _handleStreamFailure(); // resolution failure == stream failure
+      return;
+    }
+    await _player.open(Media(playable), play: true);
+  }
+
+  /// Re-resolves the current channel shortly before its token dies, so a long
+  /// continuous watch never hits a 403. One timer for the active channel only.
+  void _scheduleExpiryRefresh(DateTime? expiresAt) {
+    _expiryTimer?.cancel();
+    if (expiresAt == null) return;
+    final lead = expiresAt
+        .subtract(const Duration(seconds: 60))
+        .difference(DateTime.now());
+    if (lead <= Duration.zero) return; // imminent; reactive path will cover it
+    _expiryTimer = Timer(lead, () { if (mounted) _load(); });
   }
 
   // ── failure handling ────────────────────────────────────────────────────
@@ -247,6 +296,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _handleStreamFailure() {
     if (!mounted || _player.state.playing) return;
     _loadWatchdog?.cancel();
+
+    // Played fine, then dropped → almost always token expiry. Re-resolve the
+    // same channel instead of skipping away. _load() clears _hasPlayed, so a
+    // re-resolve that also fails falls through to the auto-skip below.
+    if (_hasPlayed) {
+      _load();
+      return;
+    }
 
     final idx = _currentIndex;
     if (idx == -1 || _channels.length < 2) {
@@ -350,16 +407,20 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── navigation ─────────────────────────────────────────────────────────────
 
+  // Channel surfing wraps around: next from the last goes to the first, and
+  // previous from the first goes to the last.
   void _playPrevious() {
+    if (_channels.isEmpty) return;
     final idx = _currentIndex;
-    if (idx <= 0) return;
-    _open(_channels[idx - 1]);
+    if (idx == -1) return;
+    _open(_channels[(idx - 1 + _channels.length) % _channels.length]);
   }
 
   void _playNext() {
+    if (_channels.isEmpty) return;
     final idx = _currentIndex;
-    if (idx == -1 || idx >= _channels.length - 1) return;
-    _open(_channels[idx + 1]);
+    if (idx == -1) return;
+    _open(_channels[(idx + 1) % _channels.length]);
   }
 
   // ── key handling ───────────────────────────────────────────────────────────
