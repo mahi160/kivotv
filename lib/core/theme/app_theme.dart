@@ -16,25 +16,31 @@ import 'app_spacing.dart';
 /// themeMode:  ThemeMode.system,
 /// ```
 abstract final class AppTheme {
-  static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark()  => _build(Brightness.dark);
+  /// [dynamicScheme] is the wallpaper-derived Material You scheme when the
+  /// platform provides one (phones / some Google TV). It's null on most
+  /// Android TV hardware, where we fall back to the fixed cinematic palette.
+  static ThemeData light([ColorScheme? dynamicScheme]) =>
+      _build(Brightness.light, dynamicScheme);
+  static ThemeData dark([ColorScheme? dynamicScheme]) =>
+      _build(Brightness.dark, dynamicScheme);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData _build(Brightness brightness, [ColorScheme? dynamicScheme]) {
     final isDark = brightness == Brightness.dark;
 
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor:   AppColors.oceanDeepBlue,
-      brightness:  brightness,
-      surface:     isDark ? AppColors.darkSurface     : AppColors.lightSurface,
-      onSurface:   isDark ? AppColors.darkOnSurface   : AppColors.lightOnSurface,
-      primary:     AppColors.oceanDeepBlue,
-      onPrimary:   Colors.white,
-      secondary:   AppColors.warmSandyBeige,
-      onSecondary: AppColors.lightOnSurface,
-      tertiary:    AppColors.goldenDriftwood,
-      onTertiary:  AppColors.lightOnSurface,
-      error:       AppColors.error,
-    );
+    final colorScheme = dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor:   AppColors.oceanDeepBlue,
+          brightness:  brightness,
+          surface:     isDark ? AppColors.darkSurface     : AppColors.lightSurface,
+          onSurface:   isDark ? AppColors.darkOnSurface   : AppColors.lightOnSurface,
+          primary:     AppColors.oceanDeepBlue,
+          onPrimary:   Colors.white,
+          secondary:   AppColors.warmSandyBeige,
+          onSecondary: AppColors.lightOnSurface,
+          tertiary:    AppColors.goldenDriftwood,
+          onTertiary:  AppColors.lightOnSurface,
+          error:       AppColors.error,
+        );
 
     return ThemeData(
       useMaterial3:  true,

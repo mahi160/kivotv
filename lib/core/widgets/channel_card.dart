@@ -31,10 +31,9 @@ class ChannelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark
-        ? AppColors.oceanDeep   // #1A2B38 — above the near-black bg
-        : AppColors.lightSurface;
+    final isDark       = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppColors.oceanDeep : AppColors.lightSurface;
+    final accent       = AppColors.focus(isDark);
 
     return FocusableTap(
       onTap:       onTap,
@@ -42,94 +41,95 @@ class ChannelCard extends StatelessWidget {
       // TV remotes can't long-press — wire MENU key to the same action.
       onMenu:      onFavoriteLongPress,
       builder: (context, focused) {
-        Widget card = AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve:    Curves.easeOut,
-          // 3-px padding keeps the focus ring inside the allocated cell area
-          // so it never gets clipped by a scroll view.
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusLg + 2),
-            boxShadow: focused
-                ? [
-                    BoxShadow(
-                      color:      AppColors.focus(isDark).withValues(alpha: 0.28),
-                      blurRadius: 16,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : null,
-            border: Border.all(
-              color: focused
-                  ? AppColors.focus(isDark)
-                  : (isDark ? AppColors.oceanMid : AppColors.lightBorder),
-              width:       focused ? 2 : 1,
-              strokeAlign: BorderSide.strokeAlignOutside,
+        // Focus = motion + accent glow, not heavy chrome. The card scales up
+        // (well within the grid gap so it never overlaps neighbours) and lifts
+        // on an accent halo.
+        return AnimatedScale(
+          scale:    focused ? 1.06 : 1.0,
+          duration: const Duration(milliseconds: 160),
+          curve:    Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve:    Curves.easeOut,
+            decoration: BoxDecoration(
+              color:        surfaceColor,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              border: Border.all(
+                color: focused
+                    ? accent
+                    : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                width:       focused ? 2 : 1,
+                strokeAlign: BorderSide.strokeAlignOutside,
+              ),
+              boxShadow: focused
+                  ? [
+                      BoxShadow(
+                        color:        accent.withValues(alpha: 0.45),
+                        blurRadius:   28,
+                        spreadRadius: 1,
+                      ),
+                      const BoxShadow(
+                        color:      Color(0x66000000),
+                        blurRadius: 18,
+                        offset:     Offset(0, 10),
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              curve:    Curves.easeOut,
-              color:    surfaceColor,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // ── Content ───────────────────────────────────────────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         ChannelAvatar(
                           logoUrl: channel.logo,
                           name:    channel.name,
-                          size:    56,
+                          size:    60,
                         ),
-                        const SizedBox(height: 9),
+                        const SizedBox(height: 12),
                         Text(
                           channel.name,
                           maxLines:  2,
                           overflow:  TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(height: 1.25),
-                        ),
-                        if (channel.group?.isNotEmpty == true) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            channel.group!,
-                            maxLines:  1,
-                            overflow:  TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                              color: isDark
-                                  ? AppColors.darkOnSurfaceVariant
-                                  : AppColors.lightOnSurfaceVariant,
-                            ),
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            height: 1.2,
+                            color: focused
+                                ? (isDark
+                                    ? AppColors.darkOnSurface
+                                    : AppColors.lightOnSurface)
+                                : null,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
 
-                  // ── Favourite badge ───────────────────────────────────
+                  // Favourite — accent star on a dark disc so it reads on any
+                  // logo and stays distinct from the focus affordance.
                   if (channel.isFavorite)
-                    const Positioned(
-                      top: 8, right: 10,
-                      child: Icon(Icons.star_rounded,
-                          size: 16, color: AppColors.goldenDriftwood),
+                    Positioned(
+                      top: 8, right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0x99000000),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.star_rounded,
+                            size: 15, color: AppColors.favActive),
+                      ),
                     ),
-
                 ],
               ),
             ),
           ),
         );
-
-        return card;
       },
     );
   }

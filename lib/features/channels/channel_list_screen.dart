@@ -24,8 +24,7 @@ class ChannelListScreen extends ConsumerStatefulWidget {
 }
 
 class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
-  static const _pageSize   = 60;
-  static const _crossCount = 3;
+  static const _pageSize = 60;
 
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
@@ -234,11 +233,11 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
       controller:    _scrollController,
       padding:       const EdgeInsets.all(AppSpacing.xs),
       clipBehavior:  Clip.none,
-      gridDelegate:  const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount:   _crossCount,
-        crossAxisSpacing: AppSpacing.md,
-        mainAxisSpacing:  AppSpacing.md,
-        mainAxisExtent:   AppSpacing.tvGridCardExtent,
+      gridDelegate:  const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: AppSpacing.tvGridCardMaxExtent,
+        crossAxisSpacing:   AppSpacing.md,
+        mainAxisSpacing:    AppSpacing.md,
+        mainAxisExtent:     AppSpacing.tvGridCardExtent,
       ),
       itemCount: itemCount,
       itemBuilder: (context, index) {

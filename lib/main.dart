@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -63,20 +64,25 @@ class _KivoAppState extends ConsumerState<KivoApp> {
         SingleActivator(LogicalKeyboardKey.select):      ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
-      child: MaterialApp.router(
-        routerConfig:             appRouter,
-        debugShowCheckedModeBanner: false,
-        theme:     AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        // No in-app theme switcher; follow the TV's system light/dark setting.
-        themeMode: ThemeMode.system,
-        builder: (context, child) {
-          return bootstrap.when(
-            data:    (_)       => child!,
-            error:   (err, _)  => _BootstrapError(error: err),
-            loading: ()        => const _SplashScreen(),
-          );
-        },
+      // Material You: use the wallpaper-derived scheme when the platform
+      // exposes one, otherwise fall back to the fixed cinematic palette.
+      // Android TV almost always hits the fallback (no dynamic colour there).
+      child: DynamicColorBuilder(
+        builder: (lightDynamic, darkDynamic) => MaterialApp.router(
+          routerConfig:             appRouter,
+          debugShowCheckedModeBanner: false,
+          theme:     AppTheme.light(lightDynamic),
+          darkTheme: AppTheme.dark(darkDynamic),
+          // No in-app theme switcher; follow the TV's system light/dark setting.
+          themeMode: ThemeMode.system,
+          builder: (context, child) {
+            return bootstrap.when(
+              data:    (_)       => child!,
+              error:   (err, _)  => _BootstrapError(error: err),
+              loading: ()        => const _SplashScreen(),
+            );
+          },
+        ),
       ),
     );
   }

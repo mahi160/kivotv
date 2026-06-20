@@ -27,16 +27,20 @@ abstract final class AppSpacing {
   static const tvSidebarTile = 72.0;
 
   /// Fixed cell height of a channel card in the home + channels grids.
-  static const tvGridCardExtent = 190.0;
+  static const tvGridCardExtent = 168.0;
+
+  /// Max width of a grid card. Grids size cards by this (not a fixed column
+  /// count), so the layout stays responsive across 720p/1080p/4K panels.
+  static const tvGridCardMaxExtent = 220.0;
 
   /// Width of the player channel-list sidebar panel.
   static const tvSidebarWidth = 320.0;
 
-  // ── Border radii ─────────────────────────────────────────────────────────
-  static const radiusSm = 16.0;
-  static const radiusMd = 22.0;
-  static const radiusLg = 26.0;
-  static const radiusXl = 30.0;
+  // ── Border radii — sharper, more cinematic ─────────────────────────────────
+  static const radiusSm = 10.0;
+  static const radiusMd = 14.0;
+  static const radiusLg = 18.0;
+  static const radiusXl = 24.0;
 
   // ── Icon sizes ───────────────────────────────────────────────────────────
   static const iconSm = 20.0;

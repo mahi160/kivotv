@@ -2,139 +2,116 @@ import 'package:flutter/material.dart';
 
 /// Centralised colour tokens for Kivo.
 ///
-/// ┌─────────────────────────────────────────────────────┐
-/// │  Brand palette (exact values as specified)          │
-/// │  Ocean Deep Blue    #5D768B                         │
-/// │  Warm Sandy Beige   #C8B39B                         │
-/// │  Golden Driftwood   #E3C9A4                         │
-/// │  Soft Seashell Pink #F2D9C7                         │
-/// │  Ivory Breeze       #F8EFE5                         │
-/// └─────────────────────────────────────────────────────┘
-///
-/// To update the brand: change values here only — nothing else.
+/// Dark-cinematic theme: near-black canvas, a single vivid blue accent, and
+/// hairline chrome. Focus is communicated by motion (scale) + an accent glow,
+/// not by heavy borders. To re-skin the app, change values here only — every
+/// screen reads these tokens, so nothing else needs editing.
 abstract final class AppColors {
-  // ── Brand swatches (verbatim) ─────────────────────────────────────────────
-  static const oceanDeepBlue    = Color(0xFF5D768B);
-  static const warmSandyBeige   = Color(0xFFC8B39B);
-  static const goldenDriftwood  = Color(0xFFE3C9A4);
-  static const softSeashellPink = Color(0xFFF2D9C7);
-  static const ivoryBreeze      = Color(0xFFF8EFE5);
+  // ── The one accent ────────────────────────────────────────────────────────
+  /// Vivid electric blue — the single accent used for focus, active state,
+  /// favourites and progress. Bright enough to pop on near-black.
+  static const accent       = Color(0xFF4D8DFF);
+  static const accentBright = Color(0xFF6FA4FF); // hover / focus glow
+  static const accentDeep   = Color(0xFF2F6BE0); // pressed
+  static const accentTint   = Color(0xFFA8C6FF); // light text on accent fills
 
-  // ── Primary scale — Ocean Deep Blue ──────────────────────────────────────
-  /// Near-black background for dark mode.
-  static const oceanAbyss    = Color(0xFF0F1A22);
-  /// Dark card / surface (dark mode).
-  static const oceanDeep     = Color(0xFF1A2B38);
-  /// Elevated surface / sidebar (dark mode).
-  static const oceanMid      = Color(0xFF253D50);
-  /// Primary interactive colour — the brand blue.
-  static const oceanPrimary  = oceanDeepBlue;         // #5D768B
-  /// Highlight / focus ring in dark mode.
-  static const oceanBright   = Color(0xFF8BA4B6);
-  /// Subtle tint overlay.
-  static const oceanOverlay  = Color(0x265D768B);
+  // ── Legacy brand names → mapped onto the accent/neutrals so existing
+  //    widgets keep compiling while picking up the new look. ─────────────────
+  static const oceanDeepBlue    = accent;
+  static const warmSandyBeige   = accentBright;
+  static const goldenDriftwood  = accent;        // favourite star = accent
+  static const softSeashellPink = accentTint;
+  static const ivoryBreeze      = Color(0xFFF3F5F9);
 
-  // ── Accent scale — Sandy / Driftwood ─────────────────────────────────────
-  /// Deepest sandy tone — hover / pressed state.
-  static const sandDark      = Color(0xFFA08870);
-  /// Core accent — Warm Sandy Beige.
-  static const sandMid       = warmSandyBeige;         // #C8B39B
-  /// Golden highlight — Golden Driftwood.
-  static const sandLight     = goldenDriftwood;        // #E3C9A4
-  /// Pale tint — Soft Seashell Pink.
-  static const sandPale      = softSeashellPink;       // #F2D9C7
+  // ── Neutral scale (dark) ───────────────────────────────────────────────────
+  /// True near-black canvas.
+  static const oceanAbyss   = Color(0xFF0A0B0F);
+  /// Card / surface.
+  static const oceanDeep    = Color(0xFF14161C);
+  /// Elevated surface / sidebar.
+  static const oceanMid     = Color(0xFF1E212B);
+  static const oceanPrimary = accent;
+  static const oceanBright  = accentBright;
+  static const oceanOverlay = Color(0x264D8DFF);
 
-  // ── Dark-mode neutrals ────────────────────────────────────────────────────
-  static const darkBackground      = oceanAbyss;
-  static const darkSurface         = oceanDeep;
-  static const darkSurfaceVariant  = oceanMid;
-  /// 18 % ocean on black — subtle card border in dark.
-  static const darkBorder          = Color(0x2E5D768B);
-  /// Focused border ring in dark mode — warm golden.
-  static const darkBorderFocused   = goldenDriftwood;
-  static const darkOnSurface       = ivoryBreeze;
-  static const darkOnSurfaceVariant = Color(0xFFD4C0AB);
+  // ── Accent aliases (sandy scale → accent scale) ────────────────────────────
+  static const sandDark  = accentDeep;
+  static const sandMid   = accentBright;
+  static const sandLight = accent;
+  static const sandPale  = accentTint;
 
-  // ── Light-mode neutrals ───────────────────────────────────────────────────
-  static const lightBackground      = ivoryBreeze;      // #F8EFE5
-  static const lightSurface         = Color(0xFFFFFFFF);
-  static const lightSurfaceVariant  = softSeashellPink; // #F2D9C7
-  /// 18 % ocean on white — subtle card border in light.
-  static const lightBorder          = Color(0x2E5D768B);
-  static const lightOnSurface       = Color(0xFF1A2830);
-  static const lightOnSurfaceVariant = Color(0xFF5C6E7C);
+  // ── Dark-mode neutrals ──────────────────────────────────────────────────────
+  static const darkBackground       = oceanAbyss;
+  static const darkSurface          = oceanDeep;
+  static const darkSurfaceVariant   = oceanMid;
+  /// Hairline border — barely-there white, minimal chrome.
+  static const darkBorder           = Color(0x12FFFFFF);
+  static const darkBorderFocused    = accent;
+  static const darkOnSurface        = Color(0xFFF3F5F9);
+  static const darkOnSurfaceVariant = Color(0xFF9BA4B4);
 
-  // ── Semantic ──────────────────────────────────────────────────────────────
-  static const error            = Color(0xFFAD4040);
-  static const errorContainer   = Color(0x1FAD4040);
-  static const success          = Color(0xFF4A8C5C);
-  static const successContainer = Color(0x1F4A8C5C);
-  static const warning          = Color(0xFF997840);
-  static const warningContainer = Color(0x1F997840);
+  // ── Light-mode neutrals (kept coherent with the accent) ─────────────────────
+  static const lightBackground       = Color(0xFFF4F6FA);
+  static const lightSurface          = Color(0xFFFFFFFF);
+  static const lightSurfaceVariant   = Color(0xFFE9EEF6);
+  static const lightBorder           = Color(0x14000000);
+  static const lightOnSurface        = Color(0xFF10131A);
+  static const lightOnSurfaceVariant = Color(0xFF5B6472);
 
-  // ── UI component colours ──────────────────────────────────────────────────
-  /// Logo mark gradient: ocean → sandy.
-  static const logoGradientStart = oceanDeepBlue;     // #5D768B
-  static const logoGradientEnd   = warmSandyBeige;    // #C8B39B
+  // ── Semantic ────────────────────────────────────────────────────────────────
+  static const error            = Color(0xFFFF5A5F);
+  static const errorContainer   = Color(0x1FFF5A5F);
+  static const success          = Color(0xFF34D399);
+  static const successContainer = Color(0x1F34D399);
+  static const warning          = Color(0xFFF5B14B);
+  static const warningContainer = Color(0x1FF5B14B);
 
-  /// Focused card gradient (dark).
-  static const focusCardStart    = oceanDeepBlue;
-  static const focusCardEnd      = oceanDeep;
+  // ── UI component colours ─────────────────────────────────────────────────────
+  static const logoGradientStart = accent;
+  static const logoGradientEnd   = accentBright;
+  static const focusCardStart    = accent;
+  static const focusCardEnd      = accentDeep;
+  static const favActive         = accent;
+  static const pinActive         = accentBright;
 
-  /// Favourite star / active accent.
-  static const favActive         = goldenDriftwood;   // #E3C9A4
-  /// Pin icon active.
-  static const pinActive         = oceanBright;
+  // ── Unified D-pad focus affordance ───────────────────────────────────────────
+  // SINGLE source of truth for the focus highlight. Every focusable widget uses
+  // this so "what is selected" always reads the same way.
+  static Color focus(bool isDark) => isDark ? accentBright : accent;
 
-  // ── Unified D-pad focus affordance ────────────────────────────────────────
-  // SINGLE source of truth for the focus highlight colour. Every focusable
-  // widget (cards, nav, player controls, sidebar, theme picker) MUST use this
-  // so the user always recognises "what is selected" the same way.
-  //
-  // Ocean blue on light backgrounds  → high contrast on ivory.
-  // Golden driftwood on dark backgrounds → high contrast on near-black.
-  /// Focus ring / border / icon highlight colour.
-  static Color focus(bool isDark) => isDark ? goldenDriftwood : oceanDeepBlue;
+  /// Translucent accent fill for widgets that tint a background on focus.
+  static Color focusFill(bool isDark) => accent.withValues(alpha: 0.16);
 
-  /// Translucent focus fill (used by widgets that tint a background on focus).
-  static Color focusFill(bool isDark) =>
-      (isDark ? goldenDriftwood : oceanDeepBlue).withValues(alpha: 0.14);
-
-  // ── Gradients ─────────────────────────────────────────────────────────────
-  /// Home screen — dark.
+  // ── Gradients — subtle cinematic vignettes, near flat ────────────────────────
   static const homeGradientDark = RadialGradient(
-    center: Alignment.topLeft,
-    radius: 1.3,
-    colors: [oceanMid, oceanDeep, oceanAbyss],
-    stops: [0.0, 0.5, 1.0],
+    center: Alignment(-0.5, -0.8),
+    radius: 1.4,
+    colors: [Color(0xFF181B23), Color(0xFF0C0D12), oceanAbyss],
+    stops:  [0.0, 0.55, 1.0],
   );
 
-  /// Channel list / settings — dark.
   static const listGradientDark = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [oceanDeep, oceanAbyss],
+    begin:  Alignment.topCenter,
+    end:    Alignment.bottomCenter,
+    colors: [Color(0xFF101218), oceanAbyss],
   );
 
-  /// Settings panel — dark (slight left-right tilt).
   static const settingsGradientDark = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    begin:  Alignment.topLeft,
+    end:    Alignment.bottomRight,
     colors: [oceanMid, oceanAbyss],
   );
 
-  /// Home screen — light.
   static const homeGradientLight = RadialGradient(
-    center: Alignment.topLeft,
-    radius: 1.3,
-    colors: [softSeashellPink, lightBackground, ivoryBreeze],
-    stops: [0.0, 0.5, 1.0],
+    center: Alignment(-0.5, -0.8),
+    radius: 1.4,
+    colors: [lightSurface, lightBackground, lightSurfaceVariant],
+    stops:  [0.0, 0.6, 1.0],
   );
 
-  /// Channel list / settings — light.
   static const listGradientLight = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
+    begin:  Alignment.topCenter,
+    end:    Alignment.bottomCenter,
     colors: [lightSurface, lightBackground],
   );
 }

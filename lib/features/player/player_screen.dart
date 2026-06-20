@@ -93,8 +93,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _currentChannel = widget.channel;
     _player = Player(
       configuration: const PlayerConfiguration(
-        // Larger demuxer buffer rides out network hiccups on flaky IPTV CDNs.
-        bufferSize: 64 * 1024 * 1024,
+        // 16 MB demuxer buffer: enough to ride out jitter (~30s at SD bitrates)
+        // without prebuffering so much that first-frame is slow to appear.
+        bufferSize: 16 * 1024 * 1024,
       ),
     );
     _controller = VideoController(
@@ -146,7 +147,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// - framedrop=vo: drop late video frames instead of letting the picture
   ///   fall behind the audio when the decoder can't keep up — the usual cause
   ///   of "audio and video out of sync" on weak hardware.
-  /// - cache + readahead: smooth out network jitter on live streams.
+  /// - cache + small readahead: smooth jitter without delaying first frame.
+  ///   readahead was 20s (slow to start); 4s starts far quicker on live HLS
+  ///   while still absorbing normal network wobble.
   Future<void> _configurePlayer() async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
@@ -154,7 +157,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       await platform.setProperty('video-sync', 'audio');
       await platform.setProperty('framedrop', 'vo');
       await platform.setProperty('cache', 'yes');
-      await platform.setProperty('demuxer-readahead-secs', '20');
+      await platform.setProperty('demuxer-readahead-secs', '4');
+      // Start playing as soon as a little data is buffered, rather than
+      // waiting to fill a large cache first.
+      await platform.setProperty('cache-secs', '4');
     } catch (_) {
       // Tuning is non-critical; playback still works with mpv defaults.
     }

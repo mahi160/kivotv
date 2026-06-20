@@ -193,11 +193,11 @@ class _DashboardSection extends StatelessWidget {
                   clipBehavior: Clip.none,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount:   3,
-                    crossAxisSpacing: AppSpacing.md,
-                    mainAxisSpacing:  AppSpacing.md,
-                    mainAxisExtent:   AppSpacing.tvGridCardExtent,
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: AppSpacing.tvGridCardMaxExtent,
+                    crossAxisSpacing:   AppSpacing.md,
+                    mainAxisSpacing:    AppSpacing.md,
+                    mainAxisExtent:     AppSpacing.tvGridCardExtent,
                   ),
                   itemCount: channels.length,
                   itemBuilder: (context, index) => ChannelCard(

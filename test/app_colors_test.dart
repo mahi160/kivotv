@@ -3,40 +3,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kivo/core/theme/app_colors.dart';
 
 void main() {
-  group('AppColors palette', () {
-    test('oceanic primary is a deep blue (hue 200–240)', () {
-      final hsl = HSLColor.fromColor(AppColors.oceanPrimary);
+  group('AppColors palette (dark-cinematic, single accent)', () {
+    test('accent is a vivid blue', () {
+      final hsl = HSLColor.fromColor(AppColors.accent);
       expect(hsl.hue, inInclusiveRange(200, 240));
-      expect(hsl.lightness, lessThan(0.6));
+      expect(hsl.saturation, greaterThan(0.6)); // vivid, not muted
     });
 
-    test('sandMid is a warm sandy tone (hue 20–50, low-medium saturation)', () {
-      final hsl = HSLColor.fromColor(AppColors.sandMid);
-      expect(hsl.hue, inInclusiveRange(20, 50));
-      // Warm Sandy Beige is desaturated — saturation > 0.15 is sufficient.
-      expect(hsl.saturation, greaterThan(0.15));
+    test('there is ONE accent: primary, favourite + focus all derive from it', () {
+      expect(AppColors.oceanPrimary, AppColors.accent);
+      expect(AppColors.favActive, AppColors.accent);
+      // The D-pad focus highlight is always the (bright) accent.
+      for (final c in [AppColors.focus(true), AppColors.focus(false)]) {
+        expect(HSLColor.fromColor(c).hue, inInclusiveRange(200, 240));
+      }
     });
 
     test('error is distinctly red', () {
-      final hsl = HSLColor.fromColor(AppColors.error);
-      expect(hsl.hue, inInclusiveRange(0, 15));
+      final hue = HSLColor.fromColor(AppColors.error).hue;
+      expect(hue >= 350 || hue <= 20, isTrue, reason: 'hue=$hue');
     });
 
     test('success is distinctly green', () {
-      final hsl = HSLColor.fromColor(AppColors.success);
-      expect(hsl.hue, inInclusiveRange(100, 145));
+      expect(HSLColor.fromColor(AppColors.success).hue, inInclusiveRange(120, 170));
     });
 
-    test('darkBackground is darker than darkSurface', () {
-      final bgLum = AppColors.darkBackground.computeLuminance();
-      final sfLum = AppColors.darkSurface.computeLuminance();
-      expect(bgLum, lessThan(sfLum));
+    test('canvas is near-black and darker than the card surface', () {
+      expect(AppColors.darkBackground.computeLuminance(), lessThan(0.02));
+      expect(
+        AppColors.darkBackground.computeLuminance(),
+        lessThan(AppColors.darkSurface.computeLuminance()),
+      );
     });
 
     test('lightBackground is lighter than darkBackground', () {
-      final light = AppColors.lightBackground.computeLuminance();
-      final dark = AppColors.darkBackground.computeLuminance();
-      expect(light, greaterThan(dark));
+      expect(
+        AppColors.lightBackground.computeLuminance(),
+        greaterThan(AppColors.darkBackground.computeLuminance()),
+      );
     });
   });
 }
