@@ -7,13 +7,11 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
 import '../../services/playlist_repository.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
-import 'widgets/stream_error_toast.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Screen
@@ -29,8 +27,6 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-/// [WidgetsBindingObserver] lets us pause playback when the app is backgrounded
-/// (e.g. user presses TV Home) and resume when it returns to the foreground.
 class _PlayerScreenState extends State<PlayerScreen>
     with WidgetsBindingObserver {
   // ── media ──────────────────────────────────────────────────────────────────
@@ -39,29 +35,32 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── channel state ──────────────────────────────────────────────────────────
   List<Channel>     _channels       = const [];
-  final Set<String> _failedUrls     = {};
   late Channel      _currentChannel;
-
-  // ── cached index — avoids O(n) scan on every overlay rebuild ───────────────
-  int _currentIndexCache = -1;
+  int               _currentIndexCache = -1;
 
   // ── overlay ────────────────────────────────────────────────────────────────
   bool   _showOverlay     = true;
   bool   _showChannelList = false;
   Timer? _hideTimer;
 
-  // ── stream error toast ─────────────────────────────────────────────────────
-  String? _streamErrorMsg;
-  Timer?  _streamErrorTimer;
+  // ── mark-watched ──────────────────────────────────────────────────────────
+  bool _markedWatched = false;
 
-  // ── playback failure detection ─────────────────────────────────────────────
-  bool   _allStreamsFailed = false;
-  Timer? _playbackFailureTimer;
-  // True once the current channel has been recorded as watched for this open.
-  bool   _markedWatched = false;
+  // ── playback-failure handling ───────────────────────────────────────────────
+  // How long to wait for a stream to start before giving up and skipping.
+  static const _streamTimeout = Duration(seconds: 10);
+  Timer?  _loadWatchdog;
+  String? _error;
+  // Consecutive auto-skips since the last successful play. Bounded so an
+  // all-dead playlist can't loop forever.
+  int  _autoSkipCount = 0;
+  // Remembers whether playback was active when the app went to background,
+  // so we don't force-play a stream the user had manually paused.
+  bool _wasPlayingBeforePause = false;
 
   // ── subscriptions ──────────────────────────────────────────────────────────
-  StreamSubscription<bool>? _playingSubscription;
+  StreamSubscription<bool>?   _playingSubscription;
+  StreamSubscription<String>? _errorSubscription;
 
   // ── sidebar scroll ─────────────────────────────────────────────────────────
   final _sidebarScroll = ScrollController();
@@ -77,44 +76,75 @@ class _PlayerScreenState extends State<PlayerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WakelockPlus.enable(); // keep screen on during playback
+    WakelockPlus.enable();
 
     _currentChannel = widget.channel;
-
-    _player = Player();
+    _player = Player(
+      configuration: const PlayerConfiguration(
+        // Larger demuxer buffer rides out network hiccups on flaky IPTV CDNs.
+        bufferSize: 64 * 1024 * 1024,
+      ),
+    );
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(
-        // Hardware acceleration ON — Impeller is disabled in AndroidManifest
-        // (see V1), which is the real fix for the black-video-with-audio bug.
-        // If a specific old/low-end box still shows black after that, flip
-        // this to false (software decode fallback, higher CPU use).
         enableHardwareAcceleration: true,
+        // Decode + render straight to a hardware surface on Android TV — the
+        // lowest-overhead path; avoids copying every frame into a GL texture.
+        vo:    'mediacodec_embed',
+        hwdec: 'mediacodec',
       ),
     );
 
+    // A playing event means the current stream is healthy: cancel the
+    // watchdog, reset the skip budget, clear any error, and mark watched.
     _playingSubscription = _player.stream.playing.listen((playing) {
-      if (playing) {
-        // Stream is actually rendering — cancel the failure watchdog.
-        _playbackFailureTimer?.cancel();
-        if (!_markedWatched) {
-          _markedWatched = true;
-          PlaylistRepository.instance.markWatched(_currentChannel);
-        }
+      if (!playing) return;
+      _loadWatchdog?.cancel();
+      _autoSkipCount = 0;
+      if (_error != null && mounted) setState(() => _error = null);
+      if (!_markedWatched) {
+        _markedWatched = true;
+        PlaylistRepository.instance.markWatched(_currentChannel);
       }
     });
 
-    // Load the channel list in the background so prev/next navigation works.
+    // A player error (dead link, bad codec, refused connection) → skip on.
+    _errorSubscription =
+        _player.stream.error.listen((_) => _handleStreamFailure());
+
     _loadChannels();
 
-    // Open media AFTER the first frame so the Video surface is attached to
-    // the widget tree. Calling Player.open() before the platform texture is
-    // created results in audio-only playback (black screen).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Tune libmpv, then open media after the first frame so the Video
+    // surface is ready.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _configurePlayer();
       if (mounted) _open(_currentChannel);
     });
 
     _scheduleOverlayHide();
+  }
+
+  /// libmpv tuning for live IPTV on low-power Android TV SoCs. Best-effort:
+  /// silently no-ops on platforms without a [NativePlayer] backend.
+  /// (hwdec/vo are set on the VideoController above.)
+  /// - video-sync=audio: make the audio clock the master so video can't drift.
+  /// - framedrop=vo: drop late video frames instead of letting the picture
+  ///   fall behind the audio when the decoder can't keep up — the usual cause
+  ///   of "audio and video out of sync" on weak hardware.
+  /// - cache + readahead: smooth out network jitter on live streams.
+  Future<void> _configurePlayer() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    try {
+      await platform.setProperty('video-sync', 'audio');
+      await platform.setProperty('framedrop', 'vo');
+      await platform.setProperty('cache', 'yes');
+      await platform.setProperty('demuxer-readahead-secs', '20');
+    } catch (_) {
+      // Tuning is non-critical; playback still works with mpv defaults.
+    }
   }
 
   @override
@@ -122,9 +152,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.removeObserver(this);
     WakelockPlus.disable();
     _hideTimer?.cancel();
-    _playbackFailureTimer?.cancel();
-    _streamErrorTimer?.cancel();
+    _loadWatchdog?.cancel();
     _playingSubscription?.cancel();
+    _errorSubscription?.cancel();
     _sidebarScroll.dispose();
     _rootFocus.dispose();
     _playFocusNode.dispose();
@@ -133,16 +163,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.dispose();
   }
 
-  // ── lifecycle — pause when backgrounded, resume on foreground ──────────────
+  // ── lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
+        _wasPlayingBeforePause = _player.state.playing;
         _player.pause();
       case AppLifecycleState.resumed:
-        _player.play();
+        // Only resume if it was playing before — don't override a manual pause.
+        if (_wasPlayingBeforePause) _player.play();
       default:
         break;
     }
@@ -165,8 +197,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final all  = <Channel>[];
     while (true) {
       final page = await PlaylistRepository.instance.channels(
-        query: widget.query,
-        limit: pageSize,
+        query:  widget.query,
+        limit:  pageSize,
         offset: offset,
       );
       all.addAll(page);
@@ -180,69 +212,64 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── playback ───────────────────────────────────────────────────────────────
 
-  Future<void> _open(Channel channel) async {
-    _playbackFailureTimer?.cancel();
+  /// Opens [channel]. [resetSkipBudget] is false only for auto-skips so the
+  /// loop guard keeps counting; any user-initiated open resets it.
+  Future<void> _open(Channel channel, {bool resetSkipBudget = true}) async {
+    // Skip re-opening the same stream that's already loaded.
+    if (channel.url == _currentChannel.url &&
+        (_player.state.playing || _player.state.buffering)) {
+      return;
+    }
+    if (resetSkipBudget) _autoSkipCount = 0;
     _markedWatched = false;
     setState(() {
-      _currentChannel   = channel;
-      _allStreamsFailed = false;
+      _currentChannel = channel;
+      _error = null;
     });
     _recomputeIndex();
-    try {
-      await _player.open(Media(channel.url), play: true);
-      // Generous timeout — low-end TVs on slow CDNs need time to buffer.
-      _playbackFailureTimer = Timer(
-        const Duration(seconds: 25),
-        _handlePlaybackFailure,
-      );
-      _showControls();
-    } catch (_) {
-      await _handlePlaybackFailure();
-    }
+    _startWatchdog();
+    await _player.open(Media(channel.url), play: true);
+    _showControls();
   }
 
-  Future<void> _handlePlaybackFailure() async {
-    _playbackFailureTimer?.cancel();
-    if (_failedUrls.contains(_currentChannel.url)) return;
+  // ── failure handling ────────────────────────────────────────────────────
 
-    // Channel list not yet loaded — retry the current channel in 5 s rather
-    // than showing "All streams unavailable" with no fallbacks to try.
-    if (_channels.isEmpty) {
-      _playbackFailureTimer =
-          Timer(const Duration(seconds: 5), _handlePlaybackFailure);
+  void _startWatchdog() {
+    _loadWatchdog?.cancel();
+    _loadWatchdog = Timer(_streamTimeout, () {
+      if (mounted && !_player.state.playing) _handleStreamFailure();
+    });
+  }
+
+  /// Called on a stream error or load timeout. Auto-advances to the next
+  /// channel, but stops and shows an error once it has skipped through a
+  /// bounded number of dead channels (so an all-dead playlist can't loop).
+  void _handleStreamFailure() {
+    if (!mounted || _player.state.playing) return;
+    _loadWatchdog?.cancel();
+
+    final idx = _currentIndex;
+    if (idx == -1 || _channels.length < 2) {
+      _showError('This channel is unavailable.');
       return;
     }
-
-    _failedUrls.add(_currentChannel.url);
-    await PlaylistRepository.instance.markBroken(_currentChannel);
-
-    _showStreamError('Stream unavailable — switching to next channel');
-
-    final next = _nextAvailableChannel();
-    if (next == null) {
-      if (mounted) setState(() => _allStreamsFailed = true);
+    final cap = _channels.length > 20 ? 20 : _channels.length;
+    if (_autoSkipCount >= cap) {
+      _showError('No playable channel found nearby.');
       return;
     }
-    await _open(next);
+    _autoSkipCount++;
+    _open(_channels[(idx + 1) % _channels.length], resetSkipBudget: false);
   }
 
-  Channel? _nextAvailableChannel() {
-    if (_channels.isEmpty) return null;
-    final start = _currentIndex == -1 ? 0 : _currentIndex + 1;
-    for (var i = 0; i < _channels.length; i++) {
-      final idx = (start + i) % _channels.length;
-      final ch  = _channels[idx];
-      if (!_failedUrls.contains(ch.url) && !ch.isBroken) return ch;
-    }
-    return null;
+  void _showError(String message) {
+    setState(() => _error = message);
+    // Hand focus back to the root so OK → retry / ▲▼ → change channel work
+    // (the now-hidden overlay controls no longer hold focus).
+    _rootFocus.requestFocus();
   }
 
-  void _retryFromStart() {
-    _failedUrls.clear();
-    _open(widget.channel);
-  }
-
-  // ── favourite helpers — patch in place, no full reload ────────────────────
+  // ── favourite helpers — in-place, no full reload ───────────────────────────
 
   Future<void> _toggleCurrentFavorite() async {
     final newValue = !_currentChannel.isFavorite;
@@ -321,16 +348,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  // ── stream error toast ─────────────────────────────────────────────────────
-
-  void _showStreamError(String msg) {
-    setState(() => _streamErrorMsg = msg);
-    _streamErrorTimer?.cancel();
-    _streamErrorTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted) setState(() => _streamErrorMsg = null);
-    });
-  }
-
   // ── navigation ─────────────────────────────────────────────────────────────
 
   void _playPrevious() {
@@ -351,7 +368,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
 
-    // ── Sidebar open ─────────────────────────────────────────────────────────
     if (_showChannelList) {
       if (key == LogicalKeyboardKey.goBack  ||
           key == LogicalKeyboardKey.escape  ||
@@ -363,7 +379,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
         return KeyEventResult.handled;
       }
-      // Pass up/down through so Flutter can move focus between sidebar items.
       if (key == LogicalKeyboardKey.arrowUp    ||
           key == LogicalKeyboardKey.arrowDown   ||
           key == LogicalKeyboardKey.channelUp   ||
@@ -372,7 +387,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     }
 
-    // ── Back → exit player ────────────────────────────────────────────────────
     if (key == LogicalKeyboardKey.goBack    ||
         key == LogicalKeyboardKey.escape    ||
         key == LogicalKeyboardKey.browserBack) {
@@ -380,25 +394,19 @@ class _PlayerScreenState extends State<PlayerScreen>
       return KeyEventResult.handled;
     }
 
-    // ── Up → previous channel ─────────────────────────────────────────────────
+    // Up → next channel, Down → previous channel.
     if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.channelUp) {
-      _playPrevious();
-      _showControls();
+      _playNext(); _showControls();
       return KeyEventResult.handled;
     }
 
-    // ── Down → next channel ───────────────────────────────────────────────────
     if (key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.channelDown) {
-      _playNext();
-      _showControls();
+      _playPrevious(); _showControls();
       return KeyEventResult.handled;
     }
 
-    // ── Left / Right: when overlay is hidden, any direction brings it back.
-    // When overlay IS shown, these keys are ignored here so FocusTraversalGroup
-    // inside the overlay can move focus between the control buttons.
     if (!_showOverlay &&
         (key == LogicalKeyboardKey.arrowLeft ||
          key == LogicalKeyboardKey.arrowRight)) {
@@ -406,25 +414,25 @@ class _PlayerScreenState extends State<PlayerScreen>
       return KeyEventResult.handled;
     }
 
-    // ── Select/Enter → toggle overlay ─────────────────────────────────────────
     if (key == LogicalKeyboardKey.select     ||
         key == LogicalKeyboardKey.enter      ||
         key == LogicalKeyboardKey.gameButtonA) {
-      _toggleOverlay();
+      if (_error != null) {
+        _open(_currentChannel); // retry
+      } else {
+        _toggleOverlay();
+      }
       return KeyEventResult.handled;
     }
 
-    // ── Media keys ────────────────────────────────────────────────────────────
     if (key == LogicalKeyboardKey.mediaPlay      ||
         key == LogicalKeyboardKey.mediaPause     ||
         key == LogicalKeyboardKey.mediaPlayPause) {
-      _player.playOrPause();
-      _showControls();
+      _player.playOrPause(); _showControls();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.mediaStop) {
-      _player.stop();
-      _showControls();
+      _player.stop(); _showControls();
       return KeyEventResult.handled;
     }
 
@@ -448,101 +456,36 @@ class _PlayerScreenState extends State<PlayerScreen>
             // ── Video ─────────────────────────────────────────────────────────
             Video(
               controller: _controller,
-              fit: BoxFit.contain,
-              // Disable media_kit built-in controls; we draw our own overlay.
-              controls: NoVideoControls,
+              fit:        BoxFit.contain,
+              controls:   NoVideoControls,
             ),
 
-            // ── Buffering spinner ─────────────────────────────────────────────
-            StreamBuilder<bool>(
-              stream: _player.stream.buffering,
-              builder: (context, snap) => snap.data == true
-                  ? const Center(child: CircularProgressIndicator())
-                  : const SizedBox.shrink(),
-            ),
+            // ── Buffering spinner (hidden once an error is shown) ─────────────
+            if (_error == null)
+              StreamBuilder<bool>(
+                stream:  _player.stream.buffering,
+                builder: (context, snap) => snap.data == true
+                    ? const Center(child: CircularProgressIndicator())
+                    : const SizedBox.shrink(),
+              ),
 
-            // ── Stream error toast ────────────────────────────────────────────
-            if (_streamErrorMsg != null)
-              Positioned(
-                bottom: 120, left: 0, right: 0,
-                child: Center(
-                  child: StreamErrorToast(message: _streamErrorMsg!),
+            // ── Stream error ──────────────────────────────────────────────────
+            if (_error != null)
+              Positioned.fill(
+                child: _StreamErrorView(
+                  channelName: _currentChannel.name,
+                  message:     _error!,
                 ),
               ),
 
-            // ── All-streams-failed dialog ─────────────────────────────────────
-            if (_allStreamsFailed)
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40, vertical: 28,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.signal_wifi_off_rounded,
-                          color: Colors.white38, size: 52),
-                      const SizedBox(height: 16),
-                      Text(
-                        'All streams unavailable',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(color: Colors.white),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'The streams for this channel are currently unreachable.',
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: Colors.white60),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ElevatedButton.icon(
-                            autofocus: true,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.oceanDeepBlue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 14),
-                            ),
-                            icon:  const Icon(Icons.refresh_rounded),
-                            label: const Text('Retry'),
-                            onPressed: _retryFromStart,
-                          ),
-                          const SizedBox(width: 16),
-                          TextButton(
-                            onPressed: () => context.go('/channels'),
-                            child: const Text(
-                              'Back to channels',
-                              style: TextStyle(color: Colors.white54),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // ── Main overlay (fades in/out) ───────────────────────────────────
-            // ExcludeFocus prevents D-pad traversal from entering the overlay
-            // while it is invisible, so focus can never "disappear".
-            // FocusTraversalGroup contains left/right movement inside the
-            // control row, preventing it from escaping to the sidebar.
+            // ── Main overlay ──────────────────────────────────────────────────
             AnimatedOpacity(
-              opacity:  _showOverlay ? 1.0 : 0.0,
+              opacity:  (_showOverlay && _error == null) ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
               child: ExcludeFocus(
-                excluding: !_showOverlay,
+                excluding: !_showOverlay || _error != null,
                 child: IgnorePointer(
-                  ignoring: !_showOverlay,
+                  ignoring: !_showOverlay || _error != null,
                   child: FocusTraversalGroup(
                     child: PlayerOverlay(
                       channel:          _currentChannel,
@@ -563,9 +506,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
             ),
 
-            // ── Channel list sidebar (slides in from right) ───────────────────
-            // ExcludeFocus prevents the off-screen sidebar from absorbing D-pad
-            // focus when it is hidden (translated off-screen but still mounted).
+            // ── Channel list sidebar ──────────────────────────────────────────
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve:    Curves.easeOut,
@@ -581,12 +522,63 @@ class _PlayerScreenState extends State<PlayerScreen>
                     scrollController: _sidebarScroll,
                     onSelectChannel: (ch) {
                       setState(() => _showChannelList = false);
-                      _open(ch);
+                      _open(ch); // user action → resets auto-skip budget
                     },
                     onToggleFavorite: _toggleSidebarFavorite,
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Stream error view
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Shown over the video when a stream fails or times out and auto-skip has
+/// run out of nearby channels to try. Purely informational — the player's
+/// root key handler maps OK → retry and ▲/▼ → change channel.
+class _StreamErrorView extends StatelessWidget {
+  const _StreamErrorView({required this.channelName, required this.message});
+
+  final String channelName;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xCC000000),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.signal_wifi_off_rounded,
+                size: 56, color: Colors.white54),
+            const SizedBox(height: 16),
+            Text(
+              channelName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: Colors.white60),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Press OK to retry  ·  ▲ ▼ to change channel',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: Colors.white38),
             ),
           ],
         ),

@@ -20,44 +20,44 @@ class DatabaseService {
     final dbPath = p.join(await getDatabasesPath(), 'kivo.db');
     final opened = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-      onCreate: (db, _) => _createSchema(db),
+      onCreate:    (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
+        // v1 → v2: added is_pinned, is_broken, recently_watched table.
+        // is_broken column stays in old DBs (can't DROP COLUMN in old SQLite)
+        // but is no longer read or written by the app as of v4.
         if (oldVersion < 2) {
           await _addColumnIfMissing(
-            db,
-            'channels',
-            'is_pinned',
-            'INTEGER NOT NULL DEFAULT 0',
-          );
+              db, 'channels', 'is_pinned', 'INTEGER NOT NULL DEFAULT 0');
           await _addColumnIfMissing(
-            db,
-            'channels',
-            'is_broken',
-            'INTEGER NOT NULL DEFAULT 0',
-          );
+              db, 'channels', 'is_broken', 'INTEGER NOT NULL DEFAULT 0');
           await db.execute('''
 CREATE TABLE IF NOT EXISTS recently_watched (
   channel_url TEXT PRIMARY KEY,
-  watched_at INTEGER NOT NULL,
+  watched_at  INTEGER NOT NULL,
   FOREIGN KEY (channel_url) REFERENCES channels (url) ON DELETE CASCADE
-)
-''');
+)''');
           await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_recent_watched_at ON recently_watched(watched_at DESC)',
+            'CREATE INDEX IF NOT EXISTS idx_recent_watched_at'
+            ' ON recently_watched(watched_at DESC)',
           );
         }
+        // v2 → v3: added is_favorite.
         if (oldVersion < 3) {
           await _addColumnIfMissing(
-            db,
-            'channels',
-            'is_favorite',
-            'INTEGER NOT NULL DEFAULT 0',
-          );
+              db, 'channels', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
           await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_channels_favorite ON channels(is_favorite)',
+            'CREATE INDEX IF NOT EXISTS idx_channels_favorite'
+            ' ON channels(is_favorite)',
           );
+        }
+        // v3 → v4: removed broken-channel tracking from the app layer.
+        // The is_broken column is left in existing DBs but ignored.
+        // Clear any leftover flags so those channels become visible again.
+        if (oldVersion < 4) {
+          await db.execute(
+              'UPDATE channels SET is_broken = 0 WHERE is_broken = 1');
         }
       },
     );
@@ -68,47 +68,37 @@ CREATE TABLE IF NOT EXISTS recently_watched (
   Future<void> _createSchema(Database db) async {
     await db.execute('''
 CREATE TABLE playlists (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  url TEXT NOT NULL UNIQUE,
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  name             TEXT    NOT NULL,
+  url              TEXT    NOT NULL UNIQUE,
   last_refreshed_at INTEGER
-)
-''');
+)''');
+    // is_pinned / is_broken were dropped from the app layer; new installs
+    // never create those columns (legacy DBs keep them, harmlessly ignored).
     await db.execute('''
 CREATE TABLE channels (
-  id TEXT NOT NULL,
+  id          TEXT    NOT NULL,
   playlist_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  url TEXT NOT NULL UNIQUE,
-  logo TEXT,
-  group_name TEXT,
-  search_text TEXT NOT NULL,
-  is_pinned INTEGER NOT NULL DEFAULT 0,
+  name        TEXT    NOT NULL,
+  url         TEXT    NOT NULL UNIQUE,
+  logo        TEXT,
+  group_name  TEXT,
+  search_text TEXT    NOT NULL,
   is_favorite INTEGER NOT NULL DEFAULT 0,
-  is_broken INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE
-)
-''');
+)''');
     await db.execute('''
 CREATE TABLE recently_watched (
   channel_url TEXT PRIMARY KEY,
-  watched_at INTEGER NOT NULL,
+  watched_at  INTEGER NOT NULL,
   FOREIGN KEY (channel_url) REFERENCES channels (url) ON DELETE CASCADE
-)
-''');
-    await db.execute('CREATE INDEX idx_channels_name ON channels(name)');
-    await db.execute('CREATE INDEX idx_channels_group ON channels(group_name)');
+)''');
+    await db.execute('CREATE INDEX idx_channels_name    ON channels(name)');
+    await db.execute('CREATE INDEX idx_channels_group   ON channels(group_name)');
+    await db.execute('CREATE INDEX idx_channels_search  ON channels(search_text)');
+    await db.execute('CREATE INDEX idx_channels_favorite ON channels(is_favorite)');
     await db.execute(
-      'CREATE INDEX idx_channels_search ON channels(search_text)',
-    );
-    await db.execute('CREATE INDEX idx_channels_pinned ON channels(is_pinned)');
-    await db.execute(
-      'CREATE INDEX idx_channels_favorite ON channels(is_favorite)',
-    );
-    await db.execute('CREATE INDEX idx_channels_broken ON channels(is_broken)');
-    await db.execute(
-      'CREATE INDEX idx_recent_watched_at ON recently_watched(watched_at DESC)',
-    );
+      'CREATE INDEX idx_recent_watched_at ON recently_watched(watched_at DESC)');
   }
 
   Future<void> _addColumnIfMissing(
@@ -118,23 +108,20 @@ CREATE TABLE recently_watched (
     String definition,
   ) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
-    final exists = columns.any((row) => row['name'] == column);
+    final exists  = columns.any((row) => row['name'] == column);
     if (!exists) {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
     }
   }
 
+  // ── Playlists ──────────────────────────────────────────────────────────────
+
   Future<int> upsertPlaylist({
     required String name,
     required String url,
   }) async {
-    final db    = await database;
-    final now   = DateTime.now().millisecondsSinceEpoch;
-    // INSERT IGNORE keeps existing row intact (preserves foreign-key channels).
-    // UPDATE sets the new name + timestamp.
-    // Separate SELECT reads back the id.
-    // Avoids RETURNING which requires SQLite >= 3.35 (not guaranteed on all
-    // Android TV firmware versions).
+    final db  = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.insert(
       'playlists',
       {'name': name, 'url': url, 'last_refreshed_at': now},
@@ -143,97 +130,71 @@ CREATE TABLE recently_watched (
     await db.update(
       'playlists',
       {'name': name, 'last_refreshed_at': now},
-      where: 'url = ?',
-      whereArgs: [url],
+      where: 'url = ?', whereArgs: [url],
     );
     final rows = await db.query(
-      'playlists',
-      columns: ['id'],
-      where: 'url = ?',
-      whereArgs: [url],
-      limit: 1,
+      'playlists', columns: ['id'], where: 'url = ?',
+      whereArgs: [url], limit: 1,
     );
     return rows.single['id'] as int;
   }
 
   Future<List<Playlist>> playlists() async {
-    final db = await database;
-    final rows = await db.query('playlists', orderBy: 'name COLLATE NOCASE ASC');
+    final db   = await database;
+    final rows = await db.query('playlists',
+        orderBy: 'name COLLATE NOCASE ASC');
     return rows.map(Playlist.fromDb).toList();
   }
 
+  // ── Channels — replace (diff-upsert) ──────────────────────────────────────
+
   /// Reconciles stored channels for [playlistId] with the new [channels] list.
-  ///
-  /// Strategy: diff-then-upsert, never delete-then-insert.
-  /// - Channels whose URL vanished from the payload are deleted (their
-  ///   `recently_watched` rows cascade away correctly).
-  /// - Surviving and new channels are upserted via ON CONFLICT(url) DO UPDATE,
-  ///   which updates the row IN PLACE — no row deletion, no cascade, so
-  ///   `is_favorite`, `is_pinned`, and `recently_watched` history are all
-  ///   preserved automatically. `is_broken` is cleared on every refresh.
-  /// - Duplicate URLs within the payload (common in real IPTV playlists)
-  ///   and URLs that already belong to another playlist are handled by the
-  ///   upsert instead of throwing a UNIQUE violation.
+  /// Deletes only URLs that disappeared upstream; upserts the rest in-place so
+  /// is_favorite / recently_watched history are preserved.
   Future<void> replaceChannels({
-    required int playlistId,
+    required int          playlistId,
     required List<Channel> channels,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
       final newUrls = {for (final c in channels) c.url};
 
-      // Find URLs that disappeared upstream so only those rows get deleted.
       final existing = await txn.query(
-        'channels',
-        columns: ['url'],
-        where: 'playlist_id = ?',
-        whereArgs: [playlistId],
+        'channels', columns: ['url'],
+        where: 'playlist_id = ?', whereArgs: [playlistId],
       );
       final toDelete = [
         for (final row in existing)
           if (!newUrls.contains(row['url'] as String)) row['url'] as String,
       ];
 
-      // Delete in chunks — SQLite variable limit is 999 by default.
       const chunkSize = 500;
       for (var i = 0; i < toDelete.length; i += chunkSize) {
-        final slice = toDelete.sublist(
-            i, math.min(i + chunkSize, toDelete.length));
+        final slice        = toDelete.sublist(i, math.min(i + chunkSize, toDelete.length));
         final placeholders = List.filled(slice.length, '?').join(',');
         await txn.rawDelete(
-          'DELETE FROM channels WHERE url IN ($placeholders)',
-          slice,
-        );
+            'DELETE FROM channels WHERE url IN ($placeholders)', slice);
       }
 
-      // Upsert: DO UPDATE never deletes the row, so no cascade fires.
-      // is_favorite / is_pinned are left untouched; is_broken is cleared.
       final batch = txn.batch();
       for (final channel in channels) {
         final data = channel.toDb(playlistId: playlistId);
         batch.rawInsert(
           '''
 INSERT INTO channels
-  (id, playlist_id, name, url, logo, group_name, search_text, is_pinned, is_favorite, is_broken)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(url) DO UPDATE SET
   id          = excluded.id,
   playlist_id = excluded.playlist_id,
   name        = excluded.name,
   logo        = excluded.logo,
   group_name  = excluded.group_name,
-  search_text = excluded.search_text,
-  is_broken   = 0
+  search_text = excluded.search_text
 ''',
           [
-            data['id'],
-            data['playlist_id'],
-            data['name'],
-            data['url'],
-            data['logo'],
-            data['group_name'],
-            data['search_text'],
-            data['is_pinned'],
+            data['id'],  data['playlist_id'], data['name'], data['url'],
+            data['logo'], data['group_name'], data['search_text'],
             data['is_favorite'],
           ],
         );
@@ -242,158 +203,118 @@ ON CONFLICT(url) DO UPDATE SET
     });
   }
 
+  // ── Channels — upsert (built-in / sample channels) ─────────────────────────
+
   Future<void> upsertChannels({
-    required int playlistId,
+    required int          playlistId,
     required List<Channel> channels,
   }) async {
-    final db = await database;
+    final db    = await database;
     final batch = db.batch();
     for (final channel in channels) {
       final data = channel.toDb(playlistId: playlistId);
       batch.rawInsert(
         '''
-INSERT INTO channels (id, playlist_id, name, url, logo, group_name, search_text, is_pinned, is_favorite, is_broken)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO channels
+  (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(url) DO UPDATE SET
   id          = excluded.id,
   playlist_id = excluded.playlist_id,
   name        = excluded.name,
   logo        = excluded.logo,
   group_name  = excluded.group_name,
-  search_text = excluded.search_text,
-  is_broken   = 0
+  search_text = excluded.search_text
 ''',
         [
-          data['id'],
-          data['playlist_id'],
-          data['name'],
-          data['url'],
-          data['logo'],
-          data['group_name'],
-          data['search_text'],
-          data['is_pinned'],
+          data['id'],  data['playlist_id'], data['name'], data['url'],
+          data['logo'], data['group_name'], data['search_text'],
           data['is_favorite'],
-          data['is_broken'],
         ],
       );
     }
     await batch.commit(noResult: true);
   }
 
+  // ── Channels — queries ─────────────────────────────────────────────────────
+
   Future<int> channelCount() async {
-    final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) AS count FROM channels WHERE is_broken = 0',
-    );
+    final db     = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) AS count FROM channels');
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<List<Channel>> channels({
-    String query = '',
-    int limit = 100,
-    int offset = 0,
-    bool includeBroken = false,
+    String query  = '',
+    int    limit  = 100,
+    int    offset = 0,
   }) async {
-    final db = await database;
+    final db              = await database;
     final normalizedQuery = query.trim().toLowerCase();
-    final where = <String>[];
-    final args = <Object?>[];
-    if (!includeBroken) where.add('is_broken = 0');
+    final where           = <String>[];
+    final args            = <Object?>[];
+
     if (normalizedQuery.isNotEmpty) {
       where.add(r"search_text LIKE ? ESCAPE '\'");
       args.add('%${_escapeLike(normalizedQuery)}%');
     }
-    final rows = await db.query(
-      'channels',
-      where: where.isEmpty ? null : where.join(' AND '),
-      whereArgs: args.isEmpty ? null : args,
-      orderBy: 'name COLLATE NOCASE ASC',
-      limit: limit,
-      offset: offset,
-    );
-    return rows.map(Channel.fromDb).toList();
-  }
 
-  Future<List<Channel>> pinnedChannels({int limit = 12}) async {
-    final db = await database;
     final rows = await db.query(
       'channels',
-      where: 'is_pinned = 1 AND is_broken = 0',
-      orderBy: 'name COLLATE NOCASE ASC',
-      limit: limit,
+      where:     where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty  ? null : args,
+      orderBy:   'name COLLATE NOCASE ASC',
+      limit:     limit,
+      offset:    offset,
     );
     return rows.map(Channel.fromDb).toList();
   }
 
   Future<List<Channel>> favoriteChannels({int limit = 12}) async {
-    final db = await database;
+    final db   = await database;
     final rows = await db.query(
       'channels',
-      where: 'is_favorite = 1 AND is_broken = 0',
+      where:   'is_favorite = 1',
       orderBy: 'name COLLATE NOCASE ASC',
-      limit: limit,
+      limit:   limit,
     );
     return rows.map(Channel.fromDb).toList();
   }
 
   Future<List<Channel>> recentlyWatched({int limit = 12}) async {
-    final db = await database;
-    final rows = await db.rawQuery(
-      '''
+    final db   = await database;
+    final rows = await db.rawQuery('''
 SELECT channels.*
-FROM recently_watched
-JOIN channels ON channels.url = recently_watched.channel_url
-WHERE channels.is_broken = 0
-ORDER BY recently_watched.watched_at DESC
-LIMIT ?
-''',
-      [limit],
-    );
+FROM   recently_watched
+JOIN   channels ON channels.url = recently_watched.channel_url
+ORDER  BY recently_watched.watched_at DESC
+LIMIT  ?
+''', [limit]);
     return rows.map(Channel.fromDb).toList();
   }
 
-  Future<void> setPinned(String channelUrl, bool pinned) async {
-    final db = await database;
-    await db.update(
-      'channels',
-      {'is_pinned': pinned ? 1 : 0},
-      where: 'url = ?',
-      whereArgs: [channelUrl],
-    );
-  }
+  // ── Mutations ──────────────────────────────────────────────────────────────
 
   Future<void> setFavorite(String channelUrl, bool favorite) async {
     final db = await database;
-    await db.update(
-      'channels',
-      {'is_favorite': favorite ? 1 : 0},
-      where: 'url = ?',
-      whereArgs: [channelUrl],
-    );
-  }
-
-  Future<void> markBroken(String channelUrl) async {
-    final db = await database;
-    await db.update(
-      'channels',
-      {'is_broken': 1},
-      where: 'url = ?',
-      whereArgs: [channelUrl],
-    );
+    await db.update('channels', {'is_favorite': favorite ? 1 : 0},
+        where: 'url = ?', whereArgs: [channelUrl]);
   }
 
   Future<void> markWatched(String channelUrl) async {
     final db = await database;
-    await db.insert('recently_watched', {
-      'channel_url': channelUrl,
-      'watched_at': DateTime.now().millisecondsSinceEpoch,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'recently_watched',
+      {'channel_url': channelUrl,
+       'watched_at':  DateTime.now().millisecondsSinceEpoch},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  String _escapeLike(String input) {
-    return input
-        .replaceAll(r'\', r'\\')
-        .replaceAll('%', r'\%')
-        .replaceAll('_', r'\_');
-  }
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  String _escapeLike(String input) => input
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%',  r'\%')
+      .replaceAll('_',  r'\_');
 }

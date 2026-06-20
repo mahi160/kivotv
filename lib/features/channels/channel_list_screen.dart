@@ -93,10 +93,9 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
     setState(() => _loading = true);
     try {
       final page = await PlaylistRepository.instance.channels(
-        query: _query,
-        limit: _pageSize,
+        query:  _query,
+        limit:  _pageSize,
         offset: _offset,
-        includeBroken: true,
       );
       if (!mounted) return;
       setState(() {
@@ -125,7 +124,7 @@ class _ChannelListScreenState extends ConsumerState<ChannelListScreen> {
   }
 
   void _openPlayer(Channel channel) {
-    if (channel.isBroken) return;
+
     context.go('/player', extra: {'channel': channel, 'query': _query});
   }
 

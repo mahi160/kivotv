@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
-import '../models/playlist.dart';
 import '../core/db/database_service.dart';
 import 'playlist_service.dart';
 
@@ -102,8 +101,6 @@ class PlaylistRepository {
     }
   }
 
-  Future<int> refreshPlaylist() => refreshAllPlaylists();
-
   Future<int> refreshAllPlaylists() async {
     // Do NOT add any default playlist here.
     // Default seeding is handled once at first launch by _seedAndRefresh().
@@ -159,27 +156,15 @@ class PlaylistRepository {
     return count;
   }
 
-  Future<List<Playlist>> playlists() => DatabaseService.instance.playlists();
-
-  Future<void> deletePlaylist(int playlistId) async {
-    final db = await DatabaseService.instance.database;
-    await db.delete('playlists', where: 'id = ?', whereArgs: [playlistId]);
-    final count = await DatabaseService.instance.channelCount();
-    channelCount.value = count;
-    _bumpDashboard();
-  }
-
   Future<List<Channel>> channels({
-    String query = '',
-    int limit = 100,
-    int offset = 0,
-    bool includeBroken = false,
+    String query  = '',
+    int    limit  = 100,
+    int    offset = 0,
   }) {
     return DatabaseService.instance.channels(
-      query: query,
-      limit: limit,
+      query:  query,
+      limit:  limit,
       offset: offset,
-      includeBroken: includeBroken,
     );
   }
 
@@ -196,12 +181,6 @@ class PlaylistRepository {
 
   Future<void> markWatched(Channel channel) async {
     await DatabaseService.instance.markWatched(channel.url);
-    _bumpDashboard();
-  }
-
-  Future<void> markBroken(Channel channel) async {
-    await DatabaseService.instance.markBroken(channel.url);
-    channelCount.value = await DatabaseService.instance.channelCount();
     _bumpDashboard();
   }
 

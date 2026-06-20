@@ -16,7 +16,7 @@ import 'app_colors.dart';
 ///   ),
 /// )
 /// ```
-enum GradientVariant { home, list, settings }
+enum GradientVariant { home, list }
 
 class GradientBackground extends StatelessWidget {
   const GradientBackground({
@@ -45,8 +45,6 @@ class GradientBackground extends StatelessWidget {
         return isDark ? AppColors.homeGradientDark : AppColors.homeGradientLight;
       case GradientVariant.list:
         return isDark ? AppColors.listGradientDark : AppColors.listGradientLight;
-      case GradientVariant.settings:
-        return isDark ? AppColors.settingsGradientDark : AppColors.listGradientLight;
     }
   }
 }

@@ -9,7 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/kivo_logo.dart';
 import 'providers/bootstrap_provider.dart';
 import 'core/router/app_router.dart';
-import 'providers/theme_provider.dart';
+import 'services/playlist_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,53 +23,76 @@ void main() async {
     ..maximumSize      = 150
     ..maximumSizeBytes = 48 << 20; // 48 MB
 
-  // Build a temporary container just to hydrate theme before first frame.
-  final container = ProviderContainer();
-  await container.read(themeModeProvider.notifier).load();
-
-  runApp(UncontrolledProviderScope(
-    container: container,
-    child: const KivoApp(),
-  ));
+  runApp(const ProviderScope(child: KivoApp()));
 }
 
-class KivoApp extends ConsumerWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+//  App root
+// ─────────────────────────────────────────────────────────────────────────────
+
+class KivoApp extends ConsumerStatefulWidget {
   const KivoApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bootstrap   = ref.watch(bootstrapProvider);
-    final themeMode   = ref.watch(themeModeProvider);
+  ConsumerState<KivoApp> createState() => _KivoAppState();
+}
+
+class _KivoAppState extends ConsumerState<KivoApp> {
+  // Ensures the auto-open navigation fires exactly once per app session,
+  // not on every rebuild triggered by theme changes etc.
+  bool _autoOpenDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bootstrap = ref.watch(bootstrapProvider);
+
+    // As soon as bootstrap completes, try to resume the last watched channel.
+    // First-launch has no recently watched → stays on home. Subsequent
+    // launches open the player immediately.
+    if (!_autoOpenDone && bootstrap is AsyncData) {
+      _autoOpenDone = true;
+      // Defer so the router widget is in the tree before we navigate.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoOpen());
+    }
 
     // Map the TV remote SELECT / OK key to ActivateIntent at the app root.
-    // This single Shortcuts wrapper makes EVERY standard Material button
-    // (ElevatedButton, TextButton, OutlinedButton, InkWell …) respond to the
-    // remote's select key without needing custom onKeyEvent handlers.
+    // This makes every Material button respond to the remote select key
+    // without custom onKeyEvent handlers in individual widgets.
     return Shortcuts(
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.select):     ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select):      ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
       child: MaterialApp.router(
-      routerConfig: appRouter,
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: themeMode,
-      // Show a branded splash until bootstrap completes.
-      builder: (context, child) {
-        return bootstrap.when(
-          data:    (_) => child!,
-          error:   (error, _) => _BootstrapError(error: error),
-          loading: () => const _SplashScreen(),
-        );
-      },
+        routerConfig:             appRouter,
+        debugShowCheckedModeBanner: false,
+        theme:     AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        // No in-app theme switcher; follow the TV's system light/dark setting.
+        themeMode: ThemeMode.system,
+        builder: (context, child) {
+          return bootstrap.when(
+            data:    (_)       => child!,
+            error:   (err, _)  => _BootstrapError(error: err),
+            loading: ()        => const _SplashScreen(),
+          );
+        },
       ),
     );
   }
+
+  Future<void> _autoOpen() async {
+    final recent = await PlaylistRepository.instance.recentlyWatched();
+    if (!mounted || recent.isEmpty) return;
+    // Navigate directly into the player with the last-watched channel.
+    // The player's Back button goes to /channels, so the user is never stuck.
+    appRouter.go('/player', extra: {'channel': recent.first, 'query': ''});
+  }
 }
 
-// ── Splash screen ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Splash screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
@@ -78,23 +101,20 @@ class _SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: isDark
-          ? AppColors.darkBackground
-          : AppColors.lightBackground,
+      backgroundColor:
+          isDark ? AppColors.darkBackground : AppColors.lightBackground,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Logo mark
             Container(
-              width: 100,
-              height: 100,
+              width: 100, height: 100,
               decoration: BoxDecoration(
                 color: AppColors.oceanDeepBlue,
                 borderRadius: BorderRadius.circular(26),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.oceanDeepBlue.withValues(alpha: 0.45),
+                    color:      AppColors.oceanDeepBlue.withValues(alpha: 0.45),
                     blurRadius: 32,
                     spreadRadius: 4,
                   ),
@@ -104,26 +124,20 @@ class _SplashScreen extends StatelessWidget {
               child: const KivoLogo(),
             ),
             const SizedBox(height: 28),
-            Text(
-              'Kivo',
-              style: Theme.of(context).textTheme.displayLarge,
-            ),
+            Text('Kivo',
+                style: Theme.of(context).textTheme.displayLarge),
             const SizedBox(height: 8),
-            Text(
-              'Live TV launcher',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text('Live TV launcher',
+                style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 48),
-            // Progress bar — wide, thin, and clearly visible on TV.
             SizedBox(
               width: 280,
               child: LinearProgressIndicator(
                 backgroundColor:
                     AppColors.oceanDeepBlue.withValues(alpha: 0.20),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.goldenDriftwood,
-                ),
-                minHeight: 4,
+                    AppColors.goldenDriftwood),
+                minHeight:    4,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -141,11 +155,12 @@ class _SplashScreen extends StatelessWidget {
   }
 }
 
-// ── Bootstrap error screen ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bootstrap error screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _BootstrapError extends StatelessWidget {
   const _BootstrapError({required this.error});
-
   final Object error;
 
   @override
@@ -163,16 +178,17 @@ class _BootstrapError extends StatelessWidget {
               const SizedBox(height: 24),
               Text(
                 'Failed to start Kivo',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                ),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 12),
               Text(
                 'Database could not be initialised.\n$error',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.darkOnSurfaceVariant,
-                ),
+                      color: AppColors.darkOnSurfaceVariant,
+                    ),
                 textAlign: TextAlign.center,
               ),
             ],

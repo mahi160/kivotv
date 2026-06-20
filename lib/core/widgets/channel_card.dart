@@ -31,15 +31,13 @@ class ChannelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
-    final isBroken = channel.isBroken;
-
+    final isDark      = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark
         ? AppColors.oceanDeep   // #1A2B38 — above the near-black bg
         : AppColors.lightSurface;
 
     return FocusableTap(
-      onTap:       isBroken ? () {} : onTap,
+      onTap:       onTap,
       onLongPress: onFavoriteLongPress,
       // TV remotes can't long-press — wire MENU key to the same action.
       onMenu:      onFavoriteLongPress,
@@ -96,12 +94,7 @@ class ChannelCard extends StatelessWidget {
                           overflow:  TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                            color: isBroken
-                                ? (isDark ? Colors.white30 : Colors.black26)
-                                : null,
-                            height: 1.25,
-                          ),
+                              ?.copyWith(height: 1.25),
                         ),
                         if (channel.group?.isNotEmpty == true) ...[
                           const SizedBox(height: 3),
@@ -130,39 +123,12 @@ class ChannelCard extends StatelessWidget {
                           size: 16, color: AppColors.goldenDriftwood),
                     ),
 
-                  // ── Broken badge ──────────────────────────────────────
-                  if (isBroken)
-                    Positioned(
-                      bottom: 6, left: 0, right: 0,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.signal_wifi_off_rounded,
-                                  size: 11, color: Colors.white54),
-                              SizedBox(width: 4),
-                              Text('Unavailable',
-                                  style: TextStyle(
-                                      fontSize: 11, color: Colors.white54)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
           ),
         );
 
-        if (isBroken) card = Opacity(opacity: 0.42, child: card);
         return card;
       },
     );

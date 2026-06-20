@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/channel.dart';
 import '../services/playlist_repository.dart';
+import 'notifier_stream.dart';
 
 // ── Dashboard data ────────────────────────────────────────────────────────────
 
@@ -24,25 +23,12 @@ class DashboardData {
 // Every time the repository bumps dashboardVersion (after pin/fav/refresh),
 // this stream emits a new value, which causes dashboardProvider to rebuild.
 
-// autoDispose so the controller + ValueNotifier listener are cleaned up
-// when dashboardProvider (also autoDispose) leaves the tree.
-final _dashboardVersionStreamProvider =
-    StreamProvider.autoDispose<int>((ref) {
-  final notifier = PlaylistRepository.instance.dashboardVersion;
-  // Non-broadcast: buffers the seeded version number until StreamProvider
-  // subscribes, so the dashboard rebuilds immediately on first watch.
-  final ctrl = StreamController<int>();
-  ctrl.add(notifier.value);
-
-  void listener() => ctrl.add(notifier.value);
-  notifier.addListener(listener);
-  ref.onDispose(() {
-    notifier.removeListener(listener);
-    ctrl.close();
-  });
-
-  return ctrl.stream;
-});
+// autoDispose so the listener is cleaned up when dashboardProvider
+// (also autoDispose) leaves the tree.
+final _dashboardVersionStreamProvider = StreamProvider.autoDispose<int>(
+  (ref) =>
+      valueNotifierStream(ref, PlaylistRepository.instance.dashboardVersion),
+);
 
 // ── Dashboard data provider ───────────────────────────────────────────────────
 //

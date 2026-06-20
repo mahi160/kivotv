@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 /// Handles the identical boilerplate that was duplicated across six widgets:
 /// - [ChannelCard]
 /// - [_NavIcon]       in `app_nav_bar.dart`
-/// - [_ThemeOption]   in `settings_screen.dart`
 /// - [CtrlBtn]        in `player/widgets/ctrl_btn.dart`
 /// - [IconAction]     in `player/widgets/icon_action.dart`
 /// - [_SidebarItem]   in `player/widgets/channel_list_panel.dart`

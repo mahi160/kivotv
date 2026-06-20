@@ -6,12 +6,12 @@ import '../theme/app_spacing.dart';
 import 'focusable_tap.dart';
 import 'kivo_logo.dart';
 
-enum NavDestination { home, channels, settings }
+enum NavDestination { home, channels }
 
 /// Persistent top bar used on every main screen.
 ///
 /// Left  — Kivo logo mark + wordmark (always).
-/// Right — Home / Channels / Settings icon buttons.
+/// Right — Home / Channels icon buttons.
 ///
 /// [active] highlights the current destination icon.
 class AppNavBar extends StatelessWidget {
@@ -49,15 +49,7 @@ class AppNavBar extends StatelessWidget {
             if (active != NavDestination.channels) context.go('/channels');
           },
         ),
-        const SizedBox(width: AppSpacing.xs),
-        _NavIcon(
-          icon: Icons.settings_rounded,
-          label: 'Settings',
-          isActive: active == NavDestination.settings,
-          onTap: () {
-            if (active != NavDestination.settings) context.go('/settings');
-          },
-        ),
+
       ],
     );
   }
