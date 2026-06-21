@@ -441,6 +441,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  // ── back navigation ────────────────────────────────────────────────────────
+
+  /// Navigate to home. Prefers `pop()` when the home route is already in the
+  /// GoRouter stack (opened via push from HomeScreen) so the existing home
+  /// widget is reused. Falls back to `go('/')` when the player is the only
+  /// route (e.g. auto-opened on launch), which replaces the stack cleanly.
+  void _goHome() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
+
   // ── navigation ─────────────────────────────────────────────────────────────
 
   // Channel surfing wraps around: next from the last goes to the first, and
@@ -487,7 +502,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (key == LogicalKeyboardKey.goBack    ||
         key == LogicalKeyboardKey.escape    ||
         key == LogicalKeyboardKey.browserBack) {
-      if (mounted) context.go('/');
+      if (mounted) _goHome();
       return KeyEventResult.handled;
     }
 
@@ -545,7 +560,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (mounted) context.go('/');
+        if (mounted) _goHome();
       },
       child: Scaffold(
       backgroundColor: Colors.black,
@@ -599,7 +614,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       onPrevious:       _playPrevious,
                       onNext:           _playNext,
                       onInteraction:    _scheduleOverlayHide,
-                      onBack:           () => context.go('/'),
+                      onBack:           () => _goHome(),
                       onToggleList:     _toggleChannelList,
                       playFocusNode:    _playFocusNode,
                       onToggleFavorite: _toggleCurrentFavorite,

@@ -21,13 +21,11 @@ class ChannelCard extends StatelessWidget {
     super.key,
     required this.channel,
     required this.onTap,
-    this.onFavoriteLongPress,
     this.autofocus = false,
   });
 
   final Channel      channel;
   final VoidCallback  onTap;
-  final VoidCallback? onFavoriteLongPress;
   /// Grabs D-pad focus on first build (used for the first Home card so the
   /// remote always starts on something the user can press OK on).
   final bool         autofocus;
@@ -47,10 +45,7 @@ class ChannelCard extends StatelessWidget {
 
     return FocusableTap(
       autofocus:   autofocus,
-      onTap:       onTap,
-      onLongPress: onFavoriteLongPress,
-      // TV remotes can't long-press — wire MENU key to the same action.
-      onMenu:      onFavoriteLongPress,
+      onTap: onTap,
       builder: (context, focused) {
         return AnimatedScale(
           // Kept inside the row/grid gap so a later-painted neighbour never

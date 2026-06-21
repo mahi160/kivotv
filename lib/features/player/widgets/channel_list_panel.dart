@@ -96,8 +96,8 @@ class ChannelListPanel extends StatelessWidget {
                       return _SidebarItem(
                         channel:     ch,
                         isCurrent:   isCurrent,
-                        onTap:       () => onSelectChannel(ch),
-                        onLongPress: () => onToggleFavorite(ch),
+                        onTap:      () => onSelectChannel(ch),
+                        onFavorite: () => onToggleFavorite(ch),
                       );
                     },
                   ),
@@ -126,21 +126,19 @@ class _SidebarItem extends StatelessWidget {
     required this.channel,
     required this.isCurrent,
     required this.onTap,
-    required this.onLongPress,
+    required this.onFavorite,
   });
 
   final Channel      channel;
   final bool         isCurrent;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback onFavorite;
 
   @override
   Widget build(BuildContext context) {
     return FocusableTap(
-      onTap:       onTap,
-      onLongPress:  onLongPress,
-      // TV remotes can't long-press — MENU key triggers the same action.
-      onMenu:       onLongPress,
+      onTap:  onTap,
+      onMenu: onFavorite, // MENU key → toggle favourite on TV remote
       builder: (_, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         // Focused → bright accent fill; current-but-not-focused → soft tint.

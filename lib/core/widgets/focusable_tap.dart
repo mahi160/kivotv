@@ -1,48 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Wraps any widget in a focusable, D-pad-activatable tap region.
+/// Wraps any widget in a focusable, D-pad-activatable region for Android TV.
 ///
-/// Handles the identical boilerplate that was duplicated across six widgets:
+/// Primary input is the D-pad remote: select/enter/gameButtonA activate [onTap],
+/// and the MENU key activates [onMenu] for secondary actions (e.g. favourite).
+///
+/// Mouse clicks (emulator) are also handled via [GestureDetector].
+/// Long-press is intentionally removed — TV remotes cannot hold a button.
+///
+/// Used by:
 /// - [ChannelCard]
-/// - [_NavIcon]       in `app_nav_bar.dart`
-/// - [CtrlBtn]        in `player/widgets/ctrl_btn.dart`
-/// - [IconAction]     in `player/widgets/icon_action.dart`
-/// - [_SidebarItem]   in `player/widgets/channel_list_panel.dart`
-///
-/// [builder] receives the current focus state so the caller controls visuals.
-/// Calls [onTap] on pointer tap OR D-pad select/enter.
-/// Calls [onMenu] on the TV remote MENU key (KEYCODE_MENU / contextMenu).
-/// Calls [onLongPress] on pointer long-press (touch only — remotes can't hold).
-///
-/// Example:
-/// ```dart
-/// FocusableTap(
-///   onTap:  () => openChannel(),
-///   onMenu: () => toggleFavourite(),
-///   builder: (context, focused) => AnimatedContainer(
-///     color: focused ? Colors.blue : Colors.grey,
-///     child: const Text('Press me'),
-///   ),
-/// )
-/// ```
+/// - [_CircleNavButton] in `app_nav_bar.dart`
+/// - [CtrlBtn]          in `player/widgets/ctrl_btn.dart`
+/// - [IconAction]       in `player/widgets/icon_action.dart`
+/// - [_SidebarItem]     in `player/widgets/channel_list_panel.dart`
 class FocusableTap extends StatefulWidget {
   const FocusableTap({
     super.key,
     required this.onTap,
     required this.builder,
-    this.onLongPress,
     this.onMenu,
     this.focusNode,
     this.autofocus = false,
   });
 
   final VoidCallback  onTap;
-  /// Pointer long-press (touch devices). Does NOT fire from a D-pad hold.
-  final VoidCallback? onLongPress;
   /// TV remote MENU button (KEYCODE_MENU / LogicalKeyboardKey.contextMenu).
-  /// Use this for secondary actions (e.g. favourite) that are unreachable
-  /// via long-press on a standard TV remote.
+  /// Use for secondary actions (e.g. favourite) unreachable via D-pad select.
   final VoidCallback? onMenu;
   final FocusNode?    focusNode;
   final bool          autofocus;
@@ -78,10 +63,10 @@ class _FocusableTapState extends State<FocusableTap> {
         }
         return KeyEventResult.ignored;
       },
+      // GestureDetector kept for emulator mouse-click testing.
       child: GestureDetector(
-        onTap:       widget.onTap,
-        onLongPress: widget.onLongPress,
-        child: widget.builder(context, _focused),
+        onTap:  widget.onTap,
+        child:  widget.builder(context, _focused),
       ),
     );
   }

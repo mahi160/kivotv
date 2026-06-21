@@ -214,9 +214,15 @@ class _GroupsSection extends ConsumerWidget {
   const _GroupsSection({required this.onOpen});
   final ValueChanged<Channel> onOpen;
 
+  // Cap how many category rows appear on the home dashboard. Groups are
+  // already sorted biggest-first, so we show the most popular categories.
+  // The full catalogue is always reachable via Search.
+  static const _maxGroups = 15;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = ref.watch(groupsProvider).value ?? [];
+    final all    = ref.watch(groupsProvider).value ?? [];
+    final groups = all.length > _maxGroups ? all.sublist(0, _maxGroups) : all;
     if (groups.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,29 +287,43 @@ class _DashboardSection extends StatelessWidget {
               // ignore: deprecated_member_use
               cacheExtent: 1200,
               itemCount:   channels.length,
-              itemBuilder: (context, index) => Padding(
-                padding: EdgeInsets.only(
-                  right: index == channels.length - 1
-                      ? 0
-                      : AppSpacing.tvRowGap,
-                ),
-                child: SizedBox(
-                  width: live
-                      ? AppSpacing.tvLiveCardWidth
-                      : AppSpacing.tvRowCardWidth,
-                  child: live
-                      ? _LiveMatchCard(
-                          channel:   channels[index],
-                          autofocus: autofocusFirst && index == 0,
-                          onTap:     () => onOpen(channels[index]),
-                        )
-                      : ChannelCard(
-                          channel:   channels[index],
-                          autofocus: autofocusFirst && index == 0,
-                          onTap:     () => onOpen(channels[index]),
-                        ),
-                ),
-              ),
+              itemBuilder: (context, index) {
+                final isFirst = index == 0;
+                final isLast  = index == channels.length - 1;
+                return Focus(
+                  // Boundary guard: consume LEFT at the first card and RIGHT
+                  // at the last card so D-pad navigation never escapes the row
+                  // horizontally into another row.
+                  onKeyEvent: (_, event) {
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                    final k = event.logicalKey;
+                    if (isFirst && k == LogicalKeyboardKey.arrowLeft)  return KeyEventResult.handled;
+                    if (isLast  && k == LogicalKeyboardKey.arrowRight) return KeyEventResult.handled;
+                    return KeyEventResult.ignored;
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: isLast ? 0 : AppSpacing.tvRowGap,
+                    ),
+                    child: SizedBox(
+                      width: live
+                          ? AppSpacing.tvLiveCardWidth
+                          : AppSpacing.tvRowCardWidth,
+                      child: live
+                          ? _LiveMatchCard(
+                              channel:   channels[index],
+                              autofocus: autofocusFirst && isFirst,
+                              onTap:     () => onOpen(channels[index]),
+                            )
+                          : ChannelCard(
+                              channel:   channels[index],
+                              autofocus: autofocusFirst && isFirst,
+                              onTap:     () => onOpen(channels[index]),
+                            ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
