@@ -47,6 +47,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   // ── mark-watched ──────────────────────────────────────────────────────────
   bool _markedWatched = false;
 
+  // ── load generation ────────────────────────────────────────────────────────
+  // Incremented at the start of every _load() call. Each async step checks
+  // that the generation hasn't changed before proceeding, so a superseded
+  // resolve/open can't race ahead and clobber a newer channel switch.
+  int _loadGeneration = 0;
+
   // ── playback-failure handling ───────────────────────────────────────────────
   // How long to wait for a stream to start before giving up and skipping.
   // Live IPTV on a low-power box legitimately takes up to ~10s to first frame
@@ -226,12 +232,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         offset: offset,
       );
       all.addAll(page);
+      if (!mounted) return;
+      // Update after EACH page so D-pad channel navigation works as soon
+      // as the first 200 channels arrive instead of waiting for all pages.
+      setState(() {
+        _channels          = List.of(all);
+        _currentIndexCache = _channels
+            .indexWhere((c) => c.url == _currentChannel.url);
+      });
       if (page.length < pageSize) break;
       offset += page.length;
     }
-    if (!mounted) return;
-    setState(() => _channels = all);
-    _recomputeIndex();
   }
 
   // ── playback ───────────────────────────────────────────────────────────────
@@ -254,7 +265,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// Resolves (if needed) and opens the *current* channel. Used both for a
   /// user switch (via [_open]) and for re-resolution when a token expires
   /// mid-watch — which is why it always reopens and never short-circuits.
+  ///
+  /// A generation counter guards every async suspension point: if a newer
+  /// _load() call starts (rapid channel switches, expiry refresh racing a
+  /// manual switch) the older call bails out silently rather than clobbering
+  /// the stream that the newer call already opened.
   Future<void> _load() async {
+    final gen = ++_loadGeneration;
     _markedWatched = false;
     _hasPlayed     = false;
     _expiryTimer?.cancel();
@@ -267,7 +284,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (StreamResolver.isResolvable(reference)) {
         final resolved = await StreamResolver.resolve(reference);
-        if (!mounted) return;
+        // Bail if a newer switch started while we were resolving.
+        if (!mounted || gen != _loadGeneration) return;
         playable = resolved.url;
         headers  = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
@@ -275,9 +293,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         playable = reference;
       }
     } catch (_) {
-      _handleStreamFailure(); // resolution failure == stream failure
+      if (mounted && gen == _loadGeneration) _handleStreamFailure();
       return;
     }
+    // Final guard before opening — covers the non-resolvable path too.
+    if (!mounted || gen != _loadGeneration) return;
     await _player.open(Media(playable, httpHeaders: headers), play: true);
   }
 
@@ -411,6 +431,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       });
     } else {
+      // Reschedule a fresh 5-s hide so the overlay doesn’t vanish at some
+      // arbitrary point on the old 12-s timer that was set when the sidebar
+      // opened.
+      _scheduleOverlayHide();
       WidgetsBinding.instance.addPostFrameCallback(
         (_) { if (mounted) _playFocusNode.requestFocus(); },
       );
@@ -517,7 +541,13 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (mounted) context.go('/');
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
         focusNode: _rootFocus,
@@ -605,6 +635,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ],
         ),
       ),
+    ),
     );
   }
 }

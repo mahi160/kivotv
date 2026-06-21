@@ -44,6 +44,10 @@ class ChannelLogo extends StatelessWidget {
     final url = logoUrl;
     if (url == null || url.isEmpty) return placeholder();
 
+    // Scale the memory-cache budget by the device's actual pixel ratio so
+    // logos are never stored at a lower resolution than the display renders
+    // them (avoids blurry logos on 3× screens).
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: CachedNetworkImage(
@@ -51,10 +55,8 @@ class ChannelLogo extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
-        // Tiny memory cache: keeps logos visible while scrolling without
-        // evicting them immediately. Disk cache handled by CachedNetworkImage.
-        memCacheWidth: (size * 2).toInt(),
-        memCacheHeight: (size * 2).toInt(),
+        memCacheWidth:  (size * dpr).ceil(),
+        memCacheHeight: (size * dpr).ceil(),
         placeholder: (context, url) => Container(
           width: size,
           height: size,

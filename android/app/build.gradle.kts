@@ -43,6 +43,12 @@ android {
         versionName = flutter.versionName
     }
 
+    // NOTE: ABI splits are handled by the Flutter toolchain, not Gradle.
+    // Use `flutter build apk --split-per-abi` for release builds to get
+    // separate arm64-v8a / armeabi-v7a APKs (~30 MB smaller per APK).
+    // Adding a Gradle `splits { abi }` block conflicts with the Flutter
+    // plugin's own abiFilters and breaks the build.
+
     buildTypes {
         release {
             // Use release keystore when available, debug otherwise (local dev / CI).

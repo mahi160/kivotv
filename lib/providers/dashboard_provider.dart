@@ -4,61 +4,63 @@ import '../models/channel.dart';
 import '../services/playlist_repository.dart';
 import 'notifier_stream.dart';
 
-// ── Dashboard data ────────────────────────────────────────────────────────────
-
-class DashboardData {
-  const DashboardData({
-    required this.live,
-    required this.favorites,
-    required this.recent,
-    required this.groups,
-  });
-
-  /// Live sports matches scraped from tflix (empty when none are on now).
-  final List<Channel> live;
-  final List<Channel> favorites;
-  final List<Channel> recent;
-  /// All other channels as (category, channels) rows — the Netflix-style body.
-  final List<MapEntry<String, List<Channel>>> groups;
-
-  bool get isEmpty =>
-      live.isEmpty && favorites.isEmpty && recent.isEmpty && groups.isEmpty;
-}
-
-// ── Bridge: PlaylistRepository.dashboardVersion ValueNotifier → Riverpod ─────
+// ── Per-section version streams ───────────────────────────────────────────────
 //
-// Every time the repository bumps dashboardVersion (after pin/fav/refresh),
-// this stream emits a new value, which causes dashboardProvider to rebuild.
+// Each stream provider bridges exactly one PlaylistRepository version notifier
+// into Riverpod. Bumping only the relevant notifier means, e.g., markWatched
+// (fired on every channel play) only rebuilds the "Recently watched" section,
+// not Live / Favourites / Groups.
 
-// autoDispose so the listener is cleaned up when dashboardProvider
-// (also autoDispose) leaves the tree.
-final _dashboardVersionStreamProvider = StreamProvider.autoDispose<int>(
-  (ref) =>
-      valueNotifierStream(ref, PlaylistRepository.instance.dashboardVersion),
+final _liveVersionStream = StreamProvider.autoDispose<int>(
+  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.liveVersion),
 );
 
-// ── Dashboard data provider ───────────────────────────────────────────────────
+final _favVersionStream = StreamProvider.autoDispose<int>(
+  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.favVersion),
+);
+
+final _recentVersionStream = StreamProvider.autoDispose<int>(
+  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.recentVersion),
+);
+
+final _groupsVersionStream = StreamProvider.autoDispose<int>(
+  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.groupsVersion),
+);
+
+// ── Section data providers ────────────────────────────────────────────────────
+
+final liveMatchesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
+  ref.watch(_liveVersionStream);
+  return PlaylistRepository.instance.liveMatches();
+});
+
+final favoritesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
+  ref.watch(_favVersionStream);
+  return PlaylistRepository.instance.favoriteChannels();
+});
+
+final recentProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
+  ref.watch(_recentVersionStream);
+  return PlaylistRepository.instance.recentlyWatched();
+});
+
+final groupsProvider =
+    FutureProvider.autoDispose<List<MapEntry<String, List<Channel>>>>((ref) async {
+  ref.watch(_groupsVersionStream);
+  return PlaylistRepository.instance.groupedChannels();
+});
+
+// ── Ready flag ────────────────────────────────────────────────────────────────
 //
-// Auto-refreshes whenever dashboardVersion changes (pin, favourite, refresh).
-// Screens watch this instead of manually adding/removing ValueNotifier listeners.
+// True once all four sections have resolved at least once. Used by HomeScreen
+// to gate its loading spinner. Because resolved providers never go back to
+// AsyncLoading (only AsyncData, possibly with skipLoadingOnReload), this
+// transitions false → true exactly once per session, so HomeScreen rebuilds
+// at most once from this provider.
 
-final dashboardProvider =
-    FutureProvider.autoDispose<DashboardData>((ref) async {
-  // Re-run whenever the repository signals a change.
-  ref.watch(_dashboardVersionStreamProvider);
-
-  final repo = PlaylistRepository.instance;
-  final results = await Future.wait([
-    repo.liveMatches(),
-    repo.favoriteChannels(),
-    repo.recentlyWatched(),
-  ]);
-  final groups = await repo.groupedChannels();
-
-  return DashboardData(
-    live:      results[0],
-    favorites: results[1],
-    recent:    results[2],
-    groups:    groups,
-  );
+final dashboardReadyProvider = Provider.autoDispose<bool>((ref) {
+  return ref.watch(liveMatchesProvider).hasValue &&
+         ref.watch(favoritesProvider).hasValue &&
+         ref.watch(recentProvider).hasValue &&
+         ref.watch(groupsProvider).hasValue;
 });

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/focusable_tap.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../models/channel.dart';
 import 'ctrl_btn.dart';
@@ -68,10 +69,42 @@ class PlayerOverlay extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded,
-                      color: Colors.white, size: 32),
-                  onPressed: () { onInteraction(); onBack(); },
+                // FocusableTap instead of IconButton so the back button
+                // gets the same gold glow ring as every other focusable
+                // in the app rather than Material's grey-highlight box.
+                FocusableTap(
+                  onTap: () { onInteraction(); onBack(); },
+                  builder: (_, focused) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: focused
+                          ? Colors.white
+                          : Colors.black.withValues(alpha: 0.55),
+                      border: Border.all(
+                        color: focused
+                            ? AppColors.accentBright
+                            : Colors.white30,
+                        width: focused ? 2 : 1,
+                      ),
+                      boxShadow: focused
+                          ? [
+                              BoxShadow(
+                                color: AppColors.accent
+                                    .withValues(alpha: 0.55),
+                                blurRadius:   24,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_rounded,
+                      size:  24,
+                      color: focused ? Colors.black87 : Colors.white,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

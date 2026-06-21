@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
@@ -12,13 +16,33 @@ class PlaylistRepository {
 
   static final PlaylistRepository instance = PlaylistRepository._();
 
-  final ValueNotifier<int>  channelCount     = ValueNotifier<int>(0);
-  final ValueNotifier<int>  dashboardVersion = ValueNotifier<int>(0);
-  /// True while a background playlist fetch is in progress.
-  final ValueNotifier<bool> isFetching       = ValueNotifier<bool>(false);
+  final ValueNotifier<int>  channelCount = ValueNotifier<int>(0);
+  final ValueNotifier<bool> isFetching   = ValueNotifier<bool>(false);
+
+  // ── Granular version notifiers ────────────────────────────────────────────
+  //
+  // Each notifier drives exactly one dashboard section provider. Bumping only
+  // the relevant notifier means an update to one section (e.g. markWatched on
+  // every channel play) doesn't trigger rebuilds in the other three sections.
+  //
+  //  liveVersion   ← refreshTflixMatches
+  //  recentVersion ← markWatched
+  //  favVersion    ← setFavorite, _bumpAll
+  //  groupsVersion ← playlist refreshes, _bumpAll
+  final ValueNotifier<int> liveVersion   = ValueNotifier<int>(0);
+  final ValueNotifier<int> favVersion    = ValueNotifier<int>(0);
+  final ValueNotifier<int> recentVersion = ValueNotifier<int>(0);
+  final ValueNotifier<int> groupsVersion = ValueNotifier<int>(0);
 
   bool _bootstrapped = false;
   Future<void>? _bootstrapFuture;
+
+  // One debounce timer per notifier so rapid bursts (e.g. multiple replaceChannels
+  // calls during a refresh) coalesce into a single provider reload.
+  Timer? _liveTimer;
+  Timer? _favTimer;
+  Timer? _recentTimer;
+  Timer? _groupsTimer;
 
   Future<void> bootstrap() {
     if (_bootstrapped) return Future.value();
@@ -27,8 +51,6 @@ class PlaylistRepository {
 
   static const _refreshThreshold = Duration(hours: 24);
 
-  // Bumping the key version forces a re-seed on every existing install
-  // when the default playlist list changes.
   static const _seededKey = 'kivo_playlists_seeded_v3';
   static const _seededPlaylists = [
     (
@@ -38,28 +60,16 @@ class PlaylistRepository {
   ];
 
   Future<void> _bootstrap() async {
-    // Seed the built-in iptvidn channels (idempotent — safe on every launch).
     await _storeBuiltInChannels();
 
     final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
-    _bumpDashboard();
+    _bumpAll();
 
     _bootstrapped = true;
-
-    // Seed the default playlists once, then keep them refreshed.
     _seedAndRefresh();
   }
 
-  /// The iptvidn channels are a hardcoded, built-in playlist (kivo:// URL, so
-  /// the refresh logic never tries to HTTP-fetch it). Their `url` is an
-  /// `iptvidn://<slug>` reference resolved at play time.
-  ///
-  /// Uses replaceChannels (not upsert) so the playlist is always EXACTLY the
-  /// current hardcoded set: channels dropped from a later build are pruned
-  /// rather than lingering forever, and the count stays deterministic.
-  /// Favourites on surviving channels are preserved (the upsert inside
-  /// replaceChannels never overwrites is_favorite).
   Future<void> _storeBuiltInChannels() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'IPTV IDN',
@@ -71,28 +81,22 @@ class PlaylistRepository {
     );
   }
 
-  /// On first launch: adds the default playlists and fetches them.
-  /// On subsequent launches: refreshes any user playlist older than 24 h.
-  /// Never blocks bootstrap or the UI.
   Future<void> _seedAndRefresh() async {
     isFetching.value = true;
     try {
-      // Live sports matches change constantly — refresh them every launch.
       await refreshTflixMatches();
 
       final prefs       = await SharedPreferences.getInstance();
       final alreadyDone = prefs.getBool(_seededKey) ?? false;
 
       if (!alreadyDone) {
-        // First launch: add and fetch the default playlists.
         for (final p in _seededPlaylists) {
           await addAndRefreshPlaylist(p.url, name: p.name);
         }
         await prefs.setBool(_seededKey, true);
-        return; // counts already bumped inside addAndRefreshPlaylist
+        return;
       }
 
-      // Subsequent launches: refresh playlists older than 24 h.
       final playlists    = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
       if (userPlaylists.isEmpty) return;
@@ -106,7 +110,6 @@ class PlaylistRepository {
 
       if (stale.isNotEmpty) await refreshAllPlaylists();
     } catch (_) {
-      // Background failures are silent — the UI shows whatever is cached.
     } finally {
       isFetching.value = false;
     }
@@ -114,15 +117,6 @@ class PlaylistRepository {
 
   DateTime? _lastTflixScrape;
 
-  /// Scrapes tflix.pro for the currently-LIVE matches and stores them under a
-  /// built-in playlist via replaceChannels (finished/upcoming matches are
-  /// pruned). The built-in `kivo://` URL means the M3U refresh loop never
-  /// touches it. Non-fatal: on failure the previously-cached matches stay.
-  ///
-  /// Matches change constantly, so this runs on cold start AND on every app
-  /// resume (see KivoApp). The [minInterval] guard skips redundant scrapes
-  /// when the app is bounced quickly (e.g. player ⇄ home); pass [force] to
-  /// override.
   Future<void> refreshTflixMatches({
     bool force = false,
     Duration minInterval = const Duration(minutes: 2),
@@ -143,19 +137,17 @@ class PlaylistRepository {
         channels:   matches,
       );
       channelCount.value = await DatabaseService.instance.channelCount();
-      _bumpDashboard();
+      // Only live matches changed — don't rebuild other sections.
+      _bumpLive();
     } catch (_) {
-      // tflix unreachable — keep whatever matches are cached.
     }
   }
 
-  /// User-triggered refresh (Settings → Sources): re-scrape tflix and re-fetch
-  /// the M3U playlists right now. Surfaces progress through [isFetching] so the
-  /// settings row can show a spinner.
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
     try {
+      await _clearImageCache();
       await refreshTflixMatches(force: true);
       await refreshAllPlaylists();
     } finally {
@@ -163,31 +155,36 @@ class PlaylistRepository {
     }
   }
 
+  /// Purges both the in-memory Flutter image cache and the flutter_cache_manager
+  /// disk cache so stale channel logos load fresh after a playlist refresh.
+  Future<void> _clearImageCache() async {
+    // In-memory: Flutter's own painting cache (holds decoded bitmaps).
+    PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
+    // Disk: flutter_cache_manager's HTTP cache (stores raw network bytes).
+    await DefaultCacheManager().emptyCache();
+  }
+
   Future<int> refreshAllPlaylists() async {
-    // Do NOT add any default playlist here.
-    // Default seeding is handled once at first launch by _seedAndRefresh().
-    // Re-adding IPTV Org every refresh would silently resurrect it after the
-    // user deliberately deletes it from Settings.
     final playlists = await DatabaseService.instance.playlists();
     for (final playlist in playlists) {
       if (playlist.isBuiltIn) continue;
-
       try {
         final channels = await PlaylistService.instance.fetchChannels(
           url: playlist.url,
         );
         await DatabaseService.instance.replaceChannels(
           playlistId: playlist.id,
-          channels: channels,
+          channels:   channels,
         );
       } catch (_) {
-        // Individual playlist failures are non-fatal — continue refreshing others.
       }
     }
 
     final count = await DatabaseService.instance.channelCount();
     channelCount.value = count;
-    _bumpDashboard();
+    _bumpAll(); // channel data changed — refresh all sections
     return count;
   }
 
@@ -196,25 +193,22 @@ class PlaylistRepository {
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       throw ArgumentError('Enter a valid playlist URL');
     }
-
     return DatabaseService.instance.upsertPlaylist(
       name: name ?? uri.host,
-      url: uri.toString(),
+      url:  uri.toString(),
     );
   }
 
   Future<int> addAndRefreshPlaylist(String url, {String? name}) async {
     final playlistId = await addPlaylist(url: url, name: name);
-    final channels = await PlaylistService.instance.fetchChannels(
-      url: url.trim(),
-    );
+    final channels   = await PlaylistService.instance.fetchChannels(url: url.trim());
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
-      channels: channels,
+      channels:   channels,
     );
     final count = await DatabaseService.instance.channelCount();
     channelCount.value = count;
-    _bumpDashboard();
+    _bumpAll();
     return count;
   }
 
@@ -246,15 +240,49 @@ class PlaylistRepository {
 
   Future<void> setFavorite(Channel channel, bool favorite) async {
     await DatabaseService.instance.setFavorite(channel.url, favorite);
-    _bumpDashboard();
+    // Favorite state is shown across all sections (star badge on cards), so
+    // we reload everything. setFavorite is a user action — frequency is low.
+    _bumpAll();
   }
 
   Future<void> markWatched(Channel channel) async {
     await DatabaseService.instance.markWatched(channel.url);
-    _bumpDashboard();
+    // Only the "Recently watched" section changes — don't reload Live / Fav /
+    // Groups. This is the single biggest source of unnecessary dashboard
+    // rebuilds (fires every time a channel starts playing).
+    _bumpRecent();
   }
 
-  void _bumpDashboard() {
-    dashboardVersion.value++;
+  // ── Bump helpers ──────────────────────────────────────────────────────────
+
+  void _bumpLive() {
+    _liveTimer?.cancel();
+    _liveTimer = Timer(const Duration(milliseconds: 150),
+        () => liveVersion.value++);
+  }
+
+  void _bumpFav() {
+    _favTimer?.cancel();
+    _favTimer = Timer(const Duration(milliseconds: 150),
+        () => favVersion.value++);
+  }
+
+  void _bumpRecent() {
+    _recentTimer?.cancel();
+    _recentTimer = Timer(const Duration(milliseconds: 150),
+        () => recentVersion.value++);
+  }
+
+  void _bumpGroups() {
+    _groupsTimer?.cancel();
+    _groupsTimer = Timer(const Duration(milliseconds: 150),
+        () => groupsVersion.value++);
+  }
+
+  void _bumpAll() {
+    _bumpLive();
+    _bumpFav();
+    _bumpRecent();
+    _bumpGroups();
   }
 }

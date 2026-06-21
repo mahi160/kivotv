@@ -66,7 +66,9 @@ class _FocusableTapState extends State<FocusableTap> {
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final k = event.logicalKey;
-        if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter) {
+        if (k == LogicalKeyboardKey.select  ||
+            k == LogicalKeyboardKey.enter   ||
+            k == LogicalKeyboardKey.gameButtonA) {
           widget.onTap();
           return KeyEventResult.handled;
         }

@@ -81,10 +81,15 @@ class ChannelListPanel extends StatelessWidget {
                           fontFamily: 'Outfit', color: Colors.white54)),
                   )
                 : ListView.builder(
-                    controller: scrollController,
-                    itemCount:  channels.length,
+                    controller:  scrollController,
+                    itemCount:   channels.length,
                     // Fixed extent enables O(1) scroll-to-current.
-                    itemExtent: AppSpacing.tvSidebarTile,
+                    itemExtent:  AppSpacing.tvSidebarTile,
+                    // Pre-build ~16 items beyond the viewport so D-pad ↓
+                    // focus traversal can reach off-screen rows without
+                    // getting stuck at the visible boundary.
+                    // ignore: deprecated_member_use
+                    cacheExtent: 1200,
                     itemBuilder: (ctx, index) {
                       final ch        = channels[index];
                       final isCurrent = ch.url == currentChannel.url;

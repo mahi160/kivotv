@@ -20,6 +20,13 @@ class TflixResolver {
   static const _base   = 'https://tflix.pro';
   static const _ua     = 'Mozilla/5.0';
 
+  // Persistent client for tflix.pro requests — reuses the TLS session across
+  // multiple resolve() calls (play.php fetch + mirror probes). Saves one full
+  // TLS handshake per channel switch. Mirror probes go to different CDN hosts,
+  // so their connections can't be pooled, but the play.php fetch is reused.
+  static final _http = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 15);
+
   static bool isResolvable(String reference) => reference.startsWith(_scheme);
 
   // Inner m3u8 inside a player wrapper: ...?url=<m3u8> (or &url=<m3u8>).
@@ -44,53 +51,55 @@ class TflixResolver {
   }
 
   Future<ResolvedStream> resolve(String reference) async {
-    final path   = reference.substring(_scheme.length);
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
-    try {
-      final body = await _get(client, '$_base/play.php/$path', referer: '$_base/');
-      final candidates = extractM3u8Candidates(body);
-      if (candidates.isEmpty) {
-        throw const FormatException('tflix: no direct source for this match');
-      }
-      for (final url in candidates.take(6)) {
-        if (await _isPlayable(client, url)) {
-          // A UA helps with CDNs that reject default player agents.
-          return ResolvedStream(url: url, httpHeaders: const {'User-Agent': _ua});
-        }
-      }
-      throw const FormatException('tflix: no reachable source for this match');
-    } finally {
-      client.close(force: true);
+    final path       = reference.substring(_scheme.length);
+    final body       = await _get('$_base/play.php/$path', referer: '$_base/');
+    final candidates = extractM3u8Candidates(body);
+    if (candidates.isEmpty) {
+      throw const FormatException('tflix: no direct source for this match');
     }
+    for (final url in candidates.take(6)) {
+      if (await _isPlayable(url)) {
+        return ResolvedStream(url: url, httpHeaders: const {'User-Agent': _ua});
+      }
+    }
+    throw const FormatException('tflix: no reachable source for this match');
   }
 
-  Future<String> _get(HttpClient c, String url, {String? referer}) async {
-    final req = await c.getUrl(Uri.parse(url));
+  Future<String> _get(String url, {String? referer}) async {
+    final req = await _http.getUrl(Uri.parse(url));
     req.headers.set(HttpHeaders.userAgentHeader, _ua);
     if (referer != null) req.headers.set(HttpHeaders.refererHeader, referer);
     final resp = await req.close().timeout(const Duration(seconds: 15));
     if (resp.statusCode != HttpStatus.ok) {
-      throw HttpException('tflix play.php HTTP ${resp.statusCode}', uri: Uri.parse(url));
+      throw HttpException('tflix play.php HTTP ${resp.statusCode}',
+          uri: Uri.parse(url));
     }
     return resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 15));
   }
 
   /// True if [url] returns 200 and an HLS manifest. Probed from the device so a
   /// mirror that's dead/geo-blocked *for this user* is correctly skipped.
-  Future<bool> _isPlayable(HttpClient c, String url) async {
+  Future<bool> _isPlayable(String url) async {
     try {
-      final req = await c.getUrl(Uri.parse(url));
-      req.headers.set(HttpHeaders.userAgentHeader, _ua);
-      final resp = await req.close().timeout(const Duration(seconds: 8));
-      if (resp.statusCode != HttpStatus.ok) {
-        await resp.drain<void>().catchError((_) {});
-        return false;
+      // Mirror probes go to external CDN hosts — use a separate short-lived
+      // client so the persistent _http pool isn't polluted with dead hosts.
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+      try {
+        final req = await client.getUrl(Uri.parse(url));
+        req.headers.set(HttpHeaders.userAgentHeader, _ua);
+        final resp = await req.close().timeout(const Duration(seconds: 8));
+        if (resp.statusCode != HttpStatus.ok) {
+          await resp.drain<void>().catchError((_) {});
+          return false;
+        }
+        final body = await resp
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 8));
+        return body.contains('#EXTM3U');
+      } finally {
+        client.close(force: true);
       }
-      final body = await resp
-          .transform(utf8.decoder)
-          .join()
-          .timeout(const Duration(seconds: 8));
-      return body.contains('#EXTM3U');
     } catch (_) {
       return false;
     }

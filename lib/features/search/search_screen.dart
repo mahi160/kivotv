@@ -88,7 +88,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (pos.pixels >= pos.maxScrollExtent - 600) _loadNextPage();
   }
 
-  void _open(Channel c) => context.go('/player', extra: {'channel': c});
+  void _open(Channel c) => context.push('/player', extra: {'channel': c});
 
   @override
   Widget build(BuildContext context) {

@@ -19,6 +19,13 @@ class IptvidnResolver {
   static const _scheme = 'iptvidn://';
   static const _base   = 'http://iptvidn.com';
 
+  // Persistent client — reuses the TCP connection to iptvidn.com across
+  // consecutive channel switches, avoiding a fresh TCP handshake (~150 ms)
+  // per resolution. Dart's HttpClient pools idle connections and handles
+  // server-initiated closes automatically. Never call close() on this.
+  static final _http = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 15);
+
   /// `<iframe ... src="http://<host>:<port>/<slug>/embed.html?token=...">`
   static final _iframeSrc =
       RegExp(r'src="(https?://[^"]+/embed\.html\?[^"]*token=[^"]+)"');
@@ -26,27 +33,21 @@ class IptvidnResolver {
   static bool isResolvable(String reference) => reference.startsWith(_scheme);
 
   Future<ResolvedStream> resolve(String reference) async {
-    final slug = reference.substring(_scheme.length);
-    final uri  = Uri.parse('$_base/play.php?stream=$slug');
-
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
-    try {
-      final request = await client.getUrl(uri);
-      request.headers
-        ..set(HttpHeaders.refererHeader, '$_base/')
-        ..set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
-      final response = await request.close().timeout(const Duration(seconds: 15));
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('play.php HTTP ${response.statusCode}', uri: uri);
-      }
-      final body = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(const Duration(seconds: 15));
-      return parsePlayResponse(body);
-    } finally {
-      client.close(force: true);
+    final slug    = reference.substring(_scheme.length);
+    final uri     = Uri.parse('$_base/play.php?stream=$slug');
+    final request = await _http.getUrl(uri);
+    request.headers
+      ..set(HttpHeaders.refererHeader, '$_base/')
+      ..set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
+    final response = await request.close().timeout(const Duration(seconds: 15));
+    if (response.statusCode != HttpStatus.ok) {
+      throw HttpException('play.php HTTP ${response.statusCode}', uri: uri);
     }
+    final body = await response
+        .transform(utf8.decoder)
+        .join()
+        .timeout(const Duration(seconds: 15));
+    return parsePlayResponse(body);
   }
 
   /// Parses a `play.php` response body into a playable stream. Pure (no I/O),

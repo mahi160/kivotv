@@ -22,23 +22,21 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-
-
   void _open(Channel channel) {
-    context.go('/player', extra: {'channel': channel});
+    context.push('/player', extra: {'channel': channel});
   }
-
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = AppColors.primary(isDark);
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final primary  = AppColors.primary(isDark);
+    final isReady  = ref.watch(dashboardReadyProvider);
+    final fetching = ref.watch(isFetchingProvider).asData?.value == true;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Back on Home leaves the app — standard TV behaviour, no confirm dialog.
         SystemNavigator.pop();
       },
       child: Scaffold(
@@ -46,17 +44,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           variant: GradientVariant.home,
           child: Column(
             children: [
-              // Slim progress bar shown while background playlist fetch runs.
-              if (ref.watch(isFetchingProvider).asData?.value == true) ...([
+              // Slim progress bar during background playlist fetch.
+              if (fetching) ...[
                 LinearProgressIndicator(
-                  minHeight: 3,
-                  backgroundColor: Colors.transparent,
-                  valueColor: AlwaysStoppedAnimation<Color>(primary),
+                  minHeight:        3,
+                  backgroundColor:  Colors.transparent,
+                  valueColor:       AlwaysStoppedAnimation<Color>(primary),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.tvEdge, 4, AppSpacing.tvEdge, 0,
-                  ),
+                    AppSpacing.tvEdge, 4, AppSpacing.tvEdge, 0),
                   child: Row(
                     children: [
                       Icon(Icons.downloading_rounded, size: 13,
@@ -71,14 +68,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-              ]),
+              ],
+
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.tvEdge,
-                    AppSpacing.md,
-                    AppSpacing.tvEdge,
-                    AppSpacing.md,
+                    AppSpacing.tvEdge, AppSpacing.md,
+                    AppSpacing.tvEdge, AppSpacing.md,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,88 +84,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onSearch:   () => context.go('/search'),
                       ),
                       const SizedBox(height: AppSpacing.lg),
+
                       Expanded(
-                        child: ref.watch(dashboardProvider).when(
-                          skipLoadingOnReload: true,
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
-                          error: (e, _) => Center(
-                            child: Text('Failed to load dashboard: $e'),
-                          ),
-                          data: (data) {
-                            // Transient first boot before channels seed.
-                            if (data.isEmpty) {
-                              return const Center(
-                                  child: CircularProgressIndicator());
-                            }
-                            final hasLive   = data.live.isNotEmpty;
-                            final hasFav    = data.favorites.isNotEmpty;
-                            final hasRecent = data.recent.isNotEmpty;
-                            // The top-most row autofocuses its first card so the
-                            // remote always lands on something pressable.
-                            final afGroups = !hasLive && !hasFav && !hasRecent;
-                            return ListView(
-                              // Clips (default) so scrolling rows slide UNDER
-                              // the fixed header instead of bleeding over it
-                              // (= the header reads as sticky). Small L/R + top
-                              // padding keeps the edge/first-row focus glow
-                              // inside the clipped viewport.
-                              padding: const EdgeInsets.fromLTRB(
-                                AppSpacing.sm,
-                                AppSpacing.sm,
-                                AppSpacing.sm,
-                                AppSpacing.xxl,
-                              ),
-                              children: [
-                                if (hasLive) ...[
-                                  _DashboardSection(
-                                    title: 'Live Now',
-                                    live:  true,
-                                    countLabel: '${data.live.length} matches',
-                                    channels: data.live,
-                                    emptyText: '',
-                                    onOpen: _open,
-                                    autofocusFirst: true,
-                                  ),
-                                  const SizedBox(height: AppSpacing.tvSectionGap),
-                                ],
-                                if (hasFav) ...[
-                                  _DashboardSection(
-                                    title: 'Favourites',
-                                    countLabel: '${data.favorites.length} channels',
-                                    channels: data.favorites,
-                                    emptyText: '',
-                                    onOpen: _open,
-                                    autofocusFirst: !hasLive,
-                                  ),
-                                  const SizedBox(height: AppSpacing.tvSectionGap),
-                                ],
-                                if (hasRecent) ...[
-                                  _DashboardSection(
-                                    title: 'Recently watched',
-                                    channels: data.recent,
-                                    emptyText: '',
-                                    onOpen: _open,
-                                    autofocusFirst: !hasLive && !hasFav,
-                                  ),
-                                  const SizedBox(height: AppSpacing.tvSectionGap),
-                                ],
-                                // Everything else, one row per category.
-                                for (var i = 0; i < data.groups.length; i++) ...[
-                                  _DashboardSection(
-                                    title:      data.groups[i].key,
-                                    countLabel: '${data.groups[i].value.length}',
-                                    channels:   data.groups[i].value,
-                                    emptyText:  '',
-                                    onOpen:     _open,
-                                    autofocusFirst: afGroups && i == 0,
-                                  ),
-                                  if (i < data.groups.length - 1)
-                                    const SizedBox(height: AppSpacing.tvSectionGap),
-                                ],
-                              ],
-                            );
-                          },
+                        // RepaintBoundary isolates the scrollable dashboard
+                        // from the gradient background: focus animations and
+                        // section repaints don't repaint the gradient layer.
+                        child: RepaintBoundary(
+                          child: isReady
+                              ? _DashboardList(onOpen: _open)
+                              : const Center(
+                                  child: CircularProgressIndicator()),
                         ),
                       ),
                     ],
@@ -184,85 +108,214 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard list
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Pure layout widget — watches no providers itself. Each child section is its
+/// own ConsumerWidget, so an update to one section (e.g. recentProvider on
+/// markWatched) only rebuilds that section, not the others.
+class _DashboardList extends StatelessWidget {
+  const _DashboardList({required this.onOpen});
+  final ValueChanged<Channel> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm, AppSpacing.sm, AppSpacing.sm, AppSpacing.xxl),
+      children: [
+        _LiveSection(onOpen:   onOpen),
+        _FavSection(onOpen:    onOpen),
+        _RecentSection(onOpen: onOpen),
+        _GroupsSection(onOpen: onOpen),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-section ConsumerWidgets
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LiveSection extends ConsumerWidget {
+  const _LiveSection({required this.onOpen});
+  final ValueChanged<Channel> onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final channels = ref.watch(liveMatchesProvider).value ?? [];
+    if (channels.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DashboardSection(
+          title:          'Live Now',
+          live:           true,
+          countLabel:     '${channels.length} matches',
+          channels:       channels,
+          onOpen:         onOpen,
+          autofocusFirst: true,
+        ),
+        const SizedBox(height: AppSpacing.tvSectionGap),
+      ],
+    );
+  }
+}
+
+class _FavSection extends ConsumerWidget {
+  const _FavSection({required this.onOpen});
+  final ValueChanged<Channel> onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final channels = ref.watch(favoritesProvider).value ?? [];
+    if (channels.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DashboardSection(
+          title:          'Favourites',
+          countLabel:     '${channels.length} channels',
+          channels:       channels,
+          onOpen:         onOpen,
+          autofocusFirst: true,
+        ),
+        const SizedBox(height: AppSpacing.tvSectionGap),
+      ],
+    );
+  }
+}
+
+class _RecentSection extends ConsumerWidget {
+  const _RecentSection({required this.onOpen});
+  final ValueChanged<Channel> onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final channels = ref.watch(recentProvider).value ?? [];
+    if (channels.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DashboardSection(
+          title:          'Recently watched',
+          channels:       channels,
+          onOpen:         onOpen,
+          autofocusFirst: true,
+        ),
+        const SizedBox(height: AppSpacing.tvSectionGap),
+      ],
+    );
+  }
+}
+
+class _GroupsSection extends ConsumerWidget {
+  const _GroupsSection({required this.onOpen});
+  final ValueChanged<Channel> onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groups = ref.watch(groupsProvider).value ?? [];
+    if (groups.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < groups.length; i++) ...[
+          _DashboardSection(
+            title:          groups[i].key,
+            countLabel:     '${groups[i].value.length}',
+            channels:       groups[i].value,
+            onOpen:         onOpen,
+            autofocusFirst: true,
+          ),
+          if (i < groups.length - 1)
+            const SizedBox(height: AppSpacing.tvSectionGap),
+        ],
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section widget (horizontal card row)
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// One Home section rendered as a single horizontal "Netflix row" of channel
 /// cards. D-pad ◀ ▶ moves within the row; ▲ ▼ jumps between rows.
 class _DashboardSection extends StatelessWidget {
   const _DashboardSection({
     required this.title,
     required this.channels,
-    required this.emptyText,
     required this.onOpen,
     this.countLabel,
     this.live = false,
     this.autofocusFirst = false,
   });
 
-  final String title;
-  final List<Channel> channels;
-  final String emptyText;
+  final String              title;
+  final List<Channel>       channels;
   final ValueChanged<Channel> onOpen;
-  final String? countLabel;
-  final bool live;
-  final bool autofocusFirst;
+  final String?             countLabel;
+  final bool                live;
+  final bool                autofocusFirst;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Section header ───────────────────────────────────────────────
         _SectionHeader(title: title, countLabel: countLabel, live: live),
         const SizedBox(height: AppSpacing.md),
 
-        // ── Row of cards (or empty hint) ─────────────────────────────────
-        // Live matches use a slim logo+name card; everything else uses the
-        // poster card.
-        channels.isEmpty
-            ? _EmptyRow(text: emptyText)
-            : SizedBox(
-                height: live
-                    ? AppSpacing.tvLiveCardHeight
-                    : AppSpacing.tvRowCardHeight,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  clipBehavior: Clip.none,
-                  // Generous cache so directional D-pad focus can reach (and
-                  // auto-scroll to) cards just off the visible edge.
-                  // ignore: deprecated_member_use
-                  cacheExtent: 1200,
-                  itemCount: channels.length,
-                  itemBuilder: (context, index) => Padding(
-                    padding: EdgeInsets.only(
-                      right: index == channels.length - 1
-                          ? 0
-                          : AppSpacing.tvRowGap,
-                    ),
-                    child: SizedBox(
-                      width: live
-                          ? AppSpacing.tvLiveCardWidth
-                          : AppSpacing.tvRowCardWidth,
-                      child: live
-                          ? _LiveMatchCard(
-                              channel:   channels[index],
-                              autofocus: autofocusFirst && index == 0,
-                              onTap:     () => onOpen(channels[index]),
-                            )
-                          : ChannelCard(
-                              channel:   channels[index],
-                              autofocus: autofocusFirst && index == 0,
-                              onTap:     () => onOpen(channels[index]),
-                            ),
-                    ),
-                  ),
+        // RepaintBoundary per row: a focused card's scale animation stays
+        // in its own compositor layer and doesn't repaint sibling rows.
+        RepaintBoundary(
+          child: SizedBox(
+            height: live
+                ? AppSpacing.tvLiveCardHeight
+                : AppSpacing.tvRowCardHeight,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              clipBehavior:    Clip.none,
+              // ignore: deprecated_member_use
+              cacheExtent: 1200,
+              itemCount:   channels.length,
+              itemBuilder: (context, index) => Padding(
+                padding: EdgeInsets.only(
+                  right: index == channels.length - 1
+                      ? 0
+                      : AppSpacing.tvRowGap,
+                ),
+                child: SizedBox(
+                  width: live
+                      ? AppSpacing.tvLiveCardWidth
+                      : AppSpacing.tvRowCardWidth,
+                  child: live
+                      ? _LiveMatchCard(
+                          channel:   channels[index],
+                          autofocus: autofocusFirst && index == 0,
+                          onTap:     () => onOpen(channels[index]),
+                        )
+                      : ChannelCard(
+                          channel:   channels[index],
+                          autofocus: autofocusFirst && index == 0,
+                          onTap:     () => onOpen(channels[index]),
+                        ),
                 ),
               ),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
-/// Slim live-match card: small logo + name on one line. Focus = accent ring +
-/// glow + a light scale, matching the rest of the app's focus language.
+// ─────────────────────────────────────────────────────────────────────────────
+// Live-match card
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _LiveMatchCard extends StatelessWidget {
   const _LiveMatchCard({
     required this.channel,
@@ -339,8 +392,10 @@ class _LiveMatchCard extends StatelessWidget {
   }
 }
 
-/// Section header. The "Live Now" variant shows a pulsing red dot and a red
-/// match-count badge; other sections show the title with a muted count.
+// ─────────────────────────────────────────────────────────────────────────────
+// Section header
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,
@@ -358,19 +413,18 @@ class _SectionHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (live) ...[
-          const _PulsingDot(),
+          // RepaintBoundary isolates the continuous pulsing-dot ticker from
+          // the surrounding section header and card rows.
+          const RepaintBoundary(child: _PulsingDot()),
           const SizedBox(width: 10),
         ],
-        Text(
-          title,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
+        Text(title, style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(width: 12),
         if (countLabel != null)
           live
               ? Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 9, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.live.withValues(alpha: 0.13),
                     borderRadius: BorderRadius.circular(6),
@@ -395,7 +449,10 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// Small pulsing red dot used in the Live Now header.
+// ─────────────────────────────────────────────────────────────────────────────
+// Pulsing dot
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PulsingDot extends StatefulWidget {
   const _PulsingDot();
 
@@ -437,47 +494,3 @@ class _PulsingDotState extends State<_PulsingDot>
     );
   }
 }
-
-/// Calm empty-state hint shown when a section has no channels yet.
-class _EmptyRow extends StatelessWidget {
-  const _EmptyRow({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      height: AppSpacing.tvRowCardHeight,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      decoration: BoxDecoration(
-        color: (isDark ? AppColors.oceanDeep : AppColors.lightSurface)
-            .withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.lightbulb_outline_rounded,
-            size: AppSpacing.iconMd,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.30),
-          ),
-          const SizedBox(width: 14),
-          Flexible(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
