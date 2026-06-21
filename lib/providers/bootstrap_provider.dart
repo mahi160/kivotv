@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../services/playlist_repository.dart';
+import 'repository_provider.dart';
 
 /// Runs the one-time app bootstrap (DB open, schema migration, seed data).
 ///
@@ -8,5 +8,5 @@ import '../services/playlist_repository.dart';
 /// until it resolves. Errors are surfaced to the user instead of swallowed
 /// by a fire-and-forget catchError().
 final bootstrapProvider = FutureProvider<void>((ref) async {
-  await PlaylistRepository.instance.bootstrap();
+  await ref.watch(repositoryProvider).bootstrap();
 });

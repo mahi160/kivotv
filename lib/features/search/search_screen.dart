@@ -9,7 +9,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/channel_card.dart';
 import '../../models/channel.dart';
-import '../../services/playlist_repository.dart';
+import '../../providers/repository_provider.dart';
 
 /// Global search across every channel + live match. Reached from the nav-bar
 /// search button. The field autofocuses (TV leanback IME); D-pad Down from the
@@ -69,7 +69,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (_loading || !_hasMore || _query.isEmpty) return;
     setState(() => _loading = true);
     try {
-      final page = await PlaylistRepository.instance
+      final page = await ref.read(repositoryProvider)
           .channels(query: _query, limit: _pageSize, offset: _offset);
       if (!mounted) return;
       setState(() {
@@ -122,9 +122,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     Expanded(
                       child: Focus(
                         onKeyEvent: (_, e) {
-                          if (e is KeyDownEvent &&
-                              e.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          if (e is! KeyDownEvent) return KeyEventResult.ignored;
+                          final k = e.logicalKey;
+                          // ↓ moves focus into the results grid.
+                          if (k == LogicalKeyboardKey.arrowDown) {
                             FocusScope.of(context).nextFocus();
+                            return KeyEventResult.handled;
+                          }
+                          // Consume ↑ ← → so the TV focus system can’t steal
+                          // focus away from the field and dismiss the keyboard.
+                          if (k == LogicalKeyboardKey.arrowUp   ||
+                              k == LogicalKeyboardKey.arrowLeft  ||
+                              k == LogicalKeyboardKey.arrowRight) {
                             return KeyEventResult.handled;
                           }
                           return KeyEventResult.ignored;

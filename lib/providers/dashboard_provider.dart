@@ -1,53 +1,49 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/channel.dart';
-import '../services/playlist_repository.dart';
 import 'notifier_stream.dart';
+import 'repository_provider.dart';
 
 // ── Per-section version streams ───────────────────────────────────────────────
 //
-// Each stream provider bridges exactly one PlaylistRepository version notifier
-// into Riverpod. Bumping only the relevant notifier means, e.g., markWatched
-// (fired on every channel play) only rebuilds the "Recently watched" section,
-// not Live / Favourites / Groups.
+// Each bridges exactly one PlaylistRepository.DebouncedVersion into Riverpod.
+// Bumping only the relevant notifier (e.g. markWatched → recentVersion) means
+// only that one section rebuilds, not the whole dashboard.
 
 final _liveVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.liveVersion),
+  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).liveVersion),
 );
-
 final _favVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.favVersion),
+  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).favVersion),
 );
-
 final _recentVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.recentVersion),
+  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).recentVersion),
 );
-
 final _groupsVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, PlaylistRepository.instance.groupsVersion),
+  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).groupsVersion),
 );
 
 // ── Section data providers ────────────────────────────────────────────────────
 
 final liveMatchesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
   ref.watch(_liveVersionStream);
-  return PlaylistRepository.instance.liveMatches();
+  return ref.watch(repositoryProvider).liveMatches();
 });
 
 final favoritesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
   ref.watch(_favVersionStream);
-  return PlaylistRepository.instance.favoriteChannels();
+  return ref.watch(repositoryProvider).favoriteChannels();
 });
 
 final recentProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
   ref.watch(_recentVersionStream);
-  return PlaylistRepository.instance.recentlyWatched();
+  return ref.watch(repositoryProvider).recentlyWatched();
 });
 
 final groupsProvider =
     FutureProvider.autoDispose<List<MapEntry<String, List<Channel>>>>((ref) async {
   ref.watch(_groupsVersionStream);
-  return PlaylistRepository.instance.groupedChannels();
+  return ref.watch(repositoryProvider).groupedChannels();
 });
 
 // ── Ready flag ────────────────────────────────────────────────────────────────

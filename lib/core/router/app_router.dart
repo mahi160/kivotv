@@ -13,11 +13,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/player',
       builder: (_, state) {
-        final extra   = state.extra as Map<String, Object?>?;
-        final channel = extra?['channel'] as Channel?;
-        final query   = extra?['query']   as String? ?? '';
+        final channel =
+            (state.extra as Map<String, Object?>?)?['channel'] as Channel?;
         if (channel == null) return const HomeScreen();
-        return PlayerScreen(channel: channel, query: query);
+        return PlayerScreen(channel: channel);
       },
     ),
   ],

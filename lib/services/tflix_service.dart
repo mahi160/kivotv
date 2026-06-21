@@ -1,5 +1,7 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+
+import 'http_get.dart';
 
 import '../models/channel.dart';
 import 'tflix_resolver.dart';
@@ -16,40 +18,14 @@ class TflixService {
   static final TflixService instance = TflixService._();
 
   static const _home = 'https://tflix.pro/';
-  static const _base = 'https://tflix.pro';
 
   Future<List<Channel>> fetchLiveMatches() async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
     try {
-      final matches = parseLiveMatches(await _get(client, _home));
-      // Only keep matches that expose a directly-playable m3u8. Matches whose
-      // sources are DRM/MPD or obfuscated-only are dropped (not shown) instead
-      // of shown-but-unplayable. play.php is checked per match in parallel.
-      final checked = await Future.wait(matches.map((m) async {
-        try {
-          final path = m.url.substring('tflix://'.length);
-          final body = await _get(client, '$_base/play.php/$path',
-              referer: '$_base/');
-          return TflixResolver.extractM3u8Candidates(body).isNotEmpty ? m : null;
-        } catch (_) {
-          return null;
-        }
-      }));
-      return [for (final m in checked) ?m];
+      return parseLiveMatches(await httpGetString(client, Uri.parse(_home)));
     } finally {
       client.close(force: true);
     }
-  }
-
-  Future<String> _get(HttpClient c, String url, {String? referer}) async {
-    final req = await c.getUrl(Uri.parse(url));
-    req.headers.set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
-    if (referer != null) req.headers.set(HttpHeaders.refererHeader, referer);
-    final resp = await req.close().timeout(const Duration(seconds: 15));
-    if (resp.statusCode != HttpStatus.ok) {
-      throw HttpException('tflix HTTP ${resp.statusCode}', uri: Uri.parse(url));
-    }
-    return resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 15));
   }
 }
 

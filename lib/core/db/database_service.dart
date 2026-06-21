@@ -24,7 +24,7 @@ class DatabaseService {
     final dbPath = p.join(await getDatabasesPath(), 'kivo.db');
     final opened = await openDatabase(
       dbPath,
-      version: 6,
+      version: 7,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate:    (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
@@ -90,6 +90,21 @@ CREATE TABLE IF NOT EXISTS recently_watched (
             // transparently falls back to the old LIKE path.
           }
         }
+        // v6 → v7: FTS5 triggers — incremental index maintenance. Existing FTS
+        // data stays valid; the triggers keep it in sync going forward so
+        // replaceChannels no longer needs a full 'rebuild' after every write.
+        if (oldVersion < 7) {
+          final hasFts = (await db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='channels_fts' LIMIT 1",
+          )).isNotEmpty;
+          if (hasFts) {
+            try {
+              await db.execute(_ftsAiTriggerSql);
+              await db.execute(_ftsAdTriggerSql);
+              await db.execute(_ftsAuTriggerSql);
+            } catch (_) {}
+          }
+        }
       },
     );
     _db = opened;
@@ -135,12 +150,14 @@ CREATE TABLE recently_watched (
     await db.execute('CREATE INDEX idx_channels_favorite  ON channels(is_favorite)');
     await db.execute(
       'CREATE INDEX idx_recent_watched_at ON recently_watched(watched_at DESC)');
-    // FTS5 virtual table — backed by channels (stores only the inverted index).
+    // FTS5 virtual table + sync triggers. Skipped gracefully when FTS5 is
+    // unavailable (SQLite < 3.9 / Android < 7) — search falls back to LIKE.
     try {
       await db.execute(_ftsCreateSql);
-    } catch (_) {
-      // Gracefully skipped on SQLite < 3.9 / Android < 7.
-    }
+      await db.execute(_ftsAiTriggerSql);
+      await db.execute(_ftsAdTriggerSql);
+      await db.execute(_ftsAuTriggerSql);
+    } catch (_) {}
   }
 
   // FTS5 virtual table definition. Content table = channels, so FTS5 reads
@@ -152,6 +169,26 @@ CREATE VIRTUAL TABLE IF NOT EXISTS channels_fts USING fts5(
   content_rowid='rowid',
   tokenize='unicode61 remove_diacritics 1'
 )''';
+
+  // FTS5 content-table sync triggers. Keep these in sync with _createSchema.
+  // INSERT: add new row to the FTS index.
+  // DELETE: remove the row from the index.
+  // UPDATE: remove old entry then add the new one (handles search_text changes).
+  static const _ftsAiTriggerSql = '''
+CREATE TRIGGER IF NOT EXISTS channels_ai AFTER INSERT ON channels BEGIN
+  INSERT INTO channels_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+END''';
+
+  static const _ftsAdTriggerSql = '''
+CREATE TRIGGER IF NOT EXISTS channels_ad AFTER DELETE ON channels BEGIN
+  INSERT INTO channels_fts(channels_fts, rowid, search_text) VALUES('delete', old.rowid, old.search_text);
+END''';
+
+  static const _ftsAuTriggerSql = '''
+CREATE TRIGGER IF NOT EXISTS channels_au AFTER UPDATE ON channels BEGIN
+  INSERT INTO channels_fts(channels_fts, rowid, search_text) VALUES('delete', old.rowid, old.search_text);
+  INSERT INTO channels_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+END''';
 
   /// True if the FTS5 table exists in this database (SQLite 3.9+ / Android 7+).
   /// Result is cached after the first check.
@@ -282,19 +319,7 @@ ON CONFLICT(url) DO UPDATE SET
       await batch.commit(noResult: true);
     });
 
-    // Rebuild the FTS index to reflect the updated channel rows.
-    // Runs outside the transaction so it doesn't block channel reads.
-    // Non-fatal: a rebuild failure leaves FTS slightly stale until the
-    // next replaceChannels call; search falls back to LIKE if FTS fails.
-    if (await _hasFts()) {
-      try {
-        final db = await database;
-        await db.execute(
-            "INSERT INTO channels_fts(channels_fts) VALUES('rebuild')");
-      } catch (_) {
-        _ftsEnabled = false; // disable FTS if the rebuild itself fails
-      }
-    }
+    // FTS index is kept in sync automatically by the triggers added in v7.
   }
 
   // ── Channels — queries ─────────────────────────────────────────────────────
@@ -352,44 +377,54 @@ ON CONFLICT(url) DO UPDATE SET
     return rows.map(Channel.fromDb).toList();
   }
 
-  /// All non-tflix channels grouped by category, for the Netflix-style Home
-  /// rows. Each group's channels are A–Z; groups are ordered biggest-first,
-  /// with ungrouped channels collected under "Other" and pushed to the end.
-  /// (tflix live matches are excluded — they have their own "Live now" row.)
+  /// Top [groupLimit] groups by channel count, each capped at [perGroupLimit]
+  /// channels, for the Netflix-style Home rows. Both limits are applied in SQL
+  /// so only the rows that will actually be displayed transfer to Dart.
   ///
-  /// [perGroupLimit] caps how many channels appear per group in the home
-  /// dashboard. The full list is always accessible via Search. Capping here
-  /// avoids creating thousands of Dart Channel objects on every dashboard
-  /// rebuild when large playlists (e.g. 10 k+ channels) are installed.
+  /// Requires SQLite 3.25+ / Android 9+ (window functions). Already required
+  /// by the existing schema — no additional compatibility concern.
   Future<List<MapEntry<String, List<Channel>>>> channelsByGroup({
+    int groupLimit    = 15,
     int perGroupLimit = 30,
   }) async {
-    final db = await database;
-    // ORDER BY group then name so per-group truncation is alphabetically stable
-    // and channels are contiguous per group in the result cursor.
-    final rows = await db.query(
-      'channels',
-      where:   "url NOT LIKE 'tflix://%'",
-      orderBy: 'group_name COLLATE NOCASE ASC, name COLLATE NOCASE ASC',
-    );
-    final byGroup = <String, List<Channel>>{};
+    final db   = await database;
+    final rows = await db.rawQuery('''
+WITH top_groups AS (
+  SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
+  FROM   channels
+  WHERE  url NOT LIKE 'tflix://%'
+  GROUP  BY _g
+  ORDER  BY COUNT(*) DESC
+  LIMIT  ?
+),
+ranked AS (
+  SELECT c.*,
+         COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g,
+         ROW_NUMBER() OVER (
+           PARTITION BY COALESCE(NULLIF(c.group_name, ''), 'Other')
+           ORDER BY c.name COLLATE NOCASE
+         ) AS _rn
+  FROM   channels c
+  WHERE  c.url NOT LIKE 'tflix://%'
+    AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN (SELECT _g FROM top_groups)
+)
+SELECT * FROM ranked WHERE _rn <= ?
+ORDER BY _g COLLATE NOCASE ASC, name COLLATE NOCASE ASC
+''', [groupLimit, perGroupLimit]);
+
+    final groupMap = <String, List<Channel>>{};
     for (final row in rows) {
-      // Read the raw field (cheap map lookup) before deciding whether to
-      // allocate a full Channel object — avoids O(n) allocations for large
-      // playlists when most channels exceed the per-group cap.
-      final rawGroup = row['group_name'] as String?;
-      final g = (rawGroup == null || rawGroup.isEmpty) ? 'Other' : rawGroup;
-      final list = (byGroup[g] ??= <Channel>[]);
-      if (list.length < perGroupLimit) list.add(Channel.fromDb(row));
+      final g = row['_g'] as String;
+      (groupMap[g] ??= []).add(Channel.fromDb(row));
     }
-    final entries = byGroup.entries.toList()
+
+    // Other pushed last; remainder A–Z.
+    return (groupMap.entries.toList()
       ..sort((a, b) {
-        final ao = a.key == 'Other' ? 1 : 0;
-        final bo = b.key == 'Other' ? 1 : 0;
-        if (ao != bo) return ao - bo;            // Other last
-        return b.value.length.compareTo(a.value.length); // biggest first
-      });
-    return entries;
+        if (a.key == 'Other' && b.key != 'Other') return  1;
+        if (b.key == 'Other' && a.key != 'Other') return -1;
+        return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+      }));
   }
 
   Future<List<Channel>> favoriteChannels({int limit = 12}) async {

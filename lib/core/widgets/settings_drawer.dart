@@ -7,7 +7,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../../providers/fetch_status_provider.dart';
 import '../../providers/theme_mode_provider.dart';
-import '../../services/playlist_repository.dart';
+import '../../providers/repository_provider.dart';
 import 'focusable_tap.dart';
 import 'kivo_logo.dart';
 
@@ -119,7 +119,7 @@ class SettingsPanel extends ConsumerWidget {
                   _SectionLabel('Sources', color: text2),
                   _RefreshRow(
                     fetching: ref.watch(isFetchingProvider).asData?.value ?? false,
-                    onTap:    () => PlaylistRepository.instance.manualRefresh(),
+                    onTap:    () => ref.read(repositoryProvider).manualRefresh(),
                     isDark:   isDark,
                   ),
 

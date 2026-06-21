@@ -1,6 +1,6 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
+
+import 'http_get.dart';
 
 import 'resolved_stream.dart';
 
@@ -33,20 +33,12 @@ class IptvidnResolver {
   static bool isResolvable(String reference) => reference.startsWith(_scheme);
 
   Future<ResolvedStream> resolve(String reference) async {
-    final slug    = reference.substring(_scheme.length);
-    final uri     = Uri.parse('$_base/play.php?stream=$slug');
-    final request = await _http.getUrl(uri);
-    request.headers
-      ..set(HttpHeaders.refererHeader, '$_base/')
-      ..set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
-    final response = await request.close().timeout(const Duration(seconds: 15));
-    if (response.statusCode != HttpStatus.ok) {
-      throw HttpException('play.php HTTP ${response.statusCode}', uri: uri);
-    }
-    final body = await response
-        .transform(utf8.decoder)
-        .join()
-        .timeout(const Duration(seconds: 15));
+    final slug = reference.substring(_scheme.length);
+    final body = await httpGetString(
+      _http,
+      Uri.parse('$_base/play.php?stream=$slug'),
+      referer: '$_base/',
+    );
     return parsePlayResponse(body);
   }
 
@@ -76,13 +68,22 @@ class IptvidnResolver {
     );
   }
 
-  /// Flussonic token = `<hmac>-<hmac>-<expiry_unix>-<start_unix>`.
-  /// The expiry is the second-to-last dash-separated field.
+  /// Flussonic token = `...-<expiry_unix>-<start_unix>` (trailing two integer
+  /// fields; leading HMAC segments are hex and never contain dashes, but we
+  /// parse from the right to be format-agnostic).
+  /// Sanity-checks the result: expiry must be in the next 6 h, otherwise
+  /// the field offsets are wrong and we return null so the reactive path
+  /// handles any eventual 403 rather than scheduling a timer at a bad time.
   static DateTime? _expiryOf(String token) {
     final parts = token.split('-');
     if (parts.length < 2) return null;
     final seconds = int.tryParse(parts[parts.length - 2]);
     if (seconds == null) return null;
-    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    final expiry = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    final now    = DateTime.now();
+    if (expiry.isBefore(now) || expiry.isAfter(now.add(const Duration(hours: 6)))) {
+      return null; // parsed the wrong field; let reactive re-resolve handle it
+    }
+    return expiry;
   }
 }

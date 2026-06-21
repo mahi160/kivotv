@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/focusable_tap.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/channel_logo.dart';
+import '../../../core/widgets/channel_card.dart';
 import '../../../models/channel.dart';
 
 /// Slide-in sidebar showing the current channel list.
@@ -16,6 +16,8 @@ class ChannelListPanel extends StatelessWidget {
     required this.scrollController,
     required this.onSelectChannel,
     required this.onToggleFavorite,
+    this.onItemFocused,
+    this.currentChannelFocusNode,
   });
 
   final List<Channel>         channels;
@@ -23,6 +25,12 @@ class ChannelListPanel extends StatelessWidget {
   final ScrollController      scrollController;
   final ValueChanged<Channel> onSelectChannel;
   final ValueChanged<Channel> onToggleFavorite;
+  /// Called with the list index whenever a sidebar row gains D-pad focus.
+  /// Used by the player to detect boundary conditions for wrap-around.
+  final ValueChanged<int>?    onItemFocused;
+  /// FocusNode for the currently-playing channel’s row, so the player can
+  /// call requestFocus() on it when the sidebar opens.
+  final FocusNode?             currentChannelFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -94,10 +102,12 @@ class ChannelListPanel extends StatelessWidget {
                       final ch        = channels[index];
                       final isCurrent = ch.url == currentChannel.url;
                       return _SidebarItem(
-                        channel:     ch,
-                        isCurrent:   isCurrent,
-                        onTap:      () => onSelectChannel(ch),
+                        channel:   ch,
+                        isCurrent: isCurrent,
+                        focusNode: isCurrent ? currentChannelFocusNode : null,
+                        onTap:     () => onSelectChannel(ch),
                         onFavorite: () => onToggleFavorite(ch),
+                        onFocused: () => onItemFocused?.call(index),
                       );
                     },
                   ),
@@ -127,16 +137,27 @@ class _SidebarItem extends StatelessWidget {
     required this.isCurrent,
     required this.onTap,
     required this.onFavorite,
+    this.focusNode,
+    this.onFocused,
   });
 
   final Channel      channel;
   final bool         isCurrent;
+  final FocusNode?   focusNode;
   final VoidCallback onTap;
   final VoidCallback onFavorite;
+  /// Called when this row gains D-pad focus. Used for wrap-around tracking.
+  final VoidCallback? onFocused;
 
   @override
   Widget build(BuildContext context) {
-    return FocusableTap(
+    return Focus(
+      // skipTraversal keeps this node out of the D-pad traversal order while
+      // still letting onFocusChange fire when a descendant is focused.
+      skipTraversal: true,
+      onFocusChange: (focused) { if (focused) onFocused?.call(); },
+      child: FocusableTap(
+      focusNode: focusNode,
       onTap:  onTap,
       onMenu: onFavorite, // MENU key → toggle favourite on TV remote
       builder: (_, focused) => AnimatedContainer(
@@ -163,10 +184,13 @@ class _SidebarItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            ChannelLogo(
-              logoUrl:      channel.logo,
-              size:         44,
-              borderRadius: 8,
+            // ChannelAvatar: shows the logo when available, otherwise the
+            // channel’s first letter in a deterministic colour — never a
+            // generic TV icon that gives no information.
+            ChannelAvatar(
+              logoUrl: channel.logo,
+              name:    channel.name,
+              size:    44,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -208,6 +232,7 @@ class _SidebarItem extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),   // FocusableTap
+    );   // Focus
   }
 }

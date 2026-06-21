@@ -22,6 +22,28 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  // Timestamp of the last time this screen mounted. Used to swallow any
+  // residual back event that arrives shortly after returning from the player:
+  // on some TV firmware (TCL / Realtek) the back button fires through both
+  // the key-event pipeline AND the Activity’s onBackPressed(), so the second
+  // event can arrive on the home screen a few ms after the first navigated
+  // away from the player. We ignore back-to-exit for 600 ms after mount.
+  DateTime _mountedAt = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _mountedAt = DateTime.now();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reset the guard whenever the route becomes active again (e.g. after
+    // returning from the player via go('/')).
+    _mountedAt = DateTime.now();
+  }
+
   void _open(Channel channel) {
     context.push('/player', extra: {'channel': channel});
   }
@@ -31,19 +53,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDark   = Theme.of(context).brightness == Brightness.dark;
     final primary  = AppColors.primary(isDark);
     final isReady  = ref.watch(dashboardReadyProvider);
-    final fetching = ref.watch(isFetchingProvider).asData?.value == true;
+    final fetching    = ref.watch(isFetchingProvider).asData?.value == true;
+    final fetchErrMsg = ref.watch(fetchErrorProvider).asData?.value;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        // Swallow back events that arrive within 600 ms of mounting.
+        // Some TV firmware (e.g. TCL/Realtek) delivers KEYCODE_BACK through
+        // both the key-event pipeline and onBackPressed() independently, so
+        // the second copy can land here just after returning from the player.
+        if (DateTime.now().difference(_mountedAt).inMilliseconds < 600) return;
         SystemNavigator.pop();
       },
       child: Scaffold(
-        body: GradientBackground(
+        body: SafeArea(
+          child: GradientBackground(
           variant: GradientVariant.home,
           child: Column(
             children: [
+              // Slim error banner when a background fetch failed.
+              if (fetchErrMsg != null) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.tvEdge, 6, AppSpacing.tvEdge, 0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off_rounded, size: 13,
+                          color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          fetchErrMsg,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Slim progress bar during background playlist fetch.
               if (fetching) ...[
                 LinearProgressIndicator(
@@ -89,11 +140,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         // RepaintBoundary isolates the scrollable dashboard
                         // from the gradient background: focus animations and
                         // section repaints don't repaint the gradient layer.
-                        child: RepaintBoundary(
-                          child: isReady
-                              ? _DashboardList(onOpen: _open)
-                              : const Center(
-                                  child: CircularProgressIndicator()),
+                        // ClipRect contains the list within its allocated
+                        // space so rows scrolled above the viewport don’t
+                        // bleed over the nav bar.
+                        child: ClipRect(
+                          child: RepaintBoundary(
+                            child: isReady
+                                ? _DashboardList(onOpen: _open)
+                                : const Center(
+                                    child: CircularProgressIndicator()),
+                          ),
                         ),
                       ),
                     ],
@@ -103,6 +159,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+        ),    // SafeArea
       ),
     );
   }
@@ -112,23 +169,92 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 // Dashboard list
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Pure layout widget — watches no providers itself. Each child section is its
-/// own ConsumerWidget, so an update to one section (e.g. recentProvider on
-/// markWatched) only rebuilds that section, not the others.
-class _DashboardList extends StatelessWidget {
+/// Reads all four section lists so it can give autofocus to exactly the first
+/// non-empty section. Each _ChannelSection child is still its own ConsumerWidget
+/// so only the affected row rebuilds on data changes.
+class _DashboardList extends ConsumerWidget {
   const _DashboardList({required this.onOpen});
   final ValueChanged<Channel> onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live   = ref.watch(liveMatchesProvider).value ?? [];
+    final favs   = ref.watch(favoritesProvider).value ?? [];
+    final recent = ref.watch(recentProvider).value ?? [];
+    final groups = ref.watch(groupsProvider).value ?? [];
+
+    // Exactly one section gets autofocus — the first non-empty one.
+    var autofocusClaimed = false;
+    bool claim(List<dynamic> list) {
+      if (autofocusClaimed || list.isEmpty) return false;
+      autofocusClaimed = true;
+      return true;
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.sm, AppSpacing.sm, AppSpacing.sm, AppSpacing.xxl),
       children: [
-        _LiveSection(onOpen:   onOpen),
-        _FavSection(onOpen:    onOpen),
-        _RecentSection(onOpen: onOpen),
-        _GroupsSection(onOpen: onOpen),
+        _ChannelSection(
+          channels:       live,
+          title:          'Live Now',
+          live:           true,
+          onOpen:         onOpen,
+          makeCountLabel: (ch) => '${ch.length} matches',
+          autofocusFirst: claim(live),
+        ),
+        _ChannelSection(
+          channels:       favs,
+          title:          'Favourites',
+          onOpen:         onOpen,
+          makeCountLabel: (ch) => '${ch.length} channels',
+          autofocusFirst: claim(favs),
+        ),
+        _ChannelSection(
+          channels:       recent,
+          title:          'Recently watched',
+          onOpen:         onOpen,
+          autofocusFirst: claim(recent),
+        ),
+        _GroupsSection(onOpen: onOpen, autofocusFirst: claim(groups)),
+      ],
+    );
+  }
+}
+
+/// Renders a [_DashboardSection] row when [channels] is non-empty.
+class _ChannelSection extends StatelessWidget {
+  const _ChannelSection({
+    required this.channels,
+    required this.title,
+    required this.onOpen,
+    this.makeCountLabel,
+    this.live = false,
+    this.autofocusFirst = false,
+  });
+
+  final List<Channel>                    channels;
+  final String                           title;
+  final ValueChanged<Channel>            onOpen;
+  final String? Function(List<Channel>)? makeCountLabel;
+  final bool                             live;
+  final bool                             autofocusFirst;
+
+  @override
+  Widget build(BuildContext context) {
+    if (channels.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DashboardSection(
+          title:          title,
+          live:           live,
+          countLabel:     makeCountLabel?.call(channels),
+          channels:       channels,
+          onOpen:         onOpen,
+          autofocusFirst: autofocusFirst,
+        ),
+        const SizedBox(height: AppSpacing.tvSectionGap),
       ],
     );
   }
@@ -138,91 +264,17 @@ class _DashboardList extends StatelessWidget {
 // Per-section ConsumerWidgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _LiveSection extends ConsumerWidget {
-  const _LiveSection({required this.onOpen});
-  final ValueChanged<Channel> onOpen;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final channels = ref.watch(liveMatchesProvider).value ?? [];
-    if (channels.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _DashboardSection(
-          title:          'Live Now',
-          live:           true,
-          countLabel:     '${channels.length} matches',
-          channels:       channels,
-          onOpen:         onOpen,
-          autofocusFirst: true,
-        ),
-        const SizedBox(height: AppSpacing.tvSectionGap),
-      ],
-    );
-  }
-}
-
-class _FavSection extends ConsumerWidget {
-  const _FavSection({required this.onOpen});
-  final ValueChanged<Channel> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final channels = ref.watch(favoritesProvider).value ?? [];
-    if (channels.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _DashboardSection(
-          title:          'Favourites',
-          countLabel:     '${channels.length} channels',
-          channels:       channels,
-          onOpen:         onOpen,
-          autofocusFirst: true,
-        ),
-        const SizedBox(height: AppSpacing.tvSectionGap),
-      ],
-    );
-  }
-}
-
-class _RecentSection extends ConsumerWidget {
-  const _RecentSection({required this.onOpen});
-  final ValueChanged<Channel> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final channels = ref.watch(recentProvider).value ?? [];
-    if (channels.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _DashboardSection(
-          title:          'Recently watched',
-          channels:       channels,
-          onOpen:         onOpen,
-          autofocusFirst: true,
-        ),
-        const SizedBox(height: AppSpacing.tvSectionGap),
-      ],
-    );
-  }
-}
 
 class _GroupsSection extends ConsumerWidget {
-  const _GroupsSection({required this.onOpen});
+  const _GroupsSection({required this.onOpen, this.autofocusFirst = false});
   final ValueChanged<Channel> onOpen;
-
-  // Cap how many category rows appear on the home dashboard. Groups are
-  // already sorted biggest-first, so we show the most popular categories.
-  // The full catalogue is always reachable via Search.
-  static const _maxGroups = 15;
+  final bool autofocusFirst;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final all    = ref.watch(groupsProvider).value ?? [];
-    final groups = all.length > _maxGroups ? all.sublist(0, _maxGroups) : all;
+    // DB already caps to top 15 groups — no UI-level trim needed.
+    final groups = ref.watch(groupsProvider).value ?? [];
     if (groups.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +285,7 @@ class _GroupsSection extends ConsumerWidget {
             countLabel:     '${groups[i].value.length}',
             channels:       groups[i].value,
             onOpen:         onOpen,
-            autofocusFirst: true,
+            autofocusFirst: autofocusFirst && i == 0,
           ),
           if (i < groups.length - 1)
             const SizedBox(height: AppSpacing.tvSectionGap),

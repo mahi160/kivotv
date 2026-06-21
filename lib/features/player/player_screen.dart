@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -9,7 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
-import '../../services/playlist_repository.dart';
+import '../../providers/repository_provider.dart';
 import '../../services/stream_resolver.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
@@ -18,17 +19,16 @@ import 'widgets/player_overlay.dart';
 //  Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.channel, this.query = ''});
+class PlayerScreen extends ConsumerStatefulWidget {
+  const PlayerScreen({super.key, required this.channel});
 
   final Channel channel;
-  final String  query;
 
   @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
+  ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen>
+class _PlayerScreenState extends ConsumerState<PlayerScreen>
     with WidgetsBindingObserver {
   // ── media ──────────────────────────────────────────────────────────────────
   late final Player          _player;
@@ -80,8 +80,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   StreamSubscription<bool>?   _playingSubscription;
   StreamSubscription<String>? _errorSubscription;
 
-  // ── sidebar scroll ─────────────────────────────────────────────────────────
+  // ── sidebar scroll + focus tracking ────────────────────────────────────────
   final _sidebarScroll = ScrollController();
+  // Which sidebar row currently has D-pad focus (updated via callback).
+  // Used to detect list boundaries for wrap-around navigation.
+  int _sidebarFocusedIndex = -1;
+
+  // Dedicated FocusNode for the current channel’s sidebar row, so we can
+  // call requestFocus() on it directly when the sidebar opens.
+  final _currentSidebarFocus = FocusNode();
 
   // ── focus ──────────────────────────────────────────────────────────────────
   final _rootFocus        = FocusNode();
@@ -108,10 +115,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player,
       configuration: const VideoControllerConfiguration(
         enableHardwareAcceleration: true,
-        // Decode + render straight to a hardware surface on Android TV — the
-        // lowest-overhead path; avoids copying every frame into a GL texture.
-        vo:    'mediacodec_embed',
-        hwdec: 'mediacodec',
+        // Do NOT set vo/hwdec here. Hardcoding 'mediacodec_embed' breaks
+        // playback on SoCs that use their own video pipeline (e.g. Realtek
+        // RTD6748 on TCL TVs). Let media_kit auto-select the best VO for
+        // the device; hwdec is set to mediacodec-copy in _configurePlayer.
       ),
     );
 
@@ -125,7 +132,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
-        PlaylistRepository.instance.markWatched(_currentChannel);
+        ref.read(repositoryProvider).markWatched(_currentChannel);
       }
     });
 
@@ -160,12 +167,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     try {
+      // mediacodec-copy: hardware decode on all Android TV SoCs (including
+      // Realtek RTD6748) by copying decoded frames into a GPU texture rather
+      // than rendering direct-to-surface. Less zero-copy than mediacodec_embed
+      // but universally compatible.
+      await platform.setProperty('hwdec', 'mediacodec-copy');
       await platform.setProperty('video-sync', 'audio');
       await platform.setProperty('framedrop', 'vo');
       await platform.setProperty('cache', 'yes');
       await platform.setProperty('demuxer-readahead-secs', '4');
-      // Start playing as soon as a little data is buffered, rather than
-      // waiting to fill a large cache first.
       await platform.setProperty('cache-secs', '4');
     } catch (_) {
       // Tuning is non-critical; playback still works with mpv defaults.
@@ -182,6 +192,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _playingSubscription?.cancel();
     _errorSubscription?.cancel();
     _sidebarScroll.dispose();
+    _currentSidebarFocus.dispose();
     _rootFocus.dispose();
     _playFocusNode.dispose();
     _sidebarScopeNode.dispose();
@@ -195,7 +206,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
         _wasPlayingBeforePause = _player.state.playing || _player.state.buffering;
         _player.pause();
       case AppLifecycleState.resumed:
@@ -222,19 +232,18 @@ class _PlayerScreenState extends State<PlayerScreen>
   // ── channel loading ────────────────────────────────────────────────────────
 
   Future<void> _loadChannels() async {
-    const pageSize = 200;
+    // 2000-row pages: reduces SQLite offset-scan overhead ~10× vs 200-row pages
+    // while still providing progressive D-pad feedback before all pages arrive.
+    const pageSize = 2000;
     var offset = 0;
     final all  = <Channel>[];
     while (true) {
-      final page = await PlaylistRepository.instance.channels(
-        query:  widget.query,
+      final page = await ref.read(repositoryProvider).channels(
         limit:  pageSize,
         offset: offset,
       );
       all.addAll(page);
       if (!mounted) return;
-      // Update after EACH page so D-pad channel navigation works as soon
-      // as the first 200 channels arrive instead of waiting for all pages.
       setState(() {
         _channels          = List.of(all);
         _currentIndexCache = _channels
@@ -310,7 +319,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         .subtract(const Duration(seconds: 60))
         .difference(DateTime.now());
     if (lead <= Duration.zero) return; // imminent; reactive path will cover it
-    _expiryTimer = Timer(lead, () { if (mounted) _load(); });
+    _expiryTimer = Timer(lead, () {
+      if (!mounted) return;
+      // Only re-resolve if the user is actively watching — don't silently
+      // resume a stream that was manually paused.
+      if (_player.state.playing || _player.state.buffering) _load();
+    });
   }
 
   // ── failure handling ────────────────────────────────────────────────────
@@ -362,7 +376,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _toggleCurrentFavorite() async {
     final newValue = !_currentChannel.isFavorite;
-    await PlaylistRepository.instance.setFavorite(_currentChannel, newValue);
+    await ref.read(repositoryProvider).setFavorite(_currentChannel, newValue);
     if (!mounted) return;
     final updated = _currentChannel.copyWith(isFavorite: newValue);
     setState(() {
@@ -374,7 +388,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _toggleSidebarFavorite(Channel ch) async {
     final newValue = !ch.isFavorite;
-    await PlaylistRepository.instance.setFavorite(ch, newValue);
+    await ref.read(repositoryProvider).setFavorite(ch, newValue);
     if (!mounted) return;
     setState(() {
       final i = _channels.indexWhere((c) => c.url == ch.url);
@@ -420,15 +434,18 @@ class _PlayerScreenState extends State<PlayerScreen>
       _showControls();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _sidebarScopeNode.requestFocus();
+        _sidebarFocusedIndex = _currentIndex.clamp(0, _channels.length - 1);
         final idx = _currentIndex;
-        if (idx > 0 && _sidebarScroll.hasClients) {
+        if (idx >= 0 && _sidebarScroll.hasClients) {
           const itemH = AppSpacing.tvSidebarTile;
           _sidebarScroll.jumpTo(
             ((idx * itemH) - 200)
                 .clamp(0, _sidebarScroll.position.maxScrollExtent),
           );
         }
+        // Focus the current channel’s row directly so the sidebar opens
+        // with the playing channel highlighted, not wherever it was before.
+        _currentSidebarFocus.requestFocus();
       });
     } else {
       // Reschedule a fresh 5-s hide so the overlay doesn’t vanish at some
@@ -443,17 +460,17 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── back navigation ────────────────────────────────────────────────────────
 
-  /// Navigate to home. Prefers `pop()` when the home route is already in the
-  /// GoRouter stack (opened via push from HomeScreen) so the existing home
-  /// widget is reused. Falls back to `go('/')` when the player is the only
-  /// route (e.g. auto-opened on launch), which replaces the stack cleanly.
+  /// Navigate to home.
+  ///
+  /// Always uses `go('/')` rather than `pop()`. Both the Flutter key-event
+  /// pipeline (_onKeyEvent) and the Android activity's onBackPressed()
+  /// independently deliver the back key, so _goHome() can be called twice
+  /// for a single remote press. `go('/')` is idempotent — calling it a
+  /// second time when already on home is a no-op — whereas `pop()` the
+  /// second time would pop the home route and exit the app.
   void _goHome() {
     if (!mounted) return;
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
+    context.go('/');
   }
 
   // ── navigation ─────────────────────────────────────────────────────────────
@@ -463,15 +480,16 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _playPrevious() {
     if (_channels.isEmpty) return;
     final idx = _currentIndex;
-    if (idx == -1) return;
-    _open(_channels[(idx - 1 + _channels.length) % _channels.length]);
+    // idx == -1 when channel not found yet; fall back gracefully.
+    _open(_channels[idx < 0
+        ? _channels.length - 1
+        : (idx - 1 + _channels.length) % _channels.length]);
   }
 
   void _playNext() {
     if (_channels.isEmpty) return;
     final idx = _currentIndex;
-    if (idx == -1) return;
-    _open(_channels[(idx + 1) % _channels.length]);
+    _open(_channels[idx < 0 ? 0 : (idx + 1) % _channels.length]);
   }
 
   // ── key handling ───────────────────────────────────────────────────────────
@@ -491,12 +509,27 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.arrowUp    ||
-          key == LogicalKeyboardKey.arrowDown   ||
-          key == LogicalKeyboardKey.channelUp   ||
-          key == LogicalKeyboardKey.channelDown) {
-        return KeyEventResult.ignored;
+
+      // Sidebar wrap-around: at the last item ↓ wraps to first channel;
+      // at the first item ↑ wraps to last channel. The wrapped channel is
+      // played so the user always lands somewhere playable.
+      final isDown = key == LogicalKeyboardKey.arrowDown ||
+                      key == LogicalKeyboardKey.channelDown;
+      final isUp   = key == LogicalKeyboardKey.arrowUp ||
+                      key == LogicalKeyboardKey.channelUp;
+      if (_channels.isNotEmpty) {
+        if (isDown && _sidebarFocusedIndex >= _channels.length - 1) {
+          setState(() => _showChannelList = false);
+          _open(_channels.first);
+          return KeyEventResult.handled;
+        }
+        if (isUp && _sidebarFocusedIndex == 0) {
+          setState(() => _showChannelList = false);
+          _open(_channels.last);
+          return KeyEventResult.handled;
+        }
       }
+      if (isDown || isUp) return KeyEventResult.ignored;
     }
 
     if (key == LogicalKeyboardKey.goBack    ||
@@ -642,7 +675,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                       setState(() => _showChannelList = false);
                       _open(ch); // user action → resets auto-skip budget
                     },
-                    onToggleFavorite: _toggleSidebarFavorite,
+                    onToggleFavorite:       _toggleSidebarFavorite,
+                    onItemFocused:          (i) => _sidebarFocusedIndex = i,
+                    currentChannelFocusNode: _currentSidebarFocus,
                   ),
                 ),
               ),

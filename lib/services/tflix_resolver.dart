@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'http_get.dart';
+
 import 'resolved_stream.dart';
 
 /// Resolves a `tflix://<teams>/match_<id>` reference into a playable HLS URL.
@@ -52,53 +54,52 @@ class TflixResolver {
 
   Future<ResolvedStream> resolve(String reference) async {
     final path       = reference.substring(_scheme.length);
-    final body       = await _get('$_base/play.php/$path', referer: '$_base/');
+    final body       = await httpGetString(
+      _http, Uri.parse('$_base/play.php/$path'), referer: '$_base/');
     final candidates = extractM3u8Candidates(body);
     if (candidates.isEmpty) {
       throw const FormatException('tflix: no direct source for this match');
     }
-    for (final url in candidates.take(6)) {
-      if (await _isPlayable(url)) {
-        return ResolvedStream(url: url, httpHeaders: const {'User-Agent': _ua});
-      }
-    }
-    throw const FormatException('tflix: no reachable source for this match');
-  }
 
-  Future<String> _get(String url, {String? referer}) async {
-    final req = await _http.getUrl(Uri.parse(url));
-    req.headers.set(HttpHeaders.userAgentHeader, _ua);
-    if (referer != null) req.headers.set(HttpHeaders.refererHeader, referer);
-    final resp = await req.close().timeout(const Duration(seconds: 15));
-    if (resp.statusCode != HttpStatus.ok) {
-      throw HttpException('tflix play.php HTTP ${resp.statusCode}',
-          uri: Uri.parse(url));
+    // Race all candidates in parallel — first 200+#EXTM3U wins.
+    // Sequential was worst-case 6 × 8 s; parallel is one round-trip.
+    final probes    = candidates.take(6).toList();
+    final completer = Completer<String>();
+    var   settled   = 0;
+
+    for (final url in probes) {
+      _isPlayable(url).then((ok) {
+        if (ok && !completer.isCompleted) completer.complete(url);
+      }).whenComplete(() {
+        if (++settled == probes.length && !completer.isCompleted) {
+          completer.completeError(
+            const FormatException('tflix: no reachable source for this match'));
+        }
+      });
     }
-    return resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 15));
+
+    final url = await completer.future;
+    return ResolvedStream(url: url, httpHeaders: const {'User-Agent': _ua});
   }
 
   /// True if [url] returns 200 and an HLS manifest. Probed from the device so a
   /// mirror that's dead/geo-blocked *for this user* is correctly skipped.
   Future<bool> _isPlayable(String url) async {
     try {
-      // Mirror probes go to external CDN hosts — use a separate short-lived
-      // client so the persistent _http pool isn't polluted with dead hosts.
+      // Separate short-lived client per probe — avoids polluting the persistent
+      // _http pool with dead CDN hosts.
       final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
       try {
         final req = await client.getUrl(Uri.parse(url));
         req.headers.set(HttpHeaders.userAgentHeader, _ua);
         final resp = await req.close().timeout(const Duration(seconds: 8));
-        if (resp.statusCode != HttpStatus.ok) {
-          await resp.drain<void>().catchError((_) {});
-          return false;
-        }
-        final body = await resp
-            .transform(utf8.decoder)
-            .join()
-            .timeout(const Duration(seconds: 8));
-        return body.contains('#EXTM3U');
+        if (resp.statusCode != HttpStatus.ok) return false;
+        // '#EXTM3U' is always the first line of a valid HLS manifest — reading
+        // the first response chunk is enough; no need to download the full file.
+        final first = await resp.first.timeout(const Duration(seconds: 8));
+        return utf8.decode(first, allowMalformed: true).trimLeft().startsWith('#EXTM3U');
       } finally {
-        client.close(force: true);
+        client.close(force: true); // also drains the socket
       }
     } catch (_) {
       return false;

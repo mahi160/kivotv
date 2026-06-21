@@ -181,26 +181,19 @@ class ChannelCard extends StatelessWidget {
     );
   }
 
-  /// Deterministic accent swatch for a channel, used to tint the logo band and
-  /// the fallback abbreviation tile. Stable per name so a channel always looks
-  /// the same between sessions.
-  ///
-  /// Static cache avoids recomputing the hash on every card rebuild (dashboard
-  /// rebuilds recreate card widgets but the swatch never changes).
-  static final _swatchCache = <String, Color>{};
-
-  static Color _swatch(String name) =>
-      _swatchCache.putIfAbsent(name, () {
-        const swatches = [
-          Color(0xFF8B1A9A), Color(0xFFB03A2E), Color(0xFF2E4057),
-          Color(0xFF6C3483), Color(0xFF0B5345), Color(0xFF1A5276),
-          Color(0xFF922B21), Color(0xFF17408B), Color(0xFFA04000),
-          Color(0xFF1B5E20), Color(0xFF5D2E8C), Color(0xFF004C97),
-        ];
-        if (name.isEmpty) return swatches[0];
-        final hash = name.codeUnits.fold(0, (a, b) => a + b);
-        return swatches[hash.abs() % swatches.length];
-      });
+  /// Deterministic accent swatch for a channel — stable per name across
+  /// sessions so the same channel always gets the same colour.
+  static Color _swatch(String name) {
+    const swatches = [
+      Color(0xFF8B1A9A), Color(0xFFB03A2E), Color(0xFF2E4057),
+      Color(0xFF6C3483), Color(0xFF0B5345), Color(0xFF1A5276),
+      Color(0xFF922B21), Color(0xFF17408B), Color(0xFFA04000),
+      Color(0xFF1B5E20), Color(0xFF5D2E8C), Color(0xFF004C97),
+    ];
+    if (name.isEmpty) return swatches[0];
+    final hash = name.codeUnits.fold(0, (a, b) => a + b);
+    return swatches[hash.abs() % swatches.length];
+  }
 }
 
 // ── Logo (network image or coloured abbreviation tile) ──────────────────────────
@@ -223,8 +216,9 @@ class _CardLogo extends StatelessWidget {
       return ChannelLogo(logoUrl: url, size: 64, borderRadius: 12);
     }
 
-    final abbr = _abbr(name);
-    final fontSize = abbr.length > 3 ? 20.0 : abbr.length > 2 ? 24.0 : 30.0;
+    // Single letter fallback — matches the sidebar’s ChannelAvatar style so
+    // every surface in the app uses the same visual language.
+    final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
       width: 60, height: 60,
       decoration: BoxDecoration(
@@ -233,10 +227,10 @@ class _CardLogo extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(
-        abbr,
-        style: TextStyle(
+        letter,
+        style: const TextStyle(
           fontFamily:    'Outfit',
-          fontSize:      fontSize,
+          fontSize:      30,
           fontWeight:    FontWeight.w700,
           letterSpacing: 0.4,
           color:         Colors.white,
@@ -246,25 +240,7 @@ class _CardLogo extends StatelessWidget {
     );
   }
 
-  /// Up to three letters: the initials of the first words, or the first
-  /// characters of a single-word name. Cached: channel names are immutable
-  /// so the abbreviation never changes across rebuilds.
-  static final _abbrCache = <String, String>{};
 
-  static String _abbr(String name) =>
-      _abbrCache.putIfAbsent(name, () {
-        final words = name
-            .trim()
-            .split(RegExp(r'\s+'))
-            .where((w) => w.isNotEmpty)
-            .toList();
-        if (words.isEmpty) return '?';
-        if (words.length == 1) {
-          final w = words.first;
-          return (w.length <= 3 ? w : w.substring(0, 3)).toUpperCase();
-        }
-        return words.take(3).map((w) => w[0]).join().toUpperCase();
-      });
 }
 
 // ── Avatar (logo or letter fallback) ─────────────────────────────────────────

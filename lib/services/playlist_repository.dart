@@ -11,38 +11,46 @@ import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
 import 'tflix_service.dart';
 
+/// A [ValueNotifier<int>] with a built-in 150 ms debounce. Rapid [bump]
+/// calls coalesce into a single notification so downstream Riverpod providers
+/// don't rebuild on every individual DB write during a batch refresh.
+class DebouncedVersion extends ValueNotifier<int> {
+  DebouncedVersion() : super(0);
+
+  Timer? _timer;
+
+  void bump() {
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 150), () => value++);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+}
+
 class PlaylistRepository {
-  PlaylistRepository._();
 
-  static final PlaylistRepository instance = PlaylistRepository._();
-
-  final ValueNotifier<int>  channelCount = ValueNotifier<int>(0);
-  final ValueNotifier<bool> isFetching   = ValueNotifier<bool>(false);
+  final ValueNotifier<int>     channelCount = ValueNotifier<int>(0);
+  final ValueNotifier<bool>    isFetching   = ValueNotifier<bool>(false);
+  /// Non-null while the last background fetch ended with an error.
+  /// Cleared when a new fetch starts.
+  final ValueNotifier<String?> fetchError   = ValueNotifier<String?>(null);
 
   // ── Granular version notifiers ────────────────────────────────────────────
-  //
-  // Each notifier drives exactly one dashboard section provider. Bumping only
-  // the relevant notifier means an update to one section (e.g. markWatched on
-  // every channel play) doesn't trigger rebuilds in the other three sections.
-  //
   //  liveVersion   ← refreshTflixMatches
   //  recentVersion ← markWatched
   //  favVersion    ← setFavorite, _bumpAll
   //  groupsVersion ← playlist refreshes, _bumpAll
-  final ValueNotifier<int> liveVersion   = ValueNotifier<int>(0);
-  final ValueNotifier<int> favVersion    = ValueNotifier<int>(0);
-  final ValueNotifier<int> recentVersion = ValueNotifier<int>(0);
-  final ValueNotifier<int> groupsVersion = ValueNotifier<int>(0);
+  final liveVersion   = DebouncedVersion();
+  final favVersion    = DebouncedVersion();
+  final recentVersion = DebouncedVersion();
+  final groupsVersion = DebouncedVersion();
 
   bool _bootstrapped = false;
   Future<void>? _bootstrapFuture;
-
-  // One debounce timer per notifier so rapid bursts (e.g. multiple replaceChannels
-  // calls during a refresh) coalesce into a single provider reload.
-  Timer? _liveTimer;
-  Timer? _favTimer;
-  Timer? _recentTimer;
-  Timer? _groupsTimer;
 
   Future<void> bootstrap() {
     if (_bootstrapped) return Future.value();
@@ -61,6 +69,7 @@ class PlaylistRepository {
 
   Future<void> _bootstrap() async {
     await _storeBuiltInChannels();
+    await _storeBdixChannel();
 
     final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
@@ -68,6 +77,24 @@ class PlaylistRepository {
 
     _bootstrapped = true;
     _seedAndRefresh();
+  }
+
+  Future<void> _storeBdixChannel() async {
+    final playlistId = await DatabaseService.instance.upsertPlaylist(
+      name: 'BDIX TV',
+      url:  'kivo://bdixtv',
+    );
+    await DatabaseService.instance.replaceChannels(
+      playlistId: playlistId,
+      channels: const [
+        Channel(
+          id:    'bdixtv-onair',
+          name:  'BDIX TV Live',
+          url:   'bdixtv://onair',
+          group: 'Live Sports',
+        ),
+      ],
+    );
   }
 
   Future<void> _storeBuiltInChannels() async {
@@ -83,6 +110,7 @@ class PlaylistRepository {
 
   Future<void> _seedAndRefresh() async {
     isFetching.value = true;
+    fetchError.value = null;
     try {
       await refreshTflixMatches();
 
@@ -109,7 +137,8 @@ class PlaylistRepository {
       }).toList();
 
       if (stale.isNotEmpty) await refreshAllPlaylists();
-    } catch (_) {
+    } catch (e) {
+      fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     } finally {
       isFetching.value = false;
     }
@@ -138,7 +167,7 @@ class PlaylistRepository {
       );
       channelCount.value = await DatabaseService.instance.channelCount();
       // Only live matches changed — don't rebuild other sections.
-      _bumpLive();
+      liveVersion.bump();
     } catch (_) {
     }
   }
@@ -146,6 +175,7 @@ class PlaylistRepository {
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
+    fetchError.value = null;
     try {
       await _clearImageCache();
       await refreshTflixMatches(force: true);
@@ -167,9 +197,11 @@ class PlaylistRepository {
   }
 
   Future<int> refreshAllPlaylists() async {
-    final playlists = await DatabaseService.instance.playlists();
-    for (final playlist in playlists) {
-      if (playlist.isBuiltIn) continue;
+    final playlists     = await DatabaseService.instance.playlists();
+    final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
+    var   failed        = 0;
+
+    for (final playlist in userPlaylists) {
       try {
         final channels = await PlaylistService.instance.fetchChannels(
           url: playlist.url,
@@ -179,12 +211,19 @@ class PlaylistRepository {
           channels:   channels,
         );
       } catch (_) {
+        failed++;
       }
+    }
+
+    // Surface an error only when every playlist failed — partial failures
+    // (one bad source among many) are normal for public IPTV lists.
+    if (userPlaylists.isNotEmpty && failed == userPlaylists.length) {
+      fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     }
 
     final count = await DatabaseService.instance.channelCount();
     channelCount.value = count;
-    _bumpAll(); // channel data changed — refresh all sections
+    _bumpAll();
     return count;
   }
 
@@ -250,39 +289,15 @@ class PlaylistRepository {
     // Only the "Recently watched" section changes — don't reload Live / Fav /
     // Groups. This is the single biggest source of unnecessary dashboard
     // rebuilds (fires every time a channel starts playing).
-    _bumpRecent();
+    recentVersion.bump();
   }
 
   // ── Bump helpers ──────────────────────────────────────────────────────────
 
-  void _bumpLive() {
-    _liveTimer?.cancel();
-    _liveTimer = Timer(const Duration(milliseconds: 150),
-        () => liveVersion.value++);
-  }
-
-  void _bumpFav() {
-    _favTimer?.cancel();
-    _favTimer = Timer(const Duration(milliseconds: 150),
-        () => favVersion.value++);
-  }
-
-  void _bumpRecent() {
-    _recentTimer?.cancel();
-    _recentTimer = Timer(const Duration(milliseconds: 150),
-        () => recentVersion.value++);
-  }
-
-  void _bumpGroups() {
-    _groupsTimer?.cancel();
-    _groupsTimer = Timer(const Duration(milliseconds: 150),
-        () => groupsVersion.value++);
-  }
-
   void _bumpAll() {
-    _bumpLive();
-    _bumpFav();
-    _bumpRecent();
-    _bumpGroups();
+    liveVersion.bump();
+    favVersion.bump();
+    recentVersion.bump();
+    groupsVersion.bump();
   }
 }
