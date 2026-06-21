@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -9,6 +8,7 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/kivo_logo.dart';
 import 'providers/bootstrap_provider.dart';
+import 'providers/theme_mode_provider.dart';
 import 'core/router/app_router.dart';
 import 'services/playlist_repository.dart';
 
@@ -38,10 +38,32 @@ class KivoApp extends ConsumerStatefulWidget {
   ConsumerState<KivoApp> createState() => _KivoAppState();
 }
 
-class _KivoAppState extends ConsumerState<KivoApp> {
+class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
   // Ensures the auto-open navigation fires exactly once per app session,
   // not on every rebuild triggered by theme changes etc.
   bool _autoOpenDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Live matches change constantly — re-scrape tflix whenever the app comes
+    // back to the foreground (cold start is already covered by bootstrap).
+    // The scrape is staleness-guarded, so quick player⇄home bounces are cheap.
+    if (state == AppLifecycleState.resumed) {
+      PlaylistRepository.instance.refreshTflixMatches();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,30 +81,28 @@ class _KivoAppState extends ConsumerState<KivoApp> {
     // Map the TV remote SELECT / OK key to ActivateIntent at the app root.
     // This makes every Material button respond to the remote select key
     // without custom onKeyEvent handlers in individual widgets.
+    // Fixed cinematic palette (no Material You / dynamic colour) so the brand
+    // look is identical on every device. Theme mode is a persisted user choice.
+    final themeMode = ref.watch(themeModeProvider);
+
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.select):      ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
-      // Material You: use the wallpaper-derived scheme when the platform
-      // exposes one, otherwise fall back to the fixed cinematic palette.
-      // Android TV almost always hits the fallback (no dynamic colour there).
-      child: DynamicColorBuilder(
-        builder: (lightDynamic, darkDynamic) => MaterialApp.router(
-          routerConfig:             appRouter,
-          debugShowCheckedModeBanner: false,
-          theme:     AppTheme.light(lightDynamic),
-          darkTheme: AppTheme.dark(darkDynamic),
-          // No in-app theme switcher; follow the TV's system light/dark setting.
-          themeMode: ThemeMode.system,
-          builder: (context, child) {
-            return bootstrap.when(
-              data:    (_)       => child!,
-              error:   (err, _)  => _BootstrapError(error: err),
-              loading: ()        => const _SplashScreen(),
-            );
-          },
-        ),
+      child: MaterialApp.router(
+        routerConfig:             appRouter,
+        debugShowCheckedModeBanner: false,
+        theme:     AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: themeMode,
+        builder: (context, child) {
+          return bootstrap.when(
+            data:    (_)       => child!,
+            error:   (err, _)  => _BootstrapError(error: err),
+            loading: ()        => const _SplashScreen(),
+          );
+        },
       ),
     );
   }
@@ -91,7 +111,7 @@ class _KivoAppState extends ConsumerState<KivoApp> {
     final recent = await PlaylistRepository.instance.recentlyWatched();
     if (!mounted || recent.isEmpty) return;
     // Navigate directly into the player with the last-watched channel.
-    // The player's Back button goes to /channels, so the user is never stuck.
+    // The player's Back button goes to Home, so the user is never stuck.
     appRouter.go('/player', extra: {'channel': recent.first, 'query': ''});
   }
 }

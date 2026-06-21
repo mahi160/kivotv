@@ -9,8 +9,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
-import '../../services/iptvidn_resolver.dart';
 import '../../services/playlist_repository.dart';
+import '../../services/stream_resolver.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
 
@@ -190,11 +190,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        _wasPlayingBeforePause = _player.state.playing;
+        _wasPlayingBeforePause = _player.state.playing || _player.state.buffering;
         _player.pause();
       case AppLifecycleState.resumed:
-        // Only resume if it was playing before — don't override a manual pause.
-        if (_wasPlayingBeforePause) _player.play();
+        // The hardware video surface (mediacodec_embed) is torn down while the
+        // app is backgrounded — just calling play() renders to a dead surface
+        // → the intermittent black screen on reopen. Re-open the current stream
+        // so mpv rebuilds the surface and pulls a fresh live frame. Only when
+        // it was actually playing, so a manual pause isn't overridden.
+        if (_wasPlayingBeforePause) _load();
       default:
         break;
     }
@@ -259,11 +263,13 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     final reference = _currentChannel.url;
     final String playable;
+    Map<String, String>? headers;
     try {
-      if (IptvidnResolver.isResolvable(reference)) {
-        final resolved = await IptvidnResolver.instance.resolve(reference);
+      if (StreamResolver.isResolvable(reference)) {
+        final resolved = await StreamResolver.resolve(reference);
         if (!mounted) return;
         playable = resolved.url;
+        headers  = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
       } else {
         playable = reference;
@@ -272,7 +278,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _handleStreamFailure(); // resolution failure == stream failure
       return;
     }
-    await _player.open(Media(playable), play: true);
+    await _player.open(Media(playable, httpHeaders: headers), play: true);
   }
 
   /// Re-resolves the current channel shortly before its token dies, so a long
@@ -457,7 +463,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (key == LogicalKeyboardKey.goBack    ||
         key == LogicalKeyboardKey.escape    ||
         key == LogicalKeyboardKey.browserBack) {
-      if (mounted) context.go('/channels');
+      if (mounted) context.go('/');
       return KeyEventResult.handled;
     }
 
@@ -563,7 +569,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       onPrevious:       _playPrevious,
                       onNext:           _playNext,
                       onInteraction:    _scheduleOverlayHide,
-                      onBack:           () => context.go('/channels'),
+                      onBack:           () => context.go('/'),
                       onToggleList:     _toggleChannelList,
                       playFocusNode:    _playFocusNode,
                       onToggleFavorite: _toggleCurrentFavorite,

@@ -2,14 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// A playable stream URL produced by [IptvidnResolver], plus the moment its
-/// token expires (parsed from the Flussonic token, may be null if unparseable).
-class ResolvedStream {
-  const ResolvedStream({required this.url, this.expiresAt});
-
-  final String url;
-  final DateTime? expiresAt;
-}
+import 'resolved_stream.dart';
 
 /// Turns an `iptvidn://<slug>` channel reference into a currently-playable HLS
 /// URL (see CONTEXT.md → "stream resolution").

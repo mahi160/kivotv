@@ -53,7 +53,7 @@ class ChannelListPanel extends StatelessWidget {
                   child: Text(
                     'Channels',
                     style: TextStyle(
-                      fontFamily:  'Inter',
+                      fontFamily:  'Outfit',
                       color:       Colors.white,
                       fontSize:    18,
                       fontWeight:  FontWeight.w700,
@@ -63,7 +63,7 @@ class ChannelListPanel extends StatelessWidget {
                 Text(
                   '${channels.length}',
                   style: const TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Outfit',
                     color:      Colors.white54,
                     fontSize:   14,
                   ),
@@ -78,7 +78,7 @@ class ChannelListPanel extends StatelessWidget {
                 ? const Center(
                     child: Text('Loading…',
                         style: TextStyle(
-                          fontFamily: 'Inter', color: Colors.white54)),
+                          fontFamily: 'Outfit', color: Colors.white54)),
                   )
                 : ListView.builder(
                     controller: scrollController,
@@ -104,7 +104,7 @@ class ChannelListPanel extends StatelessWidget {
             child: Text(
               'Long press to favourite',
               style: TextStyle(
-                fontFamily: 'Inter', color: Colors.white30, fontSize: 12),
+                fontFamily: 'Outfit', color: Colors.white30, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ),
@@ -176,7 +176,7 @@ class _SidebarItem extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily:  'Inter',
+                      fontFamily:  'Outfit',
                       color:       isCurrent ? AppColors.sandMid : Colors.white,
                       fontSize:    15,
                       fontWeight:  FontWeight.w600,
@@ -188,7 +188,7 @@ class _SidebarItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Outfit',
                         color:   Colors.white54,
                         fontSize: 12,
                       ),

@@ -5,47 +5,48 @@ import 'app_spacing.dart';
 
 /// Central theme factory for Kivo.
 ///
-/// Uses the bundled Inter font (assets/fonts/) rather than fetching it from
+/// Uses the bundled Outfit font (assets/fonts/) rather than fetching it from
 /// the network at runtime, so the UI is pixel-perfect on first launch even
 /// on TVs with slow or no internet connectivity.
+///
+/// The app uses a fixed cinematic palette (no Material You / dynamic colour) so
+/// the brand look is identical on every device.
 ///
 /// Usage in [MaterialApp.router]:
 /// ```dart
 /// theme:      AppTheme.light(),
 /// darkTheme:  AppTheme.dark(),
-/// themeMode:  ThemeMode.system,
+/// themeMode:  ref.watch(themeModeProvider),
 /// ```
 abstract final class AppTheme {
-  /// [dynamicScheme] is the wallpaper-derived Material You scheme when the
-  /// platform provides one (phones / some Google TV). It's null on most
-  /// Android TV hardware, where we fall back to the fixed cinematic palette.
-  static ThemeData light([ColorScheme? dynamicScheme]) =>
-      _build(Brightness.light, dynamicScheme);
-  static ThemeData dark([ColorScheme? dynamicScheme]) =>
-      _build(Brightness.dark, dynamicScheme);
+  static const fontFamily = 'Outfit';
 
-  static ThemeData _build(Brightness brightness, [ColorScheme? dynamicScheme]) {
-    final isDark = brightness == Brightness.dark;
+  static ThemeData light() => _build(Brightness.light);
+  static ThemeData dark()  => _build(Brightness.dark);
 
-    final colorScheme = dynamicScheme ??
-        ColorScheme.fromSeed(
-          seedColor:   AppColors.oceanDeepBlue,
-          brightness:  brightness,
-          surface:     isDark ? AppColors.darkSurface     : AppColors.lightSurface,
-          onSurface:   isDark ? AppColors.darkOnSurface   : AppColors.lightOnSurface,
-          primary:     AppColors.oceanDeepBlue,
-          onPrimary:   Colors.white,
-          secondary:   AppColors.warmSandyBeige,
-          onSecondary: AppColors.lightOnSurface,
-          tertiary:    AppColors.goldenDriftwood,
-          onTertiary:  AppColors.lightOnSurface,
-          error:       AppColors.error,
-        );
+  static ThemeData _build(Brightness brightness) {
+    final isDark  = brightness == Brightness.dark;
+    final primary = AppColors.primary(isDark);
+
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor:   primary,
+      brightness:  brightness,
+      surface:     isDark ? AppColors.darkSurface   : AppColors.lightSurface,
+      onSurface:   isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
+      primary:     primary,
+      onPrimary:   isDark ? AppColors.darkBackground : Colors.white,
+      secondary:   AppColors.accentBright,
+      onSecondary: AppColors.lightOnSurface,
+      tertiary:    primary,
+      onTertiary:  isDark ? AppColors.darkBackground : Colors.white,
+      error:       AppColors.error,
+    );
 
     return ThemeData(
       useMaterial3:  true,
       brightness:    brightness,
       colorScheme:   colorScheme,
+      fontFamily:    fontFamily,
 
       // ── Scaffold ───────────────────────────────────────────────────────
       scaffoldBackgroundColor:
@@ -64,14 +65,14 @@ abstract final class AppTheme {
       // ── Elevated buttons ───────────────────────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.oceanDeepBlue,
-          foregroundColor: Colors.white,
+          backgroundColor: primary,
+          foregroundColor: isDark ? AppColors.darkBackground : Colors.white,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical:   AppSpacing.sm + 4,
           ),
           textStyle: const TextStyle(
-            fontFamily: 'Inter',
+            fontFamily: fontFamily,
             fontSize:   18,
             fontWeight: FontWeight.w700,
           ),
@@ -83,9 +84,7 @@ abstract final class AppTheme {
 
       // ── Text buttons ───────────────────────────────────────────────────
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.oceanDeepBlue,
-        ),
+        style: TextButton.styleFrom(foregroundColor: primary),
       ),
 
       // ── Icon buttons ───────────────────────────────────────────────────
@@ -117,10 +116,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          borderSide: const BorderSide(
-            color: AppColors.oceanDeepBlue,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: primary, width: 2),
         ),
         hintStyle: TextStyle(
           color: isDark
@@ -144,6 +140,13 @@ abstract final class AppTheme {
         ),
       ),
 
+      // ── Drawer ─────────────────────────────────────────────────────────
+      drawerTheme: DrawerThemeData(
+        backgroundColor: isDark ? AppColors.darkHeader : AppColors.lightHeader,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(),
+      ),
+
       // ── Dialogs ────────────────────────────────────────────────────────
       dialogTheme: DialogThemeData(
         backgroundColor: isDark
@@ -155,11 +158,9 @@ abstract final class AppTheme {
       ),
 
       // ── Progress indicator ─────────────────────────────────────────────
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.oceanDeepBlue,
-      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: primary),
 
-      // ── Text theme (Inter, bundled) ────────────────────────────────────
+      // ── Text theme (Outfit, bundled) ───────────────────────────────────
       textTheme:        _buildTextTheme(isDark),
       primaryTextTheme: _buildTextTheme(isDark),
 
@@ -176,9 +177,9 @@ abstract final class AppTheme {
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
 
-    // All styles use the bundled Inter family. FontWeight values must match
+    // All styles use the bundled Outfit family. FontWeight values must match
     // the weights declared in pubspec.yaml (400/500/600/700/900).
-    TextStyle inter({
+    TextStyle outfit({
       required double fontSize,
       required FontWeight fontWeight,
       required Color color,
@@ -186,7 +187,7 @@ abstract final class AppTheme {
       double? height,
     }) =>
         TextStyle(
-          fontFamily:    'Inter',
+          fontFamily:    fontFamily,
           fontSize:      fontSize,
           fontWeight:    fontWeight,
           color:         color,
@@ -195,25 +196,25 @@ abstract final class AppTheme {
         );
 
     return TextTheme(
-      displayLarge:  inter(fontSize: 42, fontWeight: FontWeight.w900,
+      displayLarge:  outfit(fontSize: 42, fontWeight: FontWeight.w700,
           color: onSurface, letterSpacing: -0.5),
-      headlineLarge: inter(fontSize: 34, fontWeight: FontWeight.w900,
-          color: onSurface, letterSpacing: -0.25),
-      headlineMedium: inter(fontSize: 26, fontWeight: FontWeight.w700,
+      headlineLarge: outfit(fontSize: 34, fontWeight: FontWeight.w700,
+          color: onSurface, letterSpacing: -0.6),
+      headlineMedium: outfit(fontSize: 26, fontWeight: FontWeight.w600,
+          color: onSurface, letterSpacing: -0.3),
+      titleLarge:  outfit(fontSize: 22, fontWeight: FontWeight.w600,
+          color: onSurface, letterSpacing: -0.3),
+      titleMedium: outfit(fontSize: 19, fontWeight: FontWeight.w600,
           color: onSurface),
-      titleLarge:  inter(fontSize: 22, fontWeight: FontWeight.w700,
+      titleSmall:  outfit(fontSize: 16, fontWeight: FontWeight.w500,
           color: onSurface),
-      titleMedium: inter(fontSize: 19, fontWeight: FontWeight.w700,
+      bodyLarge:   outfit(fontSize: 18, fontWeight: FontWeight.w400,
           color: onSurface),
-      titleSmall:  inter(fontSize: 16, fontWeight: FontWeight.w600,
-          color: onSurface),
-      bodyLarge:   inter(fontSize: 18, fontWeight: FontWeight.w400,
-          color: onSurface),
-      bodyMedium:  inter(fontSize: 16, fontWeight: FontWeight.w400,
+      bodyMedium:  outfit(fontSize: 16, fontWeight: FontWeight.w400,
           color: onSurfaceVariant),
-      bodySmall:   inter(fontSize: 14, fontWeight: FontWeight.w400,
+      bodySmall:   outfit(fontSize: 14, fontWeight: FontWeight.w400,
           color: onSurfaceVariant),
-      labelLarge:  inter(fontSize: 18, fontWeight: FontWeight.w700,
+      labelLarge:  outfit(fontSize: 18, fontWeight: FontWeight.w600,
           color: onSurface),
     );
   }

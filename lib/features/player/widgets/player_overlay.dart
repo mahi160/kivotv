@@ -96,18 +96,14 @@ class PlayerOverlay extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (channel.group != null && channel.group!.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            channel.group!,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.white60),
-                          ),
-                        ),
                     ],
                   ),
                 ),
+                // Category chip on the side.
+                if (channel.group != null && channel.group!.isNotEmpty) ...[
+                  _CategoryChip(label: channel.group!),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
                 const LiveClock(),
               ],
             ),
@@ -183,7 +179,43 @@ class PlayerOverlay extends StatelessWidget {
   }
 }
 
-// ── LIVE badge ──────────────────────────────────────────────────────────────
+// ── Category chip ──────────────────────────────────────────────────
+
+/// The current channel's category, shown beside the clock while watching.
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sell_rounded, size: 15, color: AppColors.accentBright),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color:      Colors.white,
+              fontSize:   15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── LIVE badge ─────────────────────────────────────────────────
 
 /// Small "LIVE" chip shown beside the channel name — a universally understood
 /// cue that this is a live broadcast, not a recording.
@@ -212,11 +244,11 @@ class _LiveBadge extends StatelessWidget {
           Text(
             'LIVE',
             style: TextStyle(
-              fontFamily:    'Inter',
+              fontFamily:    'Outfit',
               color:         Colors.white,
               fontSize:      13,
-              fontWeight:    FontWeight.w800,
-              letterSpacing: 1.0,
+              fontWeight:    FontWeight.w700,
+              letterSpacing: 1.8,
             ),
           ),
         ],
@@ -245,10 +277,10 @@ class _ChannelNumberPill extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          fontFamily:    'Inter',
+          fontFamily:    'Outfit',
           color:         Colors.white,
           fontSize:      18,
-          fontWeight:    FontWeight.w700,
+          fontWeight:    FontWeight.w600,
           letterSpacing: 0.5,
         ),
       ),

@@ -1,111 +1,58 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
-/// The Kivo logomark.
+/// The Kivo logomark — a play glyph that sits on the brand-coloured tile drawn
+/// by its parent (nav bar, drawer, splash).
 ///
-/// The shape reads as both the letter K and a play button ▶:
-/// - Left vertical bar  = K's spine
-/// - Two diagonal arms  = K's characteristic diagonals
-/// - Arms converge at a single right-side point = ▶ play tip
-/// - V-notch on the inner-left edge = K's characteristic indent
-///
-/// Colour: gradient left (Golden Driftwood) → right (Ocean Deep Blue).
+/// Matches the redesign: a rounded vertical bar + a play triangle, rendered in
+/// a single solid [color] (white by default, for contrast on the amber/teal
+/// brand square).
 class KivoLogo extends StatelessWidget {
-  const KivoLogo({super.key, this.size = 48});
+  const KivoLogo({super.key, this.size = 48, this.color = Colors.white});
 
   final double size;
+  final Color  color;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(painter: _KivoLogoPainter()),
+      child: CustomPaint(painter: _KivoLogoPainter(color)),
     );
   }
 }
 
 class _KivoLogoPainter extends CustomPainter {
-  const _KivoLogoPainter();
+  const _KivoLogoPainter(this.color);
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // ── Gradient: ocean blue (left) → golden driftwood (right) ──────────────
-    final gradient = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: const [
-        AppColors.goldenDriftwood, // #E3C9A4 — warm golden at the spine/left
-        AppColors.oceanDeepBlue,   // #5D768B — ocean blue at the play tip/right
-      ],
-    ).createShader(Rect.fromLTWH(0, 0, w, h));
-
+    // Coordinates are authored on the design's 0..38 viewBox, then scaled to
+    // the requested paint size so the mark stays crisp at any dimension.
+    final s = size.width / 38.0;
     final paint = Paint()
-      ..shader = gradient
-      ..style  = PaintingStyle.fill
+      ..color       = color
+      ..style       = PaintingStyle.fill
       ..isAntiAlias = true;
 
-    // ── Path ─────────────────────────────────────────────────────────────────
-    //
-    // Normalised coordinates (multiply by w / h):
-    //
-    //  (0.14, 0.08) ── (0.33, 0.08)
-    //                     ╲ upper arm (quadratic bezier)
-    //                      ──────────────► (0.92, 0.50)  ← play tip
-    //                      ──────────────  (0.92, 0.50)
-    //                     ╱ lower arm (quadratic bezier)
-    //  (0.14, 0.92) ── (0.33, 0.92)
-    //     │
-    //   spine left side up to the notch:
-    //     │ (0.14, 0.62) → (0.28, 0.50) ← notch vertex (K indent)
-    //     │ (0.14, 0.38) → close
-    //
-
-    final path = Path();
-
-    // Spine top-left → top-right corner of spine
-    path.moveTo(w * 0.14, h * 0.08);
-    path.lineTo(w * 0.33, h * 0.08);
-
-    // Upper arm — slight inward curve gives dynamism without losing the K feel
-    path.quadraticBezierTo(
-      w * 0.62, h * 0.27,   // control point
-      w * 0.92, h * 0.50,   // play tip
+    // ── Vertical bar (the "spine") ──────────────────────────────────────────
+    final bar = RRect.fromRectAndRadius(
+      Rect.fromLTWH(10 * s, 10 * s, 4 * s, 18 * s),
+      Radius.circular(2 * s),
     );
+    canvas.drawRRect(bar, paint);
 
-    // Lower arm — symmetric
-    path.quadraticBezierTo(
-      w * 0.62, h * 0.73,   // control point
-      w * 0.33, h * 0.92,   // spine bottom-right
-    );
-
-    // Spine bottom-right → bottom-left
-    path.lineTo(w * 0.14, h * 0.92);
-
-    // Up the left side of the spine to the lower edge of the notch
-    path.lineTo(w * 0.14, h * 0.62);
-
-    // Notch: the characteristic K indent that separates the two arms
-    // Soft angle (not perfectly sharp) for a contemporary feel
-    path.quadraticBezierTo(
-      w * 0.24, h * 0.55,   // softening control
-      w * 0.28, h * 0.50,   // notch vertex
-    );
-    path.quadraticBezierTo(
-      w * 0.24, h * 0.45,   // softening control
-      w * 0.14, h * 0.38,   // upper edge of notch
-    );
-
-    // Close back to spine top-left
-    path.close();
-
-    canvas.drawPath(path, paint);
+    // ── Play triangle ───────────────────────────────────────────────────────
+    final triangle = Path()
+      ..moveTo(16 * s, 10.5 * s)
+      ..lineTo(29 * s, 19 * s)
+      ..lineTo(16 * s, 27.5 * s)
+      ..close();
+    canvas.drawPath(triangle, paint);
   }
 
   @override
-  bool shouldRepaint(_KivoLogoPainter oldDelegate) => false;
+  bool shouldRepaint(_KivoLogoPainter oldDelegate) => oldDelegate.color != color;
 }

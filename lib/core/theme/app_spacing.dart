@@ -26,8 +26,9 @@ abstract final class AppSpacing {
   /// ListView itemExtent so jump-to-current scrolling stays accurate).
   static const tvSidebarTile = 72.0;
 
-  /// Fixed cell height of a channel card in the channels grid.
-  static const tvGridCardExtent = 188.0;
+  /// Fixed cell height of a channel card in the channels grid. Tall enough for
+  /// the logo band + the name/group footer of the redesigned card.
+  static const tvGridCardExtent = 206.0;
 
   /// Max width of a grid card. Grids size cards by this (not a fixed column
   /// count), so the layout stays responsive across 720p/1080p/4K panels.
@@ -35,8 +36,19 @@ abstract final class AppSpacing {
 
   /// Home carousel ("Netflix row") card footprint. Cards are a fixed size in
   /// a horizontal ListView so the row reads as one clean band of equal tiles.
-  static const tvRowCardWidth  = 196.0;
-  static const tvRowCardHeight = 196.0;
+  static const tvRowCardWidth  = 212.0;
+  static const tvRowCardHeight = 200.0;
+
+  /// Compact Live-match card: small logo + name on a slim single-line tile,
+  /// much shorter than a poster card so the Live row reads as a thin band.
+  static const tvLiveCardWidth  = 264.0;
+  static const tvLiveCardHeight = 66.0;
+
+  /// Height of the tinted logo band at the top of a channel card.
+  static const tvCardLogoBand = 116.0;
+
+  /// Height of the persistent top nav bar.
+  static const tvHeaderHeight = 72.0;
   /// Gap between cards inside a home row.
   static const tvRowGap = 20.0;
   /// Vertical gap between one home section and the next.

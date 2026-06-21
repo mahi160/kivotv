@@ -8,14 +8,21 @@ import 'notifier_stream.dart';
 
 class DashboardData {
   const DashboardData({
+    required this.live,
     required this.favorites,
     required this.recent,
+    required this.groups,
   });
 
+  /// Live sports matches scraped from tflix (empty when none are on now).
+  final List<Channel> live;
   final List<Channel> favorites;
   final List<Channel> recent;
+  /// All other channels as (category, channels) rows — the Netflix-style body.
+  final List<MapEntry<String, List<Channel>>> groups;
 
-  bool get isEmpty => favorites.isEmpty && recent.isEmpty;
+  bool get isEmpty =>
+      live.isEmpty && favorites.isEmpty && recent.isEmpty && groups.isEmpty;
 }
 
 // ── Bridge: PlaylistRepository.dashboardVersion ValueNotifier → Riverpod ─────
@@ -42,12 +49,16 @@ final dashboardProvider =
 
   final repo = PlaylistRepository.instance;
   final results = await Future.wait([
+    repo.liveMatches(),
     repo.favoriteChannels(),
     repo.recentlyWatched(),
   ]);
+  final groups = await repo.groupedChannels();
 
   return DashboardData(
-    favorites: results[0],
-    recent: results[1],
+    live:      results[0],
+    favorites: results[1],
+    recent:    results[2],
+    groups:    groups,
   );
 });

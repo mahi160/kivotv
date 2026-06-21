@@ -203,39 +203,6 @@ ON CONFLICT(url) DO UPDATE SET
     });
   }
 
-  // ── Channels — upsert (built-in / sample channels) ─────────────────────────
-
-  Future<void> upsertChannels({
-    required int          playlistId,
-    required List<Channel> channels,
-  }) async {
-    final db    = await database;
-    final batch = db.batch();
-    for (final channel in channels) {
-      final data = channel.toDb(playlistId: playlistId);
-      batch.rawInsert(
-        '''
-INSERT INTO channels
-  (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(url) DO UPDATE SET
-  id          = excluded.id,
-  playlist_id = excluded.playlist_id,
-  name        = excluded.name,
-  logo        = excluded.logo,
-  group_name  = excluded.group_name,
-  search_text = excluded.search_text
-''',
-        [
-          data['id'],  data['playlist_id'], data['name'], data['url'],
-          data['logo'], data['group_name'], data['search_text'],
-          data['is_favorite'],
-        ],
-      );
-    }
-    await batch.commit(noResult: true);
-  }
-
   // ── Channels — queries ─────────────────────────────────────────────────────
 
   Future<int> channelCount() async {
@@ -245,9 +212,10 @@ ON CONFLICT(url) DO UPDATE SET
   }
 
   Future<List<Channel>> channels({
-    String query  = '',
-    int    limit  = 100,
-    int    offset = 0,
+    String  query  = '',
+    String? group,
+    int     limit  = 100,
+    int     offset = 0,
   }) async {
     final db              = await database;
     final normalizedQuery = query.trim().toLowerCase();
@@ -259,15 +227,50 @@ ON CONFLICT(url) DO UPDATE SET
       args.add('%${_escapeLike(normalizedQuery)}%');
     }
 
+    if (group != null && group.isNotEmpty) {
+      where.add('group_name = ?');
+      args.add(group);
+    }
+
     final rows = await db.query(
       'channels',
       where:     where.isEmpty ? null : where.join(' AND '),
       whereArgs: args.isEmpty  ? null : args,
-      orderBy:   'name COLLATE NOCASE ASC',
+      // Cluster by category (grouped channels first, A–Z within each group;
+      // ungrouped last) rather than one flat alphabetical list.
+      orderBy:   'group_name IS NULL, group_name COLLATE NOCASE ASC, '
+                 'name COLLATE NOCASE ASC',
       limit:     limit,
       offset:    offset,
     );
     return rows.map(Channel.fromDb).toList();
+  }
+
+  /// All non-tflix channels grouped by category, for the Netflix-style Home
+  /// rows. Each group's channels are A–Z; groups are ordered biggest-first,
+  /// with ungrouped channels collected under "Other" and pushed to the end.
+  /// (tflix live matches are excluded — they have their own "Live now" row.)
+  Future<List<MapEntry<String, List<Channel>>>> channelsByGroup() async {
+    final db = await database;
+    final rows = await db.query(
+      'channels',
+      where:   "url NOT LIKE 'tflix://%'",
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    final byGroup = <String, List<Channel>>{};
+    for (final row in rows) {
+      final c = Channel.fromDb(row);
+      final g = (c.group == null || c.group!.isEmpty) ? 'Other' : c.group!;
+      (byGroup[g] ??= <Channel>[]).add(c);
+    }
+    final entries = byGroup.entries.toList()
+      ..sort((a, b) {
+        final ao = a.key == 'Other' ? 1 : 0;
+        final bo = b.key == 'Other' ? 1 : 0;
+        if (ao != bo) return ao - bo;            // Other last
+        return b.value.length.compareTo(a.value.length); // biggest first
+      });
+    return entries;
   }
 
   Future<List<Channel>> favoriteChannels({int limit = 12}) async {
@@ -275,6 +278,18 @@ ON CONFLICT(url) DO UPDATE SET
     final rows = await db.query(
       'channels',
       where:   'is_favorite = 1',
+      orderBy: 'name COLLATE NOCASE ASC',
+      limit:   limit,
+    );
+    return rows.map(Channel.fromDb).toList();
+  }
+
+  /// Live matches scraped from tflix (their refs use the `tflix://` scheme).
+  Future<List<Channel>> liveMatches({int limit = 40}) async {
+    final db   = await database;
+    final rows = await db.query(
+      'channels',
+      where:   "url LIKE 'tflix://%'",
       orderBy: 'name COLLATE NOCASE ASC',
       limit:   limit,
     );

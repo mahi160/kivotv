@@ -38,11 +38,13 @@ class _LiveClockState extends State<LiveClock> {
     return Text(
       '$h:$m',
       style: const TextStyle(
-        fontFamily:  'Inter',
-        fontSize:    22,
-        fontWeight:  FontWeight.w700,
-        color:       Colors.white,
-        shadows:     [Shadow(blurRadius: 6)],
+        fontFamily:    'Outfit',
+        fontSize:      26,
+        fontWeight:    FontWeight.w400,
+        letterSpacing: 3,
+        color:         Colors.white,
+        fontFeatures:  [FontFeature.tabularFigures()],
+        shadows:       [Shadow(blurRadius: 6)],
       ),
     );
   }

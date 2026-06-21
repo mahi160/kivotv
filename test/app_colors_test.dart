@@ -3,20 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kivo/core/theme/app_colors.dart';
 
 void main() {
-  group('AppColors palette (dark-cinematic, single accent)', () {
-    test('accent is a vivid blue', () {
+  group('AppColors palette (warm-cinematic, one accent per mode)', () {
+    test('dark accent is a warm amber', () {
       final hsl = HSLColor.fromColor(AppColors.accent);
-      expect(hsl.hue, inInclusiveRange(200, 240));
+      expect(hsl.hue, inInclusiveRange(20, 45));
       expect(hsl.saturation, greaterThan(0.6)); // vivid, not muted
     });
 
-    test('there is ONE accent: primary, favourite + focus all derive from it', () {
+    test('light accent is a teal', () {
+      final hsl = HSLColor.fromColor(AppColors.lightAccent);
+      expect(hsl.hue, inInclusiveRange(180, 210));
+      expect(hsl.saturation, greaterThan(0.4));
+    });
+
+    test('there is ONE accent per mode: primary, favourite + focus derive from it', () {
+      // Dark mode: everything is the amber accent.
       expect(AppColors.oceanPrimary, AppColors.accent);
       expect(AppColors.favActive, AppColors.accent);
-      // The D-pad focus highlight is always the (bright) accent.
-      for (final c in [AppColors.focus(true), AppColors.focus(false)]) {
-        expect(HSLColor.fromColor(c).hue, inInclusiveRange(200, 240));
-      }
+      expect(AppColors.primary(true), AppColors.accent);
+      expect(HSLColor.fromColor(AppColors.focus(true)).hue,
+          inInclusiveRange(20, 45));
+      // Light mode: everything is the teal accent.
+      expect(AppColors.primary(false), AppColors.lightAccent);
+      expect(HSLColor.fromColor(AppColors.focus(false)).hue,
+          inInclusiveRange(180, 210));
     });
 
     test('error is distinctly red', () {

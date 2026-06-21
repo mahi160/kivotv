@@ -5,6 +5,7 @@ import '../models/channel.dart';
 import '../core/db/database_service.dart';
 import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
+import 'tflix_service.dart';
 
 class PlaylistRepository {
   PlaylistRepository._();
@@ -53,12 +54,18 @@ class PlaylistRepository {
   /// The iptvidn channels are a hardcoded, built-in playlist (kivo:// URL, so
   /// the refresh logic never tries to HTTP-fetch it). Their `url` is an
   /// `iptvidn://<slug>` reference resolved at play time.
+  ///
+  /// Uses replaceChannels (not upsert) so the playlist is always EXACTLY the
+  /// current hardcoded set: channels dropped from a later build are pruned
+  /// rather than lingering forever, and the count stays deterministic.
+  /// Favourites on surviving channels are preserved (the upsert inside
+  /// replaceChannels never overwrites is_favorite).
   Future<void> _storeBuiltInChannels() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'IPTV IDN',
       url:  'kivo://iptvidn',
     );
-    await DatabaseService.instance.upsertChannels(
+    await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
       channels:   iptvidnChannels,
     );
@@ -70,6 +77,9 @@ class PlaylistRepository {
   Future<void> _seedAndRefresh() async {
     isFetching.value = true;
     try {
+      // Live sports matches change constantly — refresh them every launch.
+      await refreshTflixMatches();
+
       final prefs       = await SharedPreferences.getInstance();
       final alreadyDone = prefs.getBool(_seededKey) ?? false;
 
@@ -97,6 +107,57 @@ class PlaylistRepository {
       if (stale.isNotEmpty) await refreshAllPlaylists();
     } catch (_) {
       // Background failures are silent — the UI shows whatever is cached.
+    } finally {
+      isFetching.value = false;
+    }
+  }
+
+  DateTime? _lastTflixScrape;
+
+  /// Scrapes tflix.pro for the currently-LIVE matches and stores them under a
+  /// built-in playlist via replaceChannels (finished/upcoming matches are
+  /// pruned). The built-in `kivo://` URL means the M3U refresh loop never
+  /// touches it. Non-fatal: on failure the previously-cached matches stay.
+  ///
+  /// Matches change constantly, so this runs on cold start AND on every app
+  /// resume (see KivoApp). The [minInterval] guard skips redundant scrapes
+  /// when the app is bounced quickly (e.g. player ⇄ home); pass [force] to
+  /// override.
+  Future<void> refreshTflixMatches({
+    bool force = false,
+    Duration minInterval = const Duration(minutes: 2),
+  }) async {
+    final last = _lastTflixScrape;
+    if (!force && last != null && DateTime.now().difference(last) < minInterval) {
+      return;
+    }
+    try {
+      final matches = await TflixService.instance.fetchLiveMatches();
+      _lastTflixScrape = DateTime.now();
+      final playlistId = await DatabaseService.instance.upsertPlaylist(
+        name: 'TFLIX Live',
+        url:  'kivo://tflix',
+      );
+      await DatabaseService.instance.replaceChannels(
+        playlistId: playlistId,
+        channels:   matches,
+      );
+      channelCount.value = await DatabaseService.instance.channelCount();
+      _bumpDashboard();
+    } catch (_) {
+      // tflix unreachable — keep whatever matches are cached.
+    }
+  }
+
+  /// User-triggered refresh (Settings → Sources): re-scrape tflix and re-fetch
+  /// the M3U playlists right now. Surfaces progress through [isFetching] so the
+  /// settings row can show a spinner.
+  Future<void> manualRefresh() async {
+    if (isFetching.value) return;
+    isFetching.value = true;
+    try {
+      await refreshTflixMatches(force: true);
+      await refreshAllPlaylists();
     } finally {
       isFetching.value = false;
     }
@@ -158,16 +219,24 @@ class PlaylistRepository {
   }
 
   Future<List<Channel>> channels({
-    String query  = '',
-    int    limit  = 100,
-    int    offset = 0,
+    String  query  = '',
+    String? group,
+    int     limit  = 100,
+    int     offset = 0,
   }) {
     return DatabaseService.instance.channels(
       query:  query,
+      group:  group,
       limit:  limit,
       offset: offset,
     );
   }
+
+  Future<List<MapEntry<String, List<Channel>>>> groupedChannels() =>
+      DatabaseService.instance.channelsByGroup();
+
+  Future<List<Channel>> liveMatches() =>
+      DatabaseService.instance.liveMatches();
 
   Future<List<Channel>> favoriteChannels() =>
       DatabaseService.instance.favoriteChannels();
