@@ -392,7 +392,7 @@ ON CONFLICT(url) DO UPDATE SET
 WITH top_groups AS (
   SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
   FROM   channels
-  WHERE  url NOT LIKE 'tflix://%'
+  WHERE  url NOT LIKE 'tflix://%' AND url NOT LIKE 'bdixtv://%'
   GROUP  BY _g
   ORDER  BY COUNT(*) DESC
   LIMIT  ?
@@ -438,12 +438,13 @@ ORDER BY _g COLLATE NOCASE ASC, name COLLATE NOCASE ASC
     return rows.map(Channel.fromDb).toList();
   }
 
-  /// Live matches scraped from tflix (their refs use the `tflix://` scheme).
+  /// Live channels shown in the "Live Now" dashboard row.
+  /// Includes tflix matches (`tflix://`) and built-in live streams (`bdixtv://`).
   Future<List<Channel>> liveMatches({int limit = 40}) async {
     final db   = await database;
     final rows = await db.query(
       'channels',
-      where:   "url LIKE 'tflix://%'",
+      where:   "url LIKE 'tflix://%' OR url LIKE 'bdixtv://%'",
       orderBy: 'name COLLATE NOCASE ASC',
       limit:   limit,
     );
