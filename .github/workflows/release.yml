@@ -1,12 +1,10 @@
 name: Release APK
 
-# Runs on every version tag (v1.0.0, v1.2.3-beta, …).
-# Push a tag to trigger:
-#   git tag v1.0.0 && git push origin v1.0.0
+# Runs only on pushes to the `prod` branch.
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - prod
 
 jobs:
   build-and-release:
@@ -63,10 +61,10 @@ jobs:
       # ── Rename with version tag ──────────────────────────────────────────
       - name: Rename APKs
         run: |
-          TAG="${{ github.ref_name }}"
+          SHA="$(echo ${{ github.sha }} | cut -c1-7)"
           cd build/app/outputs/flutter-apk
           for f in app-*-release.apk; do
-            mv "$f" "kivo-${TAG}-${f#app-}"
+            mv "$f" "kivo-${SHA}-${f#app-}"
           done
           ls -lh *.apk
 
@@ -74,12 +72,14 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Kivo TV ${{ github.ref_name }}"
+          tag_name: "prod-${{ github.sha }}"
+          name: "Kivo TV — ${{ github.sha }}"
           body: |
-            ## Kivo TV ${{ github.ref_name }}
+            **Branch:** `prod`
+            **Commit:** ${{ github.sha }}
+            **Message:** ${{ github.event.head_commit.message }}
 
             ### Install
-            Download the APK for your device's CPU architecture:
             | File | Architecture |
             |------|-------------|
             | `*arm64-v8a*` | Modern Android TV boxes (most common) |
@@ -88,7 +88,7 @@ jobs:
 
             Sideload via ADB:
             ```
-            adb install kivo-${{ github.ref_name }}-arm64-v8a-release.apk
+            adb install kivo-$(echo ${{ github.sha }} | cut -c1-7)-arm64-v8a-release.apk
             ```
           files: build/app/outputs/flutter-apk/kivo-*.apk
           fail_on_unmatched_files: true
