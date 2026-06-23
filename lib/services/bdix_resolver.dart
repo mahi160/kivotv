@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'hls_probe.dart';
 import 'http_get.dart';
 import 'resolved_stream.dart';
 
@@ -40,23 +42,49 @@ class BdixtvResolver {
 
     if (servers.isEmpty) throw const FormatException('bdix: no servers available');
 
-    // Step 2 — probe each server; return the first that exposes an m3u8.
+    // Step 2 — probe all servers in parallel; return the first live m3u8.
+    final completer = Completer<String>();
+    var settled = 0;
+
     for (final s in servers) {
-      try {
-        final body = await httpGetString(
-          _http,
-          Uri.parse(
-            '$_player?stream=1&id=${Uri.encodeComponent(s['id'] as String)}&t=$ts&pt=$pt',
-          ),
-          referer: _player,
-        );
-        final m = _m3u8Re.firstMatch(body);
-        if (m != null) return ResolvedStream(url: m.group(0)!);
-      } catch (_) {
-        continue;
-      }
+      _probeServer(s, ts, pt, completer).then((url) {
+        if (url != null && !completer.isCompleted) completer.complete(url);
+      }).whenComplete(() {
+        if (++settled == servers.length && !completer.isCompleted) {
+          completer.completeError(
+              const FormatException('bdix: no playable source found'));
+        }
+      });
     }
 
-    throw const FormatException('bdix: no playable source found');
+    return ResolvedStream(url: await completer.future);
+  }
+
+  /// Fetches a server's stream URL from the bdix API and probes it.
+  /// [done] is the shared race completer — checked between the two serial
+  /// steps so that once a winner is found, remaining probes skip the
+  /// expensive HLS manifest fetch.
+  /// Returns the m3u8 URL if live, null otherwise.
+  Future<String?> _probeServer(
+      Map<String, dynamic> s, int ts, String pt, Completer<String> done) async {
+    try {
+      final body = await httpGetString(
+        _http,
+        Uri.parse(
+          '$_player?stream=1&id=${Uri.encodeComponent(s['id'] as String)}&t=$ts&pt=$pt',
+        ),
+        referer: _player,
+      );
+      // Short-circuit if another probe already won while we were fetching.
+      if (done.isCompleted) return null;
+      final m = _m3u8Re.firstMatch(body);
+      if (m == null) return null;
+      final url = m.group(0)!;
+      return await isHlsManifest(url, timeout: const Duration(seconds: 6))
+          ? url
+          : null;
+    } catch (_) {
+      return null;
+    }
   }
 }

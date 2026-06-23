@@ -67,11 +67,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Future<void> _loadNextPage() async {
     if (_loading || !_hasMore || _query.isEmpty) return;
+    // Capture before the await — if the user changes the query while we're
+    // fetching, we discard the page instead of mixing it into the new query.
+    final capturedQuery  = _query;
+    final capturedOffset = _offset;
     setState(() => _loading = true);
     try {
-      final page = await ref.read(repositoryProvider)
-          .channels(query: _query, limit: _pageSize, offset: _offset);
+      final page = await ref.read(repositoryProvider).channels(
+          query: capturedQuery, limit: _pageSize, offset: capturedOffset);
       if (!mounted) return;
+      if (_query != capturedQuery || _offset != capturedOffset) {
+        // Stale result — query or pagination changed while we were fetching.
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _results.addAll(page);
         _offset  += page.length;

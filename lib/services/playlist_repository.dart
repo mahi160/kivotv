@@ -76,6 +76,10 @@ class PlaylistRepository {
     _bumpAll();
 
     _bootstrapped = true;
+    // Fire-and-forget intentionally: bootstrap returns quickly so the UI can
+    // show cached channels while the network refresh runs in the background.
+    // _bootstrapped == true does NOT mean the refresh is complete.
+    // ignore: unawaited_futures
     _seedAndRefresh();
   }
 
@@ -144,16 +148,30 @@ class PlaylistRepository {
     }
   }
 
-  DateTime? _lastTflixScrape;
+  DateTime?      _lastTflixScrape;
+  // In-flight guard: bootstrap, resume, and manual refresh can all call
+  // refreshTflixMatches concurrently. Store the running future so concurrent
+  // callers share one scrape instead of duplicating network + DB work.
+  Future<void>? _tflixRefreshFuture;
 
   Future<void> refreshTflixMatches({
     bool force = false,
     Duration minInterval = const Duration(minutes: 2),
-  }) async {
+  }) {
+    // Return the running future if a scrape is already in flight.
+    final running = _tflixRefreshFuture;
+    if (running != null) return running;
+
     final last = _lastTflixScrape;
     if (!force && last != null && DateTime.now().difference(last) < minInterval) {
-      return;
+      return Future.value();
     }
+    return _tflixRefreshFuture = _doRefreshTflix().whenComplete(() {
+      _tflixRefreshFuture = null;
+    });
+  }
+
+  Future<void> _doRefreshTflix() async {
     try {
       final matches = await TflixService.instance.fetchLiveMatches();
       _lastTflixScrape = DateTime.now();

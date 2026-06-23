@@ -124,6 +124,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // A playing event means the current stream is healthy: cancel the
     // watchdog, reset the skip budget, clear any error, and mark watched.
+    // Stale playing events from a previous open() are prevented by the
+    // _player.stop() call at the start of every _load().
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (!playing) return;
       _loadWatchdog?.cancel();
@@ -285,6 +287,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _hasPlayed     = false;
     _expiryTimer?.cancel();
     if (_error != null) setState(() => _error = null);
+
+    // Kill any buffering/in-flight load from the previous channel before we
+    // even start resolving. This prevents an older _player.open() from
+    // delivering stale playing/error events for the wrong channel.
+    _player.stop();
     _startWatchdog();
 
     final reference = _currentChannel.url;
@@ -293,7 +300,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       if (StreamResolver.isResolvable(reference)) {
         final resolved = await StreamResolver.resolve(reference);
-        // Bail if a newer switch started while we were resolving.
         if (!mounted || gen != _loadGeneration) return;
         playable = resolved.url;
         headers  = resolved.httpHeaders;
@@ -305,9 +311,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (mounted && gen == _loadGeneration) _handleStreamFailure();
       return;
     }
-    // Final guard before opening — covers the non-resolvable path too.
     if (!mounted || gen != _loadGeneration) return;
     await _player.open(Media(playable, httpHeaders: headers), play: true);
+    // Guard after open: if a newer switch started while _player.open() was in
+    // flight, stop what we just opened so the newer call owns playback.
+    if (!mounted || gen != _loadGeneration) {
+      _player.stop();
+    }
   }
 
   /// Re-resolves the current channel shortly before its token dies, so a long

@@ -301,6 +301,13 @@ END''';
 INSERT INTO channels
   (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+-- Global URL uniqueness is intentional: the same live stream URL can only
+-- belong to one playlist at a time. When two playlists contain the same URL,
+-- the last refreshed playlist wins (playlist_id is reassigned here). This
+-- prevents duplicate rows for shared streams (e.g. BDIX/IPTV mirrors that
+-- appear in multiple sources). If independent-playlist ownership is ever
+-- needed, change the UNIQUE constraint to (playlist_id, url) and update
+-- the favorite/recently-watched foreign keys accordingly.
 ON CONFLICT(url) DO UPDATE SET
   id          = excluded.id,
   playlist_id = excluded.playlist_id,

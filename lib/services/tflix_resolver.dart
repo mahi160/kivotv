@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import 'hls_probe.dart';
 import 'http_get.dart';
-
 import 'resolved_stream.dart';
 
 /// Resolves a `tflix://<teams>/match_<id>` reference into a playable HLS URL.
@@ -84,25 +83,6 @@ class TflixResolver {
 
   /// True if [url] returns 200 and an HLS manifest. Probed from the device so a
   /// mirror that's dead/geo-blocked *for this user* is correctly skipped.
-  Future<bool> _isPlayable(String url) async {
-    try {
-      // Separate short-lived client per probe — avoids polluting the persistent
-      // _http pool with dead CDN hosts.
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
-      try {
-        final req = await client.getUrl(Uri.parse(url));
-        req.headers.set(HttpHeaders.userAgentHeader, _ua);
-        final resp = await req.close().timeout(const Duration(seconds: 8));
-        if (resp.statusCode != HttpStatus.ok) return false;
-        // '#EXTM3U' is always the first line of a valid HLS manifest — reading
-        // the first response chunk is enough; no need to download the full file.
-        final first = await resp.first.timeout(const Duration(seconds: 8));
-        return utf8.decode(first, allowMalformed: true).trimLeft().startsWith('#EXTM3U');
-      } finally {
-        client.close(force: true); // also drains the socket
-      }
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> _isPlayable(String url) =>
+      isHlsManifest(url, headers: const {HttpHeaders.userAgentHeader: _ua});
 }
