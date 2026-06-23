@@ -32,20 +32,20 @@ class DebouncedVersion extends ValueNotifier<int> {
 }
 
 class PlaylistRepository {
+  final ValueNotifier<int> channelCount = ValueNotifier<int>(0);
+  final ValueNotifier<bool> isFetching = ValueNotifier<bool>(false);
 
-  final ValueNotifier<int>     channelCount = ValueNotifier<int>(0);
-  final ValueNotifier<bool>    isFetching   = ValueNotifier<bool>(false);
   /// Non-null while the last background fetch ended with an error.
   /// Cleared when a new fetch starts.
-  final ValueNotifier<String?> fetchError   = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> fetchError = ValueNotifier<String?>(null);
 
   // ── Granular version notifiers ────────────────────────────────────────────
   //  liveVersion   ← refreshTflixMatches
   //  recentVersion ← markWatched
   //  favVersion    ← setFavorite, _bumpAll
   //  groupsVersion ← playlist refreshes, _bumpAll
-  final liveVersion   = DebouncedVersion();
-  final favVersion    = DebouncedVersion();
+  final liveVersion = DebouncedVersion();
+  final favVersion = DebouncedVersion();
   final recentVersion = DebouncedVersion();
   final groupsVersion = DebouncedVersion();
 
@@ -58,18 +58,21 @@ class PlaylistRepository {
   }
 
   static const _refreshThreshold = Duration(hours: 24);
+  static const _streamcrichdChannelCount = 51; // 0–50 inclusive.
 
   static const _seededKey = 'kivo_playlists_seeded_v3';
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
-      url:  'https://raw.githubusercontent.com/mahi160/iptv_list/refs/heads/main/Ultimate.m3u',
+      url:
+          'https://raw.githubusercontent.com/mahi160/iptv_list/refs/heads/main/Ultimate.m3u',
     ),
   ];
 
   Future<void> _bootstrap() async {
     await _storeBuiltInChannels();
     await _storeBdixChannel();
+    await _storeStreamcrichdChannels();
 
     final storedCount = await DatabaseService.instance.channelCount();
     channelCount.value = storedCount;
@@ -86,15 +89,15 @@ class PlaylistRepository {
   Future<void> _storeBdixChannel() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'BDIX TV',
-      url:  'kivo://bdixtv',
+      url: 'kivo://bdixtv',
     );
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
       channels: const [
         Channel(
-          id:    'bdixtv-onair',
-          name:  'BDIX TV Live',
-          url:   'bdixtv://onair',
+          id: 'bdixtv-onair',
+          name: 'BDIX TV Live',
+          url: 'bdixtv://onair',
           group: 'Live Sports',
         ),
       ],
@@ -104,11 +107,29 @@ class PlaylistRepository {
   Future<void> _storeBuiltInChannels() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'IPTV IDN',
-      url:  'kivo://iptvidn',
+      url: 'kivo://iptvidn',
     );
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
-      channels:   iptvidnChannels,
+      channels: iptvidnChannels,
+    );
+  }
+
+  Future<void> _storeStreamcrichdChannels() async {
+    final playlistId = await DatabaseService.instance.upsertPlaylist(
+      name: 'StreamCricHD',
+      url: 'kivo://streamcrichd',
+    );
+    await DatabaseService.instance.replaceChannels(
+      playlistId: playlistId,
+      channels: List.generate(_streamcrichdChannelCount, (i) {
+        return Channel(
+          id: 'streamcrichd-$i',
+          name: 'StreamCricHD $i',
+          url: 'https://streamcrichd.com/update/fetch.php?hd=$i',
+          group: 'Live Sports',
+        );
+      }),
     );
   }
 
@@ -118,7 +139,7 @@ class PlaylistRepository {
     try {
       await refreshTflixMatches();
 
-      final prefs       = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
       final alreadyDone = prefs.getBool(_seededKey) ?? false;
 
       if (!alreadyDone) {
@@ -129,11 +150,11 @@ class PlaylistRepository {
         return;
       }
 
-      final playlists    = await DatabaseService.instance.playlists();
+      final playlists = await DatabaseService.instance.playlists();
       final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
       if (userPlaylists.isEmpty) return;
 
-      final now   = DateTime.now();
+      final now = DateTime.now();
       final stale = userPlaylists.where((p) {
         final last = p.lastRefreshedDateTime;
         if (last == null) return true;
@@ -148,7 +169,7 @@ class PlaylistRepository {
     }
   }
 
-  DateTime?      _lastTflixScrape;
+  DateTime? _lastTflixScrape;
   // In-flight guard: bootstrap, resume, and manual refresh can all call
   // refreshTflixMatches concurrently. Store the running future so concurrent
   // callers share one scrape instead of duplicating network + DB work.
@@ -163,7 +184,9 @@ class PlaylistRepository {
     if (running != null) return running;
 
     final last = _lastTflixScrape;
-    if (!force && last != null && DateTime.now().difference(last) < minInterval) {
+    if (!force &&
+        last != null &&
+        DateTime.now().difference(last) < minInterval) {
       return Future.value();
     }
     return _tflixRefreshFuture = _doRefreshTflix().whenComplete(() {
@@ -177,17 +200,16 @@ class PlaylistRepository {
       _lastTflixScrape = DateTime.now();
       final playlistId = await DatabaseService.instance.upsertPlaylist(
         name: 'TFLIX Live',
-        url:  'kivo://tflix',
+        url: 'kivo://tflix',
       );
       await DatabaseService.instance.replaceChannels(
         playlistId: playlistId,
-        channels:   matches,
+        channels: matches,
       );
       channelCount.value = await DatabaseService.instance.channelCount();
       // Only live matches changed — don't rebuild other sections.
       liveVersion.bump();
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   Future<void> manualRefresh() async {
@@ -215,9 +237,9 @@ class PlaylistRepository {
   }
 
   Future<int> refreshAllPlaylists() async {
-    final playlists     = await DatabaseService.instance.playlists();
+    final playlists = await DatabaseService.instance.playlists();
     final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
-    var   failed        = 0;
+    var failed = 0;
 
     for (final playlist in userPlaylists) {
       try {
@@ -226,7 +248,7 @@ class PlaylistRepository {
         );
         await DatabaseService.instance.replaceChannels(
           playlistId: playlist.id,
-          channels:   channels,
+          channels: channels,
         );
       } catch (_) {
         failed++;
@@ -252,16 +274,18 @@ class PlaylistRepository {
     }
     return DatabaseService.instance.upsertPlaylist(
       name: name ?? uri.host,
-      url:  uri.toString(),
+      url: uri.toString(),
     );
   }
 
   Future<int> addAndRefreshPlaylist(String url, {String? name}) async {
     final playlistId = await addPlaylist(url: url, name: name);
-    final channels   = await PlaylistService.instance.fetchChannels(url: url.trim());
+    final channels = await PlaylistService.instance.fetchChannels(
+      url: url.trim(),
+    );
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
-      channels:   channels,
+      channels: channels,
     );
     final count = await DatabaseService.instance.channelCount();
     channelCount.value = count;
@@ -270,15 +294,15 @@ class PlaylistRepository {
   }
 
   Future<List<Channel>> channels({
-    String  query  = '',
+    String query = '',
     String? group,
-    int     limit  = 100,
-    int     offset = 0,
+    int limit = 100,
+    int offset = 0,
   }) {
     return DatabaseService.instance.channels(
-      query:  query,
-      group:  group,
-      limit:  limit,
+      query: query,
+      group: group,
+      limit: limit,
       offset: offset,
     );
   }
@@ -286,8 +310,7 @@ class PlaylistRepository {
   Future<List<MapEntry<String, List<Channel>>>> groupedChannels() =>
       DatabaseService.instance.channelsByGroup();
 
-  Future<List<Channel>> liveMatches() =>
-      DatabaseService.instance.liveMatches();
+  Future<List<Channel>> liveMatches() => DatabaseService.instance.liveMatches();
 
   Future<List<Channel>> favoriteChannels() =>
       DatabaseService.instance.favoriteChannels();
