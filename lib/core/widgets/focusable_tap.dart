@@ -25,12 +25,13 @@ class FocusableTap extends StatefulWidget {
     this.autofocus = false,
   });
 
-  final VoidCallback  onTap;
+  final VoidCallback onTap;
+
   /// TV remote MENU button (KEYCODE_MENU / LogicalKeyboardKey.contextMenu).
   /// Use for secondary actions (e.g. favourite) unreachable via D-pad select.
   final VoidCallback? onMenu;
-  final FocusNode?    focusNode;
-  final bool          autofocus;
+  final FocusNode? focusNode;
+  final bool autofocus;
 
   /// Called every build with the current focus state.
   final Widget Function(BuildContext context, bool focused) builder;
@@ -45,14 +46,26 @@ class _FocusableTapState extends State<FocusableTap> {
   @override
   Widget build(BuildContext context) {
     return Focus(
-      focusNode:     widget.focusNode,
-      autofocus:     widget.autofocus,
-      onFocusChange: (v) => setState(() => _focused = v),
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: (v) {
+        setState(() => _focused = v);
+        if (!v) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || Scrollable.maybeOf(context) == null) return;
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.08,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+          );
+        });
+      },
       onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final k = event.logicalKey;
-        if (k == LogicalKeyboardKey.select  ||
-            k == LogicalKeyboardKey.enter   ||
+        if (k == LogicalKeyboardKey.select ||
+            k == LogicalKeyboardKey.enter ||
             k == LogicalKeyboardKey.gameButtonA) {
           widget.onTap();
           return KeyEventResult.handled;
@@ -65,8 +78,8 @@ class _FocusableTapState extends State<FocusableTap> {
       },
       // GestureDetector kept for emulator mouse-click testing.
       child: GestureDetector(
-        onTap:  widget.onTap,
-        child:  widget.builder(context, _focused),
+        onTap: widget.onTap,
+        child: widget.builder(context, _focused),
       ),
     );
   }

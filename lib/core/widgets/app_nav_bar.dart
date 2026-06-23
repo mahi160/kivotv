@@ -8,7 +8,11 @@ import 'kivo_logo.dart';
 /// Persistent top bar. With the Netflix-style single-screen Home there's no
 /// destination switching, so the bar is just: settings hamburger + brand.
 class AppNavBar extends StatelessWidget {
-  const AppNavBar({super.key, required this.onOpenMenu, required this.onSearch});
+  const AppNavBar({
+    super.key,
+    required this.onOpenMenu,
+    required this.onSearch,
+  });
 
   final VoidCallback onOpenMenu;
   final VoidCallback onSearch;
@@ -23,18 +27,18 @@ class AppNavBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _CircleNavButton(
-            icon:     Icons.menu_rounded,
-            tooltip:  'Settings',
+            icon: Icons.menu_rounded,
+            tooltip: 'Settings',
             bordered: false,
-            onTap:    onOpenMenu,
+            onTap: onOpenMenu,
           ),
           const SizedBox(width: AppSpacing.xs),
           const _LogoMark(),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Text(
             'kivo',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight:    FontWeight.w700,
+              fontWeight: FontWeight.w700,
               letterSpacing: -0.8,
               color: isDark
                   ? AppColors.darkOnSurface
@@ -43,10 +47,10 @@ class AppNavBar extends StatelessWidget {
           ),
           const Spacer(),
           _CircleNavButton(
-            icon:     Icons.search_rounded,
-            tooltip:  'Search',
+            icon: Icons.search_rounded,
+            tooltip: 'Search',
             bordered: true,
-            onTap:    onSearch,
+            onTap: onSearch,
           ),
         ],
       ),
@@ -61,15 +65,15 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = AppColors.primary(isDark);
-    const size    = 40.0;
+    const size = 34.0;
     return Container(
-      width:  size,
+      width: size,
       height: size,
       decoration: BoxDecoration(
         color: primary,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(9),
         boxShadow: [
           BoxShadow(
             color: primary.withValues(alpha: 0.35),
@@ -78,7 +82,7 @@ class _LogoMark extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(7),
+      padding: const EdgeInsets.all(6),
       child: const KivoLogo(),
     );
   }
@@ -94,9 +98,9 @@ class _CircleNavButton extends StatelessWidget {
     required this.onTap,
   });
 
-  final IconData     icon;
-  final String       tooltip;
-  final bool         bordered;
+  final IconData icon;
+  final String tooltip;
+  final bool bordered;
   final VoidCallback onTap;
 
   @override
@@ -108,14 +112,15 @@ class _CircleNavButton extends StatelessWidget {
         : AppColors.lightOnSurfaceVariant;
 
     return Semantics(
-      label:  tooltip,
+      label: tooltip,
       button: true,
       child: FocusableTap(
         onTap: onTap,
         builder: (_, focused) => AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          curve:    Curves.easeOut,
-          width: 44, height: 44,
+          curve: Curves.easeOut,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
@@ -123,22 +128,25 @@ class _CircleNavButton extends StatelessWidget {
               color: focused
                   ? accent
                   : bordered
-                      ? (isDark ? AppColors.darkBorder : AppColors.lightBorder)
-                      : Colors.transparent,
+                  ? (isDark ? AppColors.darkBorder : AppColors.lightBorder)
+                  : Colors.transparent,
               width: focused ? 2 : 1,
             ),
             boxShadow: focused
                 ? [
                     BoxShadow(
-                      color:        accent.withValues(alpha: 0.45),
-                      blurRadius:   20,
+                      color: accent.withValues(alpha: 0.45),
+                      blurRadius: 20,
                       spreadRadius: 1,
                     ),
                   ]
                 : null,
           ),
-          child: Icon(icon, size: AppSpacing.iconSm + 2,
-              color: focused ? accent : onVariant),
+          child: Icon(
+            icon,
+            size: AppSpacing.iconSm + 2,
+            color: focused ? accent : onVariant,
+          ),
         ),
       ),
     );

@@ -24,59 +24,60 @@ class ChannelCard extends StatelessWidget {
     this.autofocus = false,
   });
 
-  final Channel      channel;
-  final VoidCallback  onTap;
+  final Channel channel;
+  final VoidCallback onTap;
+
   /// Grabs D-pad focus on first build (used for the first Home card so the
   /// remote always starts on something the user can press OK on).
-  final bool         autofocus;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
-    final isDark       = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppColors.oceanDeep : AppColors.lightSurface;
-    final accent       = AppColors.focus(isDark);
-    final swatch       = _swatch(channel.name);
-    final text1        = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2        = isDark
+    final accent = AppColors.focus(isDark);
+    final swatch = _swatch(channel.name);
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
-    final hairline     = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final group        = channel.group;
+    final hairline = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final group = channel.group;
 
     return FocusableTap(
-      autofocus:   autofocus,
+      autofocus: autofocus,
       onTap: onTap,
       builder: (context, focused) {
         return AnimatedScale(
           // Kept inside the row/grid gap so a later-painted neighbour never
           // clips the focused card's ring or glow.
-          scale:    focused ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 170),
-          curve:    Curves.easeOutCubic,
+          scale: focused ? 1.10 : 1.0,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 170),
-            curve:    Curves.easeOut,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
             decoration: BoxDecoration(
               color: focused
                   ? (isDark ? AppColors.oceanMid : AppColors.lightSurface)
                   : surfaceColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               border: Border.all(
-                color:       focused ? accent : hairline,
-                width:       focused ? 2 : 1,
+                color: focused ? accent : hairline,
+                width: focused ? 2 : 1,
                 strokeAlign: BorderSide.strokeAlignOutside,
               ),
               boxShadow: focused
                   ? [
                       BoxShadow(
-                        color:        accent.withValues(alpha: 0.45),
-                        blurRadius:   34,
+                        color: accent.withValues(alpha: 0.45),
+                        blurRadius: 34,
                         spreadRadius: 1,
                       ),
                       const BoxShadow(
-                        color:      Color(0x73000000),
+                        color: Color(0x73000000),
                         blurRadius: 22,
-                        offset:     Offset(0, 12),
+                        offset: Offset(0, 12),
                       ),
                     ]
                   : null,
@@ -97,22 +98,26 @@ class ChannelCard extends StatelessWidget {
                           child: Center(
                             child: _CardLogo(
                               logoUrl: channel.logo,
-                              name:    channel.name,
-                              swatch:  swatch,
+                              name: channel.name,
+                              swatch: swatch,
                             ),
                           ),
                         ),
                         if (channel.isFavorite)
                           Positioned(
-                            top: 8, right: 9,
+                            top: 8,
+                            right: 9,
                             child: Container(
                               padding: const EdgeInsets.all(5),
                               decoration: const BoxDecoration(
                                 color: Color(0x99000000),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.star_rounded,
-                                  size: 16, color: AppColors.primary(isDark)),
+                              child: Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: AppColors.primary(isDark),
+                              ),
                             ),
                           ),
                       ],
@@ -123,20 +128,19 @@ class ChannelCard extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
+                      padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
                       decoration: BoxDecoration(
                         border: Border(top: BorderSide(color: hairline)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment:  MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             channel.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
                               // Slightly brighter on focus in dark mode so the
                               // selected channel name pops against the navy lift.
@@ -145,11 +149,12 @@ class ChannelCard extends StatelessWidget {
                             ),
                           ),
                           if (group != null && group.isNotEmpty) ...[
-                            const SizedBox(height: 5),
+                            const SizedBox(height: 3),
                             Row(
                               children: [
                                 Container(
-                                  width: 6, height: 6,
+                                  width: 6,
+                                  height: 6,
                                   decoration: BoxDecoration(
                                     color: AppColors.primary(isDark),
                                     shape: BoxShape.circle,
@@ -185,10 +190,18 @@ class ChannelCard extends StatelessWidget {
   /// sessions so the same channel always gets the same colour.
   static Color _swatch(String name) {
     const swatches = [
-      Color(0xFF8B1A9A), Color(0xFFB03A2E), Color(0xFF2E4057),
-      Color(0xFF6C3483), Color(0xFF0B5345), Color(0xFF1A5276),
-      Color(0xFF922B21), Color(0xFF17408B), Color(0xFFA04000),
-      Color(0xFF1B5E20), Color(0xFF5D2E8C), Color(0xFF004C97),
+      Color(0xFF8B1A9A),
+      Color(0xFFB03A2E),
+      Color(0xFF2E4057),
+      Color(0xFF6C3483),
+      Color(0xFF0B5345),
+      Color(0xFF1A5276),
+      Color(0xFF922B21),
+      Color(0xFF17408B),
+      Color(0xFFA04000),
+      Color(0xFF1B5E20),
+      Color(0xFF5D2E8C),
+      Color(0xFF004C97),
     ];
     if (name.isEmpty) return swatches[0];
     final hash = name.codeUnits.fold(0, (a, b) => a + b);
@@ -206,21 +219,22 @@ class _CardLogo extends StatelessWidget {
   });
 
   final String? logoUrl;
-  final String  name;
-  final Color   swatch;
+  final String name;
+  final Color swatch;
 
   @override
   Widget build(BuildContext context) {
     final url = logoUrl;
     if (url != null && url.isNotEmpty) {
-      return ChannelLogo(logoUrl: url, size: 64, borderRadius: 12);
+      return ChannelLogo(logoUrl: url, size: 58, borderRadius: 10);
     }
 
     // Single letter fallback — matches the sidebar’s ChannelAvatar style so
     // every surface in the app uses the same visual language.
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
-      width: 60, height: 60,
+      width: 56,
+      height: 56,
       decoration: BoxDecoration(
         color: swatch,
         borderRadius: BorderRadius.circular(13),
@@ -229,18 +243,16 @@ class _CardLogo extends StatelessWidget {
       child: Text(
         letter,
         style: const TextStyle(
-          fontFamily:    'Outfit',
-          fontSize:      30,
-          fontWeight:    FontWeight.w700,
+          fontFamily: 'Outfit',
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
           letterSpacing: 0.4,
-          color:         Colors.white,
-          height:        1,
+          color: Colors.white,
+          height: 1,
         ),
       ),
     );
   }
-
-
 }
 
 // ── Avatar (logo or letter fallback) ─────────────────────────────────────────
@@ -257,36 +269,32 @@ class ChannelAvatar extends StatelessWidget {
   });
 
   final String? logoUrl;
-  final String  name;
-  final double  size;
+  final String name;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final url = logoUrl;
     if (url != null && url.isNotEmpty) {
-      return ChannelLogo(
-        logoUrl:      url,
-        size:         size,
-        borderRadius: size * 0.18,
-      );
+      return ChannelLogo(logoUrl: url, size: size, borderRadius: size * 0.18);
     }
 
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
-      width:  size,
+      width: size,
       height: size,
       decoration: BoxDecoration(
-        color:        _letterBg(name),
+        color: _letterBg(name),
         borderRadius: BorderRadius.circular(size * 0.18),
       ),
       alignment: Alignment.center,
       child: Text(
         letter,
         style: TextStyle(
-          fontSize:   size * 0.46,
+          fontSize: size * 0.46,
           fontWeight: FontWeight.w700,
-          color:      Colors.white,
-          height:     1,
+          color: Colors.white,
+          height: 1,
         ),
       ),
     );
@@ -294,9 +302,14 @@ class ChannelAvatar extends StatelessWidget {
 
   static Color _letterBg(String name) {
     const swatches = [
-      Color(0xFF3D6680), Color(0xFF4A7A5C), Color(0xFF6B5080),
-      Color(0xFF7A6040), Color(0xFF3D6870), Color(0xFF7A4040),
-      Color(0xFF405060), Color(0xFF506070),
+      Color(0xFF3D6680),
+      Color(0xFF4A7A5C),
+      Color(0xFF6B5080),
+      Color(0xFF7A6040),
+      Color(0xFF3D6870),
+      Color(0xFF7A4040),
+      Color(0xFF405060),
+      Color(0xFF506070),
     ];
     if (name.isEmpty) return swatches[0];
     final hash = name.codeUnits.fold(0, (a, b) => a ^ b);
