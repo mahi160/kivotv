@@ -51,16 +51,14 @@ class ChannelCard extends StatelessWidget {
         return AnimatedScale(
           // Kept inside the row/grid gap so a later-painted neighbour never
           // clips the focused card's ring or glow.
-          scale: focused ? 1.10 : 1.0,
-          duration: const Duration(milliseconds: 140),
+          scale: focused ? 1.03 : 1.0,
+          duration: const Duration(milliseconds: 110),
           curve: Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 110),
             curve: Curves.easeOut,
             decoration: BoxDecoration(
-              color: focused
-                  ? (isDark ? AppColors.oceanMid : AppColors.lightSurface)
-                  : surfaceColor,
+              color: surfaceColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
               border: Border.all(
                 color: focused ? accent : hairline,
@@ -70,14 +68,9 @@ class ChannelCard extends StatelessWidget {
               boxShadow: focused
                   ? [
                       BoxShadow(
-                        color: accent.withValues(alpha: 0.45),
-                        blurRadius: 34,
-                        spreadRadius: 1,
-                      ),
-                      const BoxShadow(
-                        color: Color(0x73000000),
-                        blurRadius: 22,
-                        offset: Offset(0, 12),
+                        color: accent.withValues(alpha: 0.22),
+                        blurRadius: 12,
+                        spreadRadius: 0,
                       ),
                     ]
                   : null,
@@ -94,7 +87,7 @@ class ChannelCard extends StatelessWidget {
                       fit: StackFit.expand,
                       children: [
                         ColoredBox(
-                          color: swatch.withValues(alpha: isDark ? 0.20 : 0.14),
+                          color: swatch.withValues(alpha: isDark ? 0.10 : 0.08),
                           child: Center(
                             child: _CardLogo(
                               logoUrl: channel.logo,
@@ -128,7 +121,7 @@ class ChannelCard extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 9),
                       decoration: BoxDecoration(
                         border: Border(top: BorderSide(color: hairline)),
                       ),
@@ -150,27 +143,13 @@ class ChannelCard extends StatelessWidget {
                           ),
                           if (group != null && group.isNotEmpty) ...[
                             const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary(isDark),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 7),
-                                Expanded(
-                                  child: Text(
-                                    group,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: text2),
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              group,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(color: text2),
                             ),
                           ],
                         ],
@@ -226,15 +205,15 @@ class _CardLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = logoUrl;
     if (url != null && url.isNotEmpty) {
-      return ChannelLogo(logoUrl: url, size: 58, borderRadius: 10);
+      return ChannelLogo(logoUrl: url, size: 48, borderRadius: 9);
     }
 
     // Single letter fallback — matches the sidebar’s ChannelAvatar style so
     // every surface in the app uses the same visual language.
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     return Container(
-      width: 56,
-      height: 56,
+      width: 46,
+      height: 46,
       decoration: BoxDecoration(
         color: swatch,
         borderRadius: BorderRadius.circular(13),
@@ -244,7 +223,7 @@ class _CardLogo extends StatelessWidget {
         letter,
         style: const TextStyle(
           fontFamily: 'Outfit',
-          fontSize: 28,
+          fontSize: 24,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.4,
           color: Colors.white,

@@ -23,8 +23,8 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
     final saved = prefs.getString(_prefsKey);
     final mode = switch (saved) {
       'light' => ThemeMode.light,
-      'dark'  => ThemeMode.dark,
-      _       => ThemeMode.system,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
     };
     if (mode != state) state = mode;
   }
@@ -40,13 +40,14 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   /// first toggle moves to the opposite of what's on screen.
   Future<void> toggle({required bool systemIsDark}) {
     final effectiveDark = switch (state) {
-      ThemeMode.dark   => true,
-      ThemeMode.light  => false,
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
       ThemeMode.system => systemIsDark,
     };
     return set(effectiveDark ? ThemeMode.light : ThemeMode.dark);
   }
 }
 
-final themeModeProvider =
-    NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
+  ThemeModeNotifier.new,
+);

@@ -42,6 +42,9 @@ class FocusableTap extends StatefulWidget {
 
 class _FocusableTapState extends State<FocusableTap> {
   bool _focused = false;
+  // Guard against queued ensureVisible callbacks firing after focus moved
+  // away (fast D-pad presses queue multiple callbacks; cancel on focus loss).
+  bool _pendingScroll = false;
 
   @override
   Widget build(BuildContext context) {
@@ -50,13 +53,30 @@ class _FocusableTapState extends State<FocusableTap> {
       autofocus: widget.autofocus,
       onFocusChange: (v) {
         setState(() => _focused = v);
-        if (!v) return;
+        if (!v) {
+          _pendingScroll = false;
+          return;
+        }
+        _pendingScroll = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || Scrollable.maybeOf(context) == null) return;
-          Scrollable.ensureVisible(
-            context,
+          if (!mounted || !_pendingScroll) return;
+          _pendingScroll = false;
+          // Scroll ONLY the nearest horizontal row — by going directly to
+          // ScrollPosition.ensureVisible instead of Scrollable.ensureVisible.
+          // The static helper scrolls *all* ancestors (horizontal + vertical),
+          // which would push the section header out of the viewport. Calling
+          // the position directly limits the scroll to one list.
+          final state = Scrollable.maybeOf(context);
+          if (state == null) return;
+          if (axisDirectionToAxis(state.axisDirection) != Axis.horizontal) {
+            return;
+          }
+          final ro = context.findRenderObject();
+          if (ro == null || !ro.attached) return;
+          state.position.ensureVisible(
+            ro,
             alignment: 0.08,
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 120),
             curve: Curves.easeOutCubic,
           );
         });

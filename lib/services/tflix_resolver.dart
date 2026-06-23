@@ -18,8 +18,8 @@ class TflixResolver {
   static final TflixResolver instance = TflixResolver._();
 
   static const _scheme = 'tflix://';
-  static const _base   = 'https://tflix.pro';
-  static const _ua     = 'Mozilla/5.0';
+  static const _base = 'https://tflix.pro';
+  static const _ua = 'Mozilla/5.0';
 
   // Persistent client for tflix.pro requests — reuses the TLS session across
   // multiple resolve() calls (play.php fetch + mirror probes). Saves one full
@@ -33,7 +33,7 @@ class TflixResolver {
   // Inner m3u8 inside a player wrapper: ...?url=<m3u8> (or &url=<m3u8>).
   static final _wrappedUrl = RegExp(r'''[?&]url=(https?://[^"'\s]+)''');
   // A bare .m3u8 that isn't itself a player-wrapper page.
-  static final _bareM3u8   = RegExp(r'''https?://[^"'\s]+\.m3u8[^"'\s]*''');
+  static final _bareM3u8 = RegExp(r'''https?://[^"'\s]+\.m3u8[^"'\s]*''');
 
   /// Ordered, de-duplicated m3u8 candidates from a play.php body. Pure, so it's
   /// unit-tested. Prefers the inner m3u8 of a `?url=` wrapper over bare ones.
@@ -52,9 +52,12 @@ class TflixResolver {
   }
 
   Future<ResolvedStream> resolve(String reference) async {
-    final path       = reference.substring(_scheme.length);
-    final body       = await httpGetString(
-      _http, Uri.parse('$_base/play.php/$path'), referer: '$_base/');
+    final path = reference.substring(_scheme.length);
+    final body = await httpGetString(
+      _http,
+      Uri.parse('$_base/play.php/$path'),
+      referer: '$_base/',
+    );
     final candidates = extractM3u8Candidates(body);
     if (candidates.isEmpty) {
       throw const FormatException('tflix: no direct source for this match');
@@ -62,19 +65,24 @@ class TflixResolver {
 
     // Race all candidates in parallel — first 200+#EXTM3U wins.
     // Sequential was worst-case 6 × 8 s; parallel is one round-trip.
-    final probes    = candidates.take(6).toList();
+    final probes = candidates.take(6).toList();
     final completer = Completer<String>();
-    var   settled   = 0;
+    var settled = 0;
 
     for (final url in probes) {
-      _isPlayable(url).then((ok) {
-        if (ok && !completer.isCompleted) completer.complete(url);
-      }).whenComplete(() {
-        if (++settled == probes.length && !completer.isCompleted) {
-          completer.completeError(
-            const FormatException('tflix: no reachable source for this match'));
-        }
-      });
+      _isPlayable(url)
+          .then((ok) {
+            if (ok && !completer.isCompleted) completer.complete(url);
+          })
+          .whenComplete(() {
+            if (++settled == probes.length && !completer.isCompleted) {
+              completer.completeError(
+                const FormatException(
+                  'tflix: no reachable source for this match',
+                ),
+              );
+            }
+          });
     }
 
     final url = await completer.future;

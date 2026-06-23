@@ -38,7 +38,7 @@ class AppNavBar extends StatelessWidget {
           Text(
             'kivo',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               letterSpacing: -0.8,
               color: isDark
                   ? AppColors.darkOnSurface
@@ -74,13 +74,7 @@ class _LogoMark extends StatelessWidget {
       decoration: BoxDecoration(
         color: primary,
         borderRadius: BorderRadius.circular(9),
-        boxShadow: [
-          BoxShadow(
-            color: primary.withValues(alpha: 0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        boxShadow: null,
       ),
       padding: const EdgeInsets.all(6),
       child: const KivoLogo(),
@@ -117,7 +111,7 @@ class _CircleNavButton extends StatelessWidget {
       child: FocusableTap(
         onTap: onTap,
         builder: (_, focused) => AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 110),
           curve: Curves.easeOut,
           width: 40,
           height: 40,
@@ -132,15 +126,7 @@ class _CircleNavButton extends StatelessWidget {
                   : Colors.transparent,
               width: focused ? 2 : 1,
             ),
-            boxShadow: focused
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.45),
-                      blurRadius: 20,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
+            boxShadow: null,
           ),
           child: Icon(
             icon,

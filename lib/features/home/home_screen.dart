@@ -12,7 +12,6 @@ import '../../core/widgets/focusable_tap.dart';
 import '../../core/widgets/settings_drawer.dart';
 import '../../models/channel.dart';
 import '../../providers/dashboard_provider.dart';
-import '../../providers/fetch_status_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -50,11 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = AppColors.primary(isDark);
     final isReady = ref.watch(dashboardReadyProvider);
-    final fetching = ref.watch(isFetchingProvider).asData?.value == true;
-    final fetchErrMsg = ref.watch(fetchErrorProvider).asData?.value;
 
     return PopScope(
       canPop: false,
@@ -73,111 +68,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             variant: GradientVariant.home,
             child: Column(
               children: [
-                // Slim error banner when a background fetch failed.
-                if (fetchErrMsg != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.tvEdge,
-                      6,
-                      AppSpacing.tvEdge,
-                      0,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.wifi_off_rounded,
-                          size: 13,
-                          color: AppColors.error,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            fetchErrMsg,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: AppColors.error),
-                          ),
-                        ),
-                      ],
-                    ),
+                // ── Nav bar — fixed, never scrolls ──────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.tvEdge,
+                    AppSpacing.sm,
+                    AppSpacing.tvEdge,
+                    0,
                   ),
-                ],
+                  child: AppNavBar(
+                    onOpenMenu: () => showSettings(context),
+                    onSearch: () => context.go('/search'),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.tvHeaderGap),
 
-                // Slim progress bar during background playlist fetch.
-                if (fetching) ...[
-                  LinearProgressIndicator(
-                    minHeight: 3,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation<Color>(primary),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.tvEdge,
-                      4,
-                      AppSpacing.tvEdge,
-                      0,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.downloading_rounded,
-                          size: 13,
-                          color: primary.withValues(alpha: 0.70),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Fetching channels…',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: primary.withValues(alpha: 0.70),
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
+                // ── Scrollable dashboard ──────────────────────────────
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.tvEdge,
-                      AppSpacing.sm,
-                      AppSpacing.tvEdge,
-                      AppSpacing.md,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AppNavBar(
-                          onOpenMenu: () => showSettings(context),
-                          onSearch: () => context.go('/search'),
-                        ),
-                        const SizedBox(height: AppSpacing.tvHeaderGap),
-
-                        Expanded(
-                          // RepaintBoundary isolates the scrollable dashboard
-                          // from the gradient background: focus animations and
-                          // section repaints don't repaint the gradient layer.
-                          // ClipRect contains the list within its allocated
-                          // space so rows scrolled above the viewport don’t
-                          // bleed over the nav bar.
-                          child: ClipRect(
-                            child: RepaintBoundary(
-                              child: isReady
-                                  ? _DashboardList(onOpen: _open)
-                                  : const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: RepaintBoundary(
+                    child: isReady
+                        ? _DashboardList(onOpen: _open)
+                        : const _HomeSkeleton(),
                   ),
                 ),
               ],
             ),
           ),
-        ), // SafeArea
+        ),
       ),
     );
   }
@@ -201,7 +118,10 @@ class _DashboardList extends ConsumerWidget {
     final recent = ref.watch(recentProvider).value ?? [];
     final groups = ref.watch(groupsProvider).value ?? [];
 
-    // Exactly one section gets autofocus — the first non-empty one.
+    // Autofocus goes to the first non-empty section in display order
+    // (Live → Favs → Recent → Groups) so the focused card is always near
+    // the top of the list — Flutter's ensureVisible scroll won't push the
+    // section header above the viewport.
     var autofocusClaimed = false;
     bool claim(List<dynamic> list) {
       if (autofocusClaimed || list.isEmpty) return false;
@@ -209,11 +129,16 @@ class _DashboardList extends ConsumerWidget {
       return true;
     }
 
+    final autofocusLive = claim(live);
+    final autofocusFavs = claim(favs);
+    final autofocusRecent = claim(recent);
+    final autofocusGroups = claim(groups);
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(
+        AppSpacing.tvEdge,
         AppSpacing.xs,
-        AppSpacing.xs,
-        AppSpacing.xs,
+        AppSpacing.tvEdge,
         AppSpacing.xxl,
       ),
       children: [
@@ -223,22 +148,22 @@ class _DashboardList extends ConsumerWidget {
           live: true,
           onOpen: onOpen,
           makeCountLabel: (ch) => '${ch.length} matches',
-          autofocusFirst: claim(live),
+          autofocusFirst: autofocusLive,
         ),
         _ChannelSection(
           channels: favs,
           title: 'Favourites',
           onOpen: onOpen,
           makeCountLabel: (ch) => '${ch.length} channels',
-          autofocusFirst: claim(favs),
+          autofocusFirst: autofocusFavs,
         ),
         _ChannelSection(
           channels: recent,
           title: 'Recently watched',
           onOpen: onOpen,
-          autofocusFirst: claim(recent),
+          autofocusFirst: autofocusRecent,
         ),
-        _GroupsSection(onOpen: onOpen, autofocusFirst: claim(groups)),
+        _GroupsSection(onOpen: onOpen, autofocusFirst: autofocusGroups),
       ],
     );
   }
@@ -340,68 +265,105 @@ class _DashboardSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHeader(title: title, countLabel: countLabel, live: live),
-        const SizedBox(height: AppSpacing.sm),
+    return Focus(
+      // Passenger Focus: invisible to traversal (canRequestFocus/skipTraversal)
+      // but fires onFocusChange when any descendant card is focused. We use
+      // this to scroll the *section* into view (header + cards together) rather
+      // than just the focused card, so the header is never pushed above the
+      // viewport.
+      //
+      // Deferred to addPostFrameCallback so our scroll always wins over any
+      // same-frame horizontal scroll from FocusableTap.
+      //
+      // The Padding child adds 8 px above the header, which becomes part of
+      // this Focus's RenderObject. ensureVisible(alignment:0) therefore lands
+      // with 8 px of breathing room above the header text.
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (hasFocus) {
+        if (!hasFocus) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(title: title, countLabel: countLabel, live: live),
+            const SizedBox(height: AppSpacing.sm),
 
-        // RepaintBoundary per row: a focused card's scale animation stays
-        // in its own compositor layer and doesn't repaint sibling rows.
-        RepaintBoundary(
-          child: SizedBox(
-            height: live
-                ? AppSpacing.tvLiveCardHeight
-                : AppSpacing.tvRowCardHeight,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              // ignore: deprecated_member_use
-              cacheExtent: 1200,
-              itemCount: channels.length,
-              itemBuilder: (context, index) {
-                final isFirst = index == 0;
-                final isLast = index == channels.length - 1;
-                return Focus(
-                  // Boundary guard: consume LEFT at the first card and RIGHT
-                  // at the last card so D-pad navigation never escapes the row
-                  // horizontally into another row.
-                  onKeyEvent: (_, event) {
-                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                    final k = event.logicalKey;
-                    if (isFirst && k == LogicalKeyboardKey.arrowLeft)
-                      return KeyEventResult.handled;
-                    if (isLast && k == LogicalKeyboardKey.arrowRight)
-                      return KeyEventResult.handled;
-                    return KeyEventResult.ignored;
+            // RepaintBoundary per row: a focused card's scale animation stays
+            // in its own compositor layer and doesn't repaint sibling rows.
+            RepaintBoundary(
+              child: SizedBox(
+                height: live
+                    ? AppSpacing.tvLiveCardHeight
+                    : AppSpacing.tvRowCardHeight,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  // ignore: deprecated_member_use
+                  cacheExtent: 1200,
+                  itemCount: channels.length,
+                  itemBuilder: (context, index) {
+                    final isFirst = index == 0;
+                    final isLast = index == channels.length - 1;
+                    return Focus(
+                      // Boundary guard: invisible to traversal, but onKeyEvent fires for
+                      // focused descendants. Consumes LEFT at the first card
+                      // and RIGHT at the last so D-pad never escapes the row.
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: (_, event) {
+                        if (event is! KeyDownEvent) {
+                          return KeyEventResult.ignored;
+                        }
+                        final k = event.logicalKey;
+                        if (isFirst && k == LogicalKeyboardKey.arrowLeft) {
+                          return KeyEventResult.handled;
+                        }
+                        if (isLast && k == LogicalKeyboardKey.arrowRight) {
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: isLast ? 0 : AppSpacing.tvRowGap,
+                        ),
+                        child: SizedBox(
+                          width: live
+                              ? AppSpacing.tvLiveCardWidth
+                              : AppSpacing.tvRowCardWidth,
+                          child: live
+                              ? _LiveMatchCard(
+                                  channel: channels[index],
+                                  autofocus: autofocusFirst && isFirst,
+                                  onTap: () => onOpen(channels[index]),
+                                )
+                              : ChannelCard(
+                                  channel: channels[index],
+                                  autofocus: autofocusFirst && isFirst,
+                                  onTap: () => onOpen(channels[index]),
+                                ),
+                        ),
+                      ),
+                    );
                   },
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: isLast ? 0 : AppSpacing.tvRowGap,
-                    ),
-                    child: SizedBox(
-                      width: live
-                          ? AppSpacing.tvLiveCardWidth
-                          : AppSpacing.tvRowCardWidth,
-                      child: live
-                          ? _LiveMatchCard(
-                              channel: channels[index],
-                              autofocus: autofocusFirst && isFirst,
-                              onTap: () => onOpen(channels[index]),
-                            )
-                          : ChannelCard(
-                              channel: channels[index],
-                              autofocus: autofocusFirst && isFirst,
-                              onTap: () => onOpen(channels[index]),
-                            ),
-                    ),
-                  ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -433,15 +395,15 @@ class _LiveMatchCard extends StatelessWidget {
       autofocus: autofocus,
       onTap: onTap,
       builder: (_, focused) => AnimatedScale(
-        scale: focused ? 1.08 : 1.0,
-        duration: const Duration(milliseconds: 130),
+        scale: focused ? 1.03 : 1.0,
+        duration: const Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 130),
+          duration: const Duration(milliseconds: 110),
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: surface,
+            color: surface.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             border: Border.all(
               color: focused ? accent : border,
@@ -451,9 +413,8 @@ class _LiveMatchCard extends StatelessWidget {
             boxShadow: focused
                 ? [
                     BoxShadow(
-                      color: accent.withValues(alpha: 0.45),
-                      blurRadius: 22,
-                      spreadRadius: 1,
+                      color: accent.withValues(alpha: 0.20),
+                      blurRadius: 10,
                     ),
                   ]
                 : null,
@@ -463,7 +424,7 @@ class _LiveMatchCard extends StatelessWidget {
               ChannelAvatar(
                 logoUrl: channel.logo,
                 name: channel.name,
-                size: 38,
+                size: 34,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -506,20 +467,15 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (live) ...[
-          // RepaintBoundary isolates the continuous pulsing-dot ticker from
-          // the surrounding section header and card rows.
-          const RepaintBoundary(child: _PulsingDot()),
-          const SizedBox(width: 10),
-        ],
-        Text(title, style: Theme.of(context).textTheme.headlineMedium),
+        if (live) ...[const _LiveDot(), const SizedBox(width: 10)],
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(width: 12),
         if (countLabel != null)
           live
               ? Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
+                    horizontal: 8,
+                    vertical: 2,
                   ),
                   decoration: BoxDecoration(
                     color: AppColors.live.withValues(alpha: 0.13),
@@ -546,50 +502,98 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pulsing dot
+// Live dot
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _PulsingDot extends StatefulWidget {
-  const _PulsingDot();
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+class _LiveDot extends StatelessWidget {
+  const _LiveDot();
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween<double>(
-        begin: 1.0,
-        end: 0.3,
-      ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
-      child: ScaleTransition(
-        scale: Tween<double>(
-          begin: 1.0,
-          end: 0.75,
-        ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
-        child: Container(
-          width: 10,
-          height: 10,
-          decoration: const BoxDecoration(
-            color: AppColors.live,
-            shape: BoxShape.circle,
-          ),
-        ),
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: AppColors.live,
+        shape: BoxShape.circle,
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loading skeleton
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Static shimmer shown while the dashboard providers first load.
+/// No animation controller needed — the skeleton disappears after one
+/// async tick (providers resolve from the in-memory Riverpod cache).
+class _HomeSkeleton extends StatelessWidget {
+  const _HomeSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.tvEdge,
+        AppSpacing.xs,
+        AppSpacing.tvEdge,
+        AppSpacing.xxl,
+      ),
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          _SkeletonRect(
+            color: color,
+            width: 120,
+            height: 16,
+            radius: AppSpacing.radiusSm,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            height: AppSpacing.tvRowCardHeight,
+            child: Row(
+              children: [
+                for (var j = 0; j < 6; j++) ...[
+                  _SkeletonRect(
+                    color: color,
+                    width: AppSpacing.tvRowCardWidth,
+                    height: AppSpacing.tvRowCardHeight,
+                    radius: AppSpacing.radiusMd,
+                  ),
+                  if (j < 5) const SizedBox(width: AppSpacing.tvRowGap),
+                ],
+              ],
+            ),
+          ),
+          if (i < 2) const SizedBox(height: AppSpacing.tvSectionGap),
+        ],
+      ],
+    );
+  }
+}
+
+class _SkeletonRect extends StatelessWidget {
+  const _SkeletonRect({
+    required this.color,
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+  final Color color;
+  final double width, height, radius;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(radius),
+    ),
+  );
 }

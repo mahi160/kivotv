@@ -22,43 +22,44 @@ abstract final class AppTheme {
   static const fontFamily = 'Outfit';
 
   static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark()  => _build(Brightness.dark);
+  static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
-    final isDark  = brightness == Brightness.dark;
+    final isDark = brightness == Brightness.dark;
     final primary = AppColors.primary(isDark);
 
     final colorScheme = ColorScheme.fromSeed(
-      seedColor:   primary,
-      brightness:  brightness,
-      surface:     isDark ? AppColors.darkSurface   : AppColors.lightSurface,
-      onSurface:   isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
-      primary:     primary,
-      onPrimary:   isDark ? AppColors.darkBackground : Colors.white,
-      secondary:   AppColors.accentBright,
+      seedColor: primary,
+      brightness: brightness,
+      surface: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      onSurface: isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
+      primary: primary,
+      onPrimary: isDark ? AppColors.darkBackground : Colors.white,
+      secondary: AppColors.accentBright,
       onSecondary: AppColors.lightOnSurface,
-      tertiary:    primary,
-      onTertiary:  isDark ? AppColors.darkBackground : Colors.white,
-      error:       AppColors.error,
+      tertiary: primary,
+      onTertiary: isDark ? AppColors.darkBackground : Colors.white,
+      error: AppColors.error,
     );
 
     return ThemeData(
-      useMaterial3:  true,
-      brightness:    brightness,
-      colorScheme:   colorScheme,
-      fontFamily:    fontFamily,
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: colorScheme,
+      fontFamily: fontFamily,
 
       // ── Scaffold ───────────────────────────────────────────────────────
-      scaffoldBackgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      scaffoldBackgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
 
       // ── AppBar ─────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        backgroundColor:  Colors.transparent,
-        foregroundColor:  isDark
+        backgroundColor: Colors.transparent,
+        foregroundColor: isDark
             ? AppColors.darkOnSurface
             : AppColors.lightOnSurface,
-        elevation:              0,
+        elevation: 0,
         scrolledUnderElevation: 0,
       ),
 
@@ -69,11 +70,11 @@ abstract final class AppTheme {
           foregroundColor: isDark ? AppColors.darkBackground : Colors.white,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical:   AppSpacing.sm + 4,
+            vertical: AppSpacing.sm + 4,
           ),
           textStyle: const TextStyle(
             fontFamily: fontFamily,
-            fontSize:   18,
+            fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
           shape: RoundedRectangleBorder(
@@ -99,9 +100,7 @@ abstract final class AppTheme {
       // ── Input fields ───────────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark
-            ? AppColors.darkSurface
-            : AppColors.lightSurface,
+        fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(
@@ -127,11 +126,9 @@ abstract final class AppTheme {
 
       // ── Cards ──────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color:            isDark
-            ? AppColors.darkSurface
-            : AppColors.lightSurface,
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         surfaceTintColor: Colors.transparent,
-        elevation:        0,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
           side: BorderSide(
@@ -161,7 +158,7 @@ abstract final class AppTheme {
       progressIndicatorTheme: ProgressIndicatorThemeData(color: primary),
 
       // ── Text theme (Outfit, bundled) ───────────────────────────────────
-      textTheme:        _buildTextTheme(isDark),
+      textTheme: _buildTextTheme(isDark),
       primaryTextTheme: _buildTextTheme(isDark),
 
       // ── Focus colour — follows unified focus token ─────────────────────
@@ -185,37 +182,70 @@ abstract final class AppTheme {
       required Color color,
       double? letterSpacing,
       double? height,
-    }) =>
-        TextStyle(
-          fontFamily:    fontFamily,
-          fontSize:      fontSize,
-          fontWeight:    fontWeight,
-          color:         color,
-          letterSpacing: letterSpacing,
-          height:        height,
-        );
+    }) => TextStyle(
+      fontFamily: fontFamily,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      letterSpacing: letterSpacing,
+      height: height,
+    );
 
     return TextTheme(
-      displayLarge:  outfit(fontSize: 42, fontWeight: FontWeight.w700,
-          color: onSurface, letterSpacing: -0.5),
-      headlineLarge: outfit(fontSize: 34, fontWeight: FontWeight.w700,
-          color: onSurface, letterSpacing: -0.6),
-      headlineMedium: outfit(fontSize: 26, fontWeight: FontWeight.w600,
-          color: onSurface, letterSpacing: -0.3),
-      titleLarge:  outfit(fontSize: 22, fontWeight: FontWeight.w600,
-          color: onSurface, letterSpacing: -0.3),
-      titleMedium: outfit(fontSize: 19, fontWeight: FontWeight.w600,
-          color: onSurface),
-      titleSmall:  outfit(fontSize: 16, fontWeight: FontWeight.w500,
-          color: onSurface),
-      bodyLarge:   outfit(fontSize: 18, fontWeight: FontWeight.w400,
-          color: onSurface),
-      bodyMedium:  outfit(fontSize: 16, fontWeight: FontWeight.w400,
-          color: onSurfaceVariant),
-      bodySmall:   outfit(fontSize: 14, fontWeight: FontWeight.w400,
-          color: onSurfaceVariant),
-      labelLarge:  outfit(fontSize: 18, fontWeight: FontWeight.w600,
-          color: onSurface),
+      displayLarge: outfit(
+        fontSize: 42,
+        fontWeight: FontWeight.w700,
+        color: onSurface,
+        letterSpacing: -0.5,
+      ),
+      headlineLarge: outfit(
+        fontSize: 34,
+        fontWeight: FontWeight.w700,
+        color: onSurface,
+        letterSpacing: -0.6,
+      ),
+      headlineMedium: outfit(
+        fontSize: 26,
+        fontWeight: FontWeight.w600,
+        color: onSurface,
+        letterSpacing: -0.3,
+      ),
+      titleLarge: outfit(
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        color: onSurface,
+        letterSpacing: -0.3,
+      ),
+      titleMedium: outfit(
+        fontSize: 19,
+        fontWeight: FontWeight.w600,
+        color: onSurface,
+      ),
+      titleSmall: outfit(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        color: onSurface,
+      ),
+      bodyLarge: outfit(
+        fontSize: 18,
+        fontWeight: FontWeight.w400,
+        color: onSurface,
+      ),
+      bodyMedium: outfit(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        color: onSurfaceVariant,
+      ),
+      bodySmall: outfit(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: onSurfaceVariant,
+      ),
+      labelLarge: outfit(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: onSurface,
+      ),
     );
   }
 }

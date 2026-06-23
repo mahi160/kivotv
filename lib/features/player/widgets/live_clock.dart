@@ -12,13 +12,13 @@ class LiveClock extends StatefulWidget {
 }
 
 class _LiveClockState extends State<LiveClock> {
-  late Timer    _timer;
+  late Timer _timer;
   late DateTime _now;
 
   @override
   void initState() {
     super.initState();
-    _now   = DateTime.now();
+    _now = DateTime.now();
     // Update every 30 s — precise enough for HH:MM display.
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() => _now = DateTime.now());
@@ -38,13 +38,13 @@ class _LiveClockState extends State<LiveClock> {
     return Text(
       '$h:$m',
       style: const TextStyle(
-        fontFamily:    'Outfit',
-        fontSize:      26,
-        fontWeight:    FontWeight.w400,
+        fontFamily: 'Outfit',
+        fontSize: 26,
+        fontWeight: FontWeight.w400,
         letterSpacing: 3,
-        color:         Colors.white,
-        fontFeatures:  [FontFeature.tabularFigures()],
-        shadows:       [Shadow(blurRadius: 6)],
+        color: Colors.white,
+        fontFeatures: [FontFeature.tabularFigures()],
+        shadows: [Shadow(blurRadius: 6)],
       ),
     );
   }

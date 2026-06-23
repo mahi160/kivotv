@@ -1,4 +1,3 @@
-import 'bdix_resolver.dart';
 import 'iptvidn_resolver.dart';
 import 'resolved_stream.dart';
 import 'streamcrichd_resolver.dart';
@@ -12,15 +11,11 @@ class StreamResolver {
   static bool isResolvable(String reference) =>
       IptvidnResolver.isResolvable(reference) ||
       TflixResolver.isResolvable(reference) ||
-      BdixtvResolver.isResolvable(reference) ||
       StreamcrichdResolver.isResolvable(reference);
 
   static Future<ResolvedStream> resolve(String reference) {
     if (TflixResolver.isResolvable(reference)) {
       return TflixResolver.instance.resolve(reference);
-    }
-    if (BdixtvResolver.isResolvable(reference)) {
-      return BdixtvResolver.instance.resolve(reference);
     }
     if (StreamcrichdResolver.isResolvable(reference)) {
       return StreamcrichdResolver.instance.resolve(reference);

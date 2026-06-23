@@ -17,7 +17,7 @@ class IptvidnResolver {
   static final IptvidnResolver instance = IptvidnResolver._();
 
   static const _scheme = 'iptvidn://';
-  static const _base   = 'http://iptvidn.com';
+  static const _base = 'http://iptvidn.com';
 
   // Persistent client — reuses the TCP connection to iptvidn.com across
   // consecutive channel switches, avoiding a fresh TCP handshake (~150 ms)
@@ -27,8 +27,9 @@ class IptvidnResolver {
     ..connectionTimeout = const Duration(seconds: 15);
 
   /// `<iframe ... src="http://<host>:<port>/<slug>/embed.html?token=...">`
-  static final _iframeSrc =
-      RegExp(r'src="(https?://[^"]+/embed\.html\?[^"]*token=[^"]+)"');
+  static final _iframeSrc = RegExp(
+    r'src="(https?://[^"]+/embed\.html\?[^"]*token=[^"]+)"',
+  );
 
   static bool isResolvable(String reference) => reference.startsWith(_scheme);
 
@@ -51,7 +52,9 @@ class IptvidnResolver {
   static ResolvedStream parsePlayResponse(String body) {
     final match = _iframeSrc.firstMatch(body);
     if (match == null) {
-      throw const FormatException('iptvidn: no embed iframe in play.php response');
+      throw const FormatException(
+        'iptvidn: no embed iframe in play.php response',
+      );
     }
     final embed = Uri.parse(match.group(1)!);
     final token = embed.queryParameters['token'];
@@ -59,11 +62,11 @@ class IptvidnResolver {
       throw const FormatException('iptvidn: no token in embed URL');
     }
     final origin = '${embed.scheme}://${embed.host}:${embed.port}';
-    final path   = embed.path.replaceFirst(RegExp(r'embed\.html$'), 'index.m3u8');
+    final path = embed.path.replaceFirst(RegExp(r'embed\.html$'), 'index.m3u8');
     // ponytail: token alone authorises the stream (verified); the embed's
     // `remote=no_check_ip` param isn't needed on the m3u8 request.
     return ResolvedStream(
-      url:       '$origin$path?token=$token',
+      url: '$origin$path?token=$token',
       expiresAt: _expiryOf(token),
     );
   }
@@ -80,8 +83,9 @@ class IptvidnResolver {
     final seconds = int.tryParse(parts[parts.length - 2]);
     if (seconds == null) return null;
     final expiry = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
-    final now    = DateTime.now();
-    if (expiry.isBefore(now) || expiry.isAfter(now.add(const Duration(hours: 6)))) {
+    final now = DateTime.now();
+    if (expiry.isBefore(now) ||
+        expiry.isAfter(now.add(const Duration(hours: 6)))) {
       return null; // parsed the wrong field; let reactive re-resolve handle it
     }
     return expiry;

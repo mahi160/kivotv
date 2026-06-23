@@ -17,20 +17,26 @@ final _favVersionStream = StreamProvider.autoDispose<int>(
   (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).favVersion),
 );
 final _recentVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).recentVersion),
+  (ref) =>
+      valueNotifierStream(ref, ref.watch(repositoryProvider).recentVersion),
 );
 final _groupsVersionStream = StreamProvider.autoDispose<int>(
-  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).groupsVersion),
+  (ref) =>
+      valueNotifierStream(ref, ref.watch(repositoryProvider).groupsVersion),
 );
 
 // ── Section data providers ────────────────────────────────────────────────────
 
-final liveMatchesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
+final liveMatchesProvider = FutureProvider.autoDispose<List<Channel>>((
+  ref,
+) async {
   ref.watch(_liveVersionStream);
   return ref.watch(repositoryProvider).liveMatches();
 });
 
-final favoritesProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
+final favoritesProvider = FutureProvider.autoDispose<List<Channel>>((
+  ref,
+) async {
   ref.watch(_favVersionStream);
   return ref.watch(repositoryProvider).favoriteChannels();
 });
@@ -41,10 +47,12 @@ final recentProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
 });
 
 final groupsProvider =
-    FutureProvider.autoDispose<List<MapEntry<String, List<Channel>>>>((ref) async {
-  ref.watch(_groupsVersionStream);
-  return ref.watch(repositoryProvider).groupedChannels();
-});
+    FutureProvider.autoDispose<List<MapEntry<String, List<Channel>>>>((
+      ref,
+    ) async {
+      ref.watch(_groupsVersionStream);
+      return ref.watch(repositoryProvider).groupedChannels();
+    });
 
 // ── Ready flag ────────────────────────────────────────────────────────────────
 //
@@ -56,7 +64,7 @@ final groupsProvider =
 
 final dashboardReadyProvider = Provider.autoDispose<bool>((ref) {
   return ref.watch(liveMatchesProvider).hasValue &&
-         ref.watch(favoritesProvider).hasValue &&
-         ref.watch(recentProvider).hasValue &&
-         ref.watch(groupsProvider).hasValue;
+      ref.watch(favoritesProvider).hasValue &&
+      ref.watch(recentProvider).hasValue &&
+      ref.watch(groupsProvider).hasValue;
 });

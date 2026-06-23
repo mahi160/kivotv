@@ -42,9 +42,13 @@ class GradientBackground extends StatelessWidget {
   Gradient _gradient(bool isDark) {
     switch (variant) {
       case GradientVariant.home:
-        return isDark ? AppColors.homeGradientDark : AppColors.homeGradientLight;
+        return isDark
+            ? AppColors.homeGradientDark
+            : AppColors.homeGradientLight;
       case GradientVariant.list:
-        return isDark ? AppColors.listGradientDark : AppColors.listGradientLight;
+        return isDark
+            ? AppColors.listGradientDark
+            : AppColors.listGradientLight;
     }
   }
 }

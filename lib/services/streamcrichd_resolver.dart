@@ -77,14 +77,57 @@ class StreamcrichdResolver {
     if (!url.startsWith(RegExp(r'https?://')) ||
         !url.toLowerCase().contains('.m3u8') ||
         !_isAllowedHlsHost(uri.host)) {
-      throw const FormatException('streamcrichd: malformed HLS URL array');
+      throw FormatException(
+        'streamcrichd: unexpected HLS URL "$url" (host not in allowlist)',
+      );
     }
 
+    // Extract fid from the HLS path (…/hls/<fid>.m3u8) for display name.
+    final pathSeg = uri.pathSegments;
+    final fidRaw = pathSeg.isNotEmpty
+        ? pathSeg.last.replaceFirst(
+            RegExp(r'\.m3u8$', caseSensitive: false),
+            '',
+          )
+        : null;
     return ResolvedStream(
       url: url,
       expiresAt: _expiryOf(uri),
       httpHeaders: const {'User-Agent': _ua, 'Referer': '$_premiumBase/'},
+      channelName: fidRaw != null && fidRaw.isNotEmpty
+          ? _fidToName(fidRaw)
+          : null,
     );
+  }
+
+  /// Converts a raw stream fid (e.g. "asportshd", "geo-super") to a
+  /// human-readable channel name ("A Sports HD", "Geo Super").
+  static String _fidToName(String fid) {
+    var s = fid.toLowerCase();
+    // Peel off known quality suffixes before splitting.
+    var suffix = '';
+    for (final q in ['fhd', 'uhd', 'hd', 'sd']) {
+      if (s.endsWith(q) && s.length > q.length) {
+        suffix = ' ${q.toUpperCase()}';
+        s = s.substring(0, s.length - q.length);
+        break;
+      }
+    }
+    // Split on hyphens, underscores, and camelCase transitions.
+    final words = s
+        .replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (m) => '${m.group(1)!} ${m.group(2)!}',
+        )
+        .split(RegExp(r'[-_\s]+'))
+        .where((p) => p.isNotEmpty)
+        .map(
+          (p) => p.length <= 3
+              ? p.toUpperCase()
+              : p[0].toUpperCase() + p.substring(1),
+        )
+        .toList();
+    return (words.join(' ') + suffix).trim();
   }
 
   static bool _isAllowedHlsHost(String host) =>
@@ -102,8 +145,9 @@ class StreamcrichdResolver {
     return expiry;
   }
 
-  // ponytail: fetch.php currently returns useful HTML with HTTP 500.
-  // Keep this local; make http_get configurable only if another resolver needs it.
+  /// Lenient GET that accepts both 200 and 500 responses. The fetch.php
+  /// endpoint returns a 500 status but still serves valid HTML with the
+  /// stream player markup we need.
   static Future<String> _getLenient(Uri url, {String? referer}) async {
     final req = await _http.getUrl(url);
     req.headers.set(HttpHeaders.userAgentHeader, _ua);

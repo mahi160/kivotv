@@ -12,10 +12,10 @@ import 'dart:io';
 Future<String> httpGetString(
   HttpClient client,
   Uri url, {
-  String?  referer,
-  String   userAgent      = 'Mozilla/5.0',
+  String? referer,
+  String userAgent = 'Mozilla/5.0',
   Duration connectTimeout = const Duration(seconds: 15),
-  Duration bodyTimeout    = const Duration(seconds: 15),
+  Duration bodyTimeout = const Duration(seconds: 15),
 }) async {
   final req = await client.getUrl(url);
   req.headers.set(HttpHeaders.userAgentHeader, userAgent);

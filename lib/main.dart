@@ -22,7 +22,7 @@ void main() async {
   // Cap the Flutter image cache so channel logos don't exhaust RAM on
   // low-end Android TV boxes (1 GB RAM) that also buffer video.
   PaintingBinding.instance.imageCache
-    ..maximumSize      = 150
+    ..maximumSize = 150
     ..maximumSizeBytes = 48 << 20; // 48 MB
 
   runApp(const ProviderScope(child: KivoApp()));
@@ -83,9 +83,7 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
       _autoOpenDone = true;
       // Defer one frame so the router widget is in the tree, then pass the
       // live BuildContext so navigation uses the mounted navigator.
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _autoOpen(context),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoOpen(context));
     }
 
     // Map the TV remote SELECT / OK key to ActivateIntent at the app root.
@@ -97,20 +95,20 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
 
     return Shortcuts(
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.select):      ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
       },
       child: MaterialApp.router(
-        routerConfig:             appRouter,
+        routerConfig: appRouter,
         debugShowCheckedModeBanner: false,
-        theme:     AppTheme.light(),
+        theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         themeMode: themeMode,
         builder: (context, child) {
           return bootstrap.when(
-            data:    (_)       => child!,
-            error:   (err, _)  => _BootstrapError(error: err),
-            loading: ()        => const _SplashScreen(),
+            data: (_) => child!,
+            error: (err, _) => _BootstrapError(error: err),
+            loading: () => const _SplashScreen(),
           );
         },
       ),
@@ -122,8 +120,7 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
     // Guard after the async gap: widget may have unmounted, or the user may
     // have already navigated away during the DB read.
     if (!mounted || recent.isEmpty) return;
-    final currentPath =
-        appRouter.routerDelegate.currentConfiguration.uri.path;
+    final currentPath = appRouter.routerDelegate.currentConfiguration.uri.path;
     if (currentPath != '/') return;
     // context.go uses the mounted navigator — safer than appRouter.go which
     // is a global and doesn't verify the navigator is ready.
@@ -144,20 +141,22 @@ class _SplashScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 100, height: 100,
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
                 color: AppColors.oceanDeepBlue,
                 borderRadius: BorderRadius.circular(26),
                 boxShadow: [
                   BoxShadow(
-                    color:      AppColors.oceanDeepBlue.withValues(alpha: 0.45),
+                    color: AppColors.oceanDeepBlue.withValues(alpha: 0.45),
                     blurRadius: 32,
                     spreadRadius: 4,
                   ),
@@ -167,20 +166,23 @@ class _SplashScreen extends StatelessWidget {
               child: const KivoLogo(),
             ),
             const SizedBox(height: 28),
-            Text('Kivo',
-                style: Theme.of(context).textTheme.displayLarge),
+            Text('Kivo', style: Theme.of(context).textTheme.displayLarge),
             const SizedBox(height: 8),
-            Text('Live TV launcher',
-                style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              'Live TV launcher',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 48),
             SizedBox(
               width: 280,
               child: LinearProgressIndicator(
-                backgroundColor:
-                    AppColors.oceanDeepBlue.withValues(alpha: 0.20),
+                backgroundColor: AppColors.oceanDeepBlue.withValues(
+                  alpha: 0.20,
+                ),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.goldenDriftwood),
-                minHeight:    4,
+                  AppColors.goldenDriftwood,
+                ),
+                minHeight: 4,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -216,22 +218,24 @@ class _BootstrapError extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded,
-                  size: 64, color: AppColors.error),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 64,
+                color: AppColors.error,
+              ),
               const SizedBox(height: 24),
               Text(
                 'Failed to start Kivo',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(color: Colors.white),
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineMedium?.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 12),
               Text(
                 'Database could not be initialised.\n$error',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.darkOnSurfaceVariant,
-                    ),
+                  color: AppColors.darkOnSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],

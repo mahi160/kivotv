@@ -31,17 +31,17 @@ class PlayerScreen extends ConsumerStatefulWidget {
 class _PlayerScreenState extends ConsumerState<PlayerScreen>
     with WidgetsBindingObserver {
   // ── media ──────────────────────────────────────────────────────────────────
-  late final Player          _player;
+  late final Player _player;
   late final VideoController _controller;
 
   // ── channel state ──────────────────────────────────────────────────────────
-  List<Channel>     _channels       = const [];
-  late Channel      _currentChannel;
-  int               _currentIndexCache = -1;
+  List<Channel> _channels = const [];
+  late Channel _currentChannel;
+  int _currentIndexCache = -1;
 
   // ── overlay ────────────────────────────────────────────────────────────────
-  bool   _showOverlay     = true;
-  bool   _showChannelList = false;
+  bool _showOverlay = true;
+  bool _showChannelList = false;
   Timer? _hideTimer;
 
   // ── mark-watched ──────────────────────────────────────────────────────────
@@ -60,11 +60,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // a stream that was about to play. A genuinely dead link errors out far
   // sooner via the player's error stream; this only backstops a silent stall.
   static const _streamTimeout = Duration(seconds: 20);
-  Timer?  _loadWatchdog;
+  Timer? _loadWatchdog;
   String? _error;
   // Consecutive auto-skips since the last successful play. Bounded so an
   // all-dead playlist can't loop forever.
-  int  _autoSkipCount = 0;
+  int _autoSkipCount = 0;
   // True once the current channel has actually played. Distinguishes a dead
   // channel (never played → auto-skip) from a mid-watch token expiry
   // (played, then failed → re-resolve the same channel).
@@ -77,7 +77,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _wasPlayingBeforePause = false;
 
   // ── subscriptions ──────────────────────────────────────────────────────────
-  StreamSubscription<bool>?   _playingSubscription;
+  StreamSubscription<bool>? _playingSubscription;
   StreamSubscription<String>? _errorSubscription;
 
   // ── sidebar scroll + focus tracking ────────────────────────────────────────
@@ -91,8 +91,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   final _currentSidebarFocus = FocusNode();
 
   // ── focus ──────────────────────────────────────────────────────────────────
-  final _rootFocus        = FocusNode();
-  final _playFocusNode    = FocusNode();
+  final _rootFocus = FocusNode();
+  final _playFocusNode = FocusNode();
   final _sidebarScopeNode = FocusScopeNode();
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!playing) return;
       _loadWatchdog?.cancel();
       _autoSkipCount = 0;
-      _hasPlayed     = true;
+      _hasPlayed = true;
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
@@ -139,8 +139,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
 
     // A player error (dead link, bad codec, refused connection) → skip on.
-    _errorSubscription =
-        _player.stream.error.listen((_) => _handleStreamFailure());
+    _errorSubscription = _player.stream.error.listen(
+      (_) => _handleStreamFailure(),
+    );
 
     _loadChannels();
 
@@ -208,7 +209,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-        _wasPlayingBeforePause = _player.state.playing || _player.state.buffering;
+        _wasPlayingBeforePause =
+            _player.state.playing || _player.state.buffering;
         _player.pause();
       case AppLifecycleState.resumed:
         // The hardware video surface (mediacodec_embed) is torn down while the
@@ -225,8 +227,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // ── index cache ────────────────────────────────────────────────────────────
 
   void _recomputeIndex() {
-    _currentIndexCache =
-        _channels.indexWhere((c) => c.url == _currentChannel.url);
+    _currentIndexCache = _channels.indexWhere(
+      (c) => c.url == _currentChannel.url,
+    );
   }
 
   int get _currentIndex => _currentIndexCache;
@@ -238,18 +241,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // while still providing progressive D-pad feedback before all pages arrive.
     const pageSize = 2000;
     var offset = 0;
-    final all  = <Channel>[];
+    final all = <Channel>[];
     while (true) {
-      final page = await ref.read(repositoryProvider).channels(
-        limit:  pageSize,
-        offset: offset,
-      );
+      final page = await ref
+          .read(repositoryProvider)
+          .channels(limit: pageSize, offset: offset);
       all.addAll(page);
       if (!mounted) return;
+      if (page.length < pageSize) {
+        // Final page — sort before surfacing so sidebar + prev/next are alpha.
+        all.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+      }
       setState(() {
-        _channels          = List.of(all);
-        _currentIndexCache = _channels
-            .indexWhere((c) => c.url == _currentChannel.url);
+        _channels = List.of(all);
+        _currentIndexCache = _channels.indexWhere(
+          (c) => c.url == _currentChannel.url,
+        );
       });
       if (page.length < pageSize) break;
       offset += page.length;
@@ -284,7 +293,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<void> _load() async {
     final gen = ++_loadGeneration;
     _markedWatched = false;
-    _hasPlayed     = false;
+    _hasPlayed = false;
     _expiryTimer?.cancel();
     if (_error != null) setState(() => _error = null);
 
@@ -302,8 +311,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final resolved = await StreamResolver.resolve(reference);
         if (!mounted || gen != _loadGeneration) return;
         playable = resolved.url;
-        headers  = resolved.httpHeaders;
+        headers = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
+        // Lazily update generic channel names (e.g. "StreamCricHD 24" →
+        // "A Sports HD") the first time each channel is resolved.
+        final newName = resolved.channelName;
+        if (newName != null &&
+            RegExp(r'^StreamCricHD \d+$').hasMatch(_currentChannel.name)) {
+          ref
+              .read(repositoryProvider)
+              .updateChannelName(_currentChannel, newName);
+          if (mounted) {
+            setState(() {
+              _currentChannel = _currentChannel.copyWith(name: newName);
+              final i = _channels.indexWhere(
+                (c) => c.url == _currentChannel.url,
+              );
+              if (i != -1) _channels[i] = _currentChannel;
+            });
+          }
+        }
       } else {
         playable = reference;
       }
@@ -414,9 +441,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _showControls() {
     setState(() => _showOverlay = true);
     _scheduleOverlayHide();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) { if (mounted) _playFocusNode.requestFocus(); },
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _playFocusNode.requestFocus();
+    });
   }
 
   void _scheduleOverlayHide() {
@@ -449,8 +476,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (idx >= 0 && _sidebarScroll.hasClients) {
           const itemH = AppSpacing.tvSidebarTile;
           _sidebarScroll.jumpTo(
-            ((idx * itemH) - 200)
-                .clamp(0, _sidebarScroll.position.maxScrollExtent),
+            ((idx * itemH) - 200).clamp(
+              0,
+              _sidebarScroll.position.maxScrollExtent,
+            ),
           );
         }
         // Focus the current channel’s row directly so the sidebar opens
@@ -462,9 +491,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // arbitrary point on the old 12-s timer that was set when the sidebar
       // opened.
       _scheduleOverlayHide();
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) { if (mounted) _playFocusNode.requestFocus(); },
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _playFocusNode.requestFocus();
+      });
     }
   }
 
@@ -491,9 +520,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_channels.isEmpty) return;
     final idx = _currentIndex;
     // idx == -1 when channel not found yet; fall back gracefully.
-    _open(_channels[idx < 0
-        ? _channels.length - 1
-        : (idx - 1 + _channels.length) % _channels.length]);
+    _open(
+      _channels[idx < 0
+          ? _channels.length - 1
+          : (idx - 1 + _channels.length) % _channels.length],
+    );
   }
 
   void _playNext() {
@@ -509,24 +540,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final key = event.logicalKey;
 
     if (_showChannelList) {
-      if (key == LogicalKeyboardKey.goBack  ||
-          key == LogicalKeyboardKey.escape  ||
+      if (key == LogicalKeyboardKey.goBack ||
+          key == LogicalKeyboardKey.escape ||
           key == LogicalKeyboardKey.arrowLeft) {
         setState(() => _showChannelList = false);
         _scheduleOverlayHide();
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) { if (mounted) _playFocusNode.requestFocus(); },
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _playFocusNode.requestFocus();
+        });
         return KeyEventResult.handled;
       }
 
       // Sidebar wrap-around: at the last item ↓ wraps to first channel;
       // at the first item ↑ wraps to last channel. The wrapped channel is
       // played so the user always lands somewhere playable.
-      final isDown = key == LogicalKeyboardKey.arrowDown ||
-                      key == LogicalKeyboardKey.channelDown;
-      final isUp   = key == LogicalKeyboardKey.arrowUp ||
-                      key == LogicalKeyboardKey.channelUp;
+      final isDown =
+          key == LogicalKeyboardKey.arrowDown ||
+          key == LogicalKeyboardKey.channelDown;
+      final isUp =
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.channelUp;
       if (_channels.isNotEmpty) {
         if (isDown && _sidebarFocusedIndex >= _channels.length - 1) {
           setState(() => _showChannelList = false);
@@ -542,8 +575,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (isDown || isUp) return KeyEventResult.ignored;
     }
 
-    if (key == LogicalKeyboardKey.goBack    ||
-        key == LogicalKeyboardKey.escape    ||
+    if (key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.browserBack) {
       if (mounted) _goHome();
       return KeyEventResult.handled;
@@ -552,25 +585,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Up → next channel, Down → previous channel.
     if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.channelUp) {
-      _playNext(); _showControls();
+      _playNext();
+      _showControls();
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.channelDown) {
-      _playPrevious(); _showControls();
+      _playPrevious();
+      _showControls();
       return KeyEventResult.handled;
     }
 
     if (!_showOverlay &&
         (key == LogicalKeyboardKey.arrowLeft ||
-         key == LogicalKeyboardKey.arrowRight)) {
+            key == LogicalKeyboardKey.arrowRight)) {
       _showControls();
       return KeyEventResult.handled;
     }
 
-    if (key == LogicalKeyboardKey.select     ||
-        key == LogicalKeyboardKey.enter      ||
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.gameButtonA) {
       if (_error != null) {
         _open(_currentChannel); // retry
@@ -580,14 +615,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return KeyEventResult.handled;
     }
 
-    if (key == LogicalKeyboardKey.mediaPlay      ||
-        key == LogicalKeyboardKey.mediaPause     ||
+    if (key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPause ||
         key == LogicalKeyboardKey.mediaPlayPause) {
-      _player.playOrPause(); _showControls();
+      _player.playOrPause();
+      _showControls();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.mediaStop) {
-      _player.stop(); _showControls();
+      _player.stop();
+      _showControls();
       return KeyEventResult.handled;
     }
 
@@ -606,96 +643,97 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (mounted) _goHome();
       },
       child: Scaffold(
-      backgroundColor: Colors.black,
-      body: Focus(
-        focusNode: _rootFocus,
-        autofocus: true,
-        onKeyEvent: _onKeyEvent,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // ── Video ─────────────────────────────────────────────────────────
-            Video(
-              controller: _controller,
-              fit:        BoxFit.contain,
-              controls:   NoVideoControls,
-            ),
-
-            // ── Buffering spinner (hidden once an error is shown) ─────────────
-            if (_error == null)
-              StreamBuilder<bool>(
-                stream:  _player.stream.buffering,
-                builder: (context, snap) => snap.data == true
-                    ? const Center(child: CircularProgressIndicator())
-                    : const SizedBox.shrink(),
+        backgroundColor: Colors.black,
+        body: Focus(
+          focusNode: _rootFocus,
+          autofocus: true,
+          onKeyEvent: _onKeyEvent,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // ── Video ─────────────────────────────────────────────────────────
+              Video(
+                controller: _controller,
+                fit: BoxFit.contain,
+                controls: NoVideoControls,
               ),
 
-            // ── Stream error ──────────────────────────────────────────────────
-            if (_error != null)
-              Positioned.fill(
-                child: _StreamErrorView(
-                  channelName: _currentChannel.name,
-                  message:     _error!,
+              // ── Buffering spinner (hidden once an error is shown) ─────────────
+              if (_error == null)
+                StreamBuilder<bool>(
+                  stream: _player.stream.buffering,
+                  builder: (context, snap) => snap.data == true
+                      ? const Center(child: CircularProgressIndicator())
+                      : const SizedBox.shrink(),
                 ),
-              ),
 
-            // ── Main overlay ──────────────────────────────────────────────────
-            AnimatedOpacity(
-              opacity:  (_showOverlay && _error == null) ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: ExcludeFocus(
-                excluding: !_showOverlay || _error != null,
-                child: IgnorePointer(
-                  ignoring: !_showOverlay || _error != null,
-                  child: FocusTraversalGroup(
-                    child: PlayerOverlay(
-                      channel:          _currentChannel,
-                      channelIndex:     _currentIndex,
-                      channelTotal:     _channels.length,
-                      player:           _player,
-                      showingList:      _showChannelList,
-                      onPrevious:       _playPrevious,
-                      onNext:           _playNext,
-                      onInteraction:    _scheduleOverlayHide,
-                      onBack:           () => _goHome(),
-                      onToggleList:     _toggleChannelList,
-                      playFocusNode:    _playFocusNode,
-                      onToggleFavorite: _toggleCurrentFavorite,
+              // ── Stream error ──────────────────────────────────────────────────
+              if (_error != null)
+                Positioned.fill(
+                  child: _StreamErrorView(
+                    channelName: _currentChannel.name,
+                    message: _error!,
+                  ),
+                ),
+
+              // ── Main overlay ──────────────────────────────────────────────────
+              AnimatedOpacity(
+                opacity: (_showOverlay && _error == null) ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: ExcludeFocus(
+                  excluding: !_showOverlay || _error != null,
+                  child: IgnorePointer(
+                    ignoring: !_showOverlay || _error != null,
+                    child: FocusTraversalGroup(
+                      child: PlayerOverlay(
+                        channel: _currentChannel,
+                        channelIndex: _currentIndex,
+                        channelTotal: _channels.length,
+                        player: _player,
+                        showingList: _showChannelList,
+                        onPrevious: _playPrevious,
+                        onNext: _playNext,
+                        onInteraction: _scheduleOverlayHide,
+                        onBack: () => _goHome(),
+                        onToggleList: _toggleChannelList,
+                        playFocusNode: _playFocusNode,
+                        onToggleFavorite: _toggleCurrentFavorite,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            // ── Channel list sidebar ──────────────────────────────────────────
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 250),
-              curve:    Curves.easeOut,
-              top: 0, bottom: 0,
-              right: _showChannelList ? 0 : -(AppSpacing.tvSidebarWidth + 20),
-              child: ExcludeFocus(
-                excluding: !_showChannelList,
-                child: FocusScope(
-                  node: _sidebarScopeNode,
-                  child: ChannelListPanel(
-                    channels:         _channels,
-                    currentChannel:   _currentChannel,
-                    scrollController: _sidebarScroll,
-                    onSelectChannel: (ch) {
-                      setState(() => _showChannelList = false);
-                      _open(ch); // user action → resets auto-skip budget
-                    },
-                    onToggleFavorite:       _toggleSidebarFavorite,
-                    onItemFocused:          (i) => _sidebarFocusedIndex = i,
-                    currentChannelFocusNode: _currentSidebarFocus,
+              // ── Channel list sidebar ──────────────────────────────────────────
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                top: 0,
+                bottom: 0,
+                right: _showChannelList ? 0 : -(AppSpacing.tvSidebarWidth + 20),
+                child: ExcludeFocus(
+                  excluding: !_showChannelList,
+                  child: FocusScope(
+                    node: _sidebarScopeNode,
+                    child: ChannelListPanel(
+                      channels: _channels,
+                      currentChannel: _currentChannel,
+                      scrollController: _sidebarScroll,
+                      onSelectChannel: (ch) {
+                        setState(() => _showChannelList = false);
+                        _open(ch); // user action → resets auto-skip budget
+                      },
+                      onToggleFavorite: _toggleSidebarFavorite,
+                      onItemFocused: (i) => _sidebarFocusedIndex = i,
+                      currentChannelFocusNode: _currentSidebarFocus,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -721,28 +759,34 @@ class _StreamErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.signal_wifi_off_rounded,
-                size: 56, color: Colors.white54),
+            const Icon(
+              Icons.signal_wifi_off_rounded,
+              size: 56,
+              color: Colors.white54,
+            ),
             const SizedBox(height: 16),
             Text(
               channelName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(color: Colors.white),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: Colors.white),
             ),
             const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: Colors.white60),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.white60),
             ),
             const SizedBox(height: 20),
             Text(
               'Press OK to retry  ·  ▲ ▼ to change channel',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: Colors.white38),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.white38),
             ),
           ],
         ),

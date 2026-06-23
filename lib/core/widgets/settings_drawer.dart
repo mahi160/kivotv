@@ -28,8 +28,10 @@ Future<void> showSettings(BuildContext context) {
     transitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (_, _, _) => const SettingsPanel(),
     transitionBuilder: (_, anim, _, child) => SlideTransition(
-      position: Tween(begin: const Offset(-1, 0), end: Offset.zero)
-          .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+      position: Tween(
+        begin: const Offset(-1, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
       child: child,
     ),
   );
@@ -42,15 +44,15 @@ Future<void> showSettings(BuildContext context) {
 class SettingsPanel extends ConsumerWidget {
   const SettingsPanel({super.key});
 
-  static const _version   = '1.0.0';
+  static const _version = '1.0.0';
   static const _buildDate = '2026.06.21';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final border  = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final text1   = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2   = isDark
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
     final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
@@ -63,93 +65,112 @@ class SettingsPanel extends ConsumerWidget {
         color: surface,
         elevation: 16,
         child: SizedBox(
-        width: width,
-        height: double.infinity,
-        child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top bar: brand + close ─────────────────────────────────────
-            Container(
-              height: AppSpacing.tvHeaderHeight,
-              padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: border)),
-              ),
-              child: Row(
-                children: [
-                  _BrandMark(isDark: isDark),
-                  const SizedBox(width: 10),
-                  Text(
-                    'kivo',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight:    FontWeight.w700,
-                      letterSpacing: -0.6,
-                      color:         text1,
-                    ),
+          width: width,
+          height: double.infinity,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Top bar: brand + close ─────────────────────────────────────
+                Container(
+                  height: AppSpacing.tvHeaderHeight,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: border)),
                   ),
-                  const Spacer(),
-                  _CloseButton(
-                    isDark: isDark,
-                    onTap:  () => Navigator.of(context).maybePop(),
+                  child: Row(
+                    children: [
+                      _BrandMark(isDark: isDark),
+                      const SizedBox(width: 10),
+                      Text(
+                        'kivo',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.6,
+                          color: text1,
+                        ),
+                      ),
+                      const Spacer(),
+                      _CloseButton(
+                        isDark: isDark,
+                        onTap: () => Navigator.of(context).maybePop(),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+
+                // ── Body ───────────────────────────────────────────────────────
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+                    children: [
+                      _SectionLabel('Appearance', color: text2),
+                      _ToggleRow(
+                        icon: Icons.dark_mode_rounded,
+                        title: 'Dark mode',
+                        subtitle: isDark
+                            ? 'Dark mode active'
+                            : 'Light mode active',
+                        value: isDark,
+                        autofocus:
+                            true, // D-pad lands here when the panel opens
+                        onToggle: () => ref
+                            .read(themeModeProvider.notifier)
+                            .toggle(systemIsDark: isDark),
+                        border: border,
+                        isDark: isDark,
+                      ),
+
+                      const SizedBox(height: AppSpacing.md),
+                      _SectionLabel('Sources', color: text2),
+                      _RefreshRow(
+                        fetching:
+                            ref.watch(isFetchingProvider).asData?.value ??
+                            false,
+                        onTap: () =>
+                            ref.read(repositoryProvider).manualRefresh(),
+                        isDark: isDark,
+                      ),
+
+                      const SizedBox(height: AppSpacing.md),
+                      _SectionLabel('About', color: text2),
+                      _InfoRow(
+                        label: 'Version',
+                        value: _version,
+                        border: border,
+                        text1: text1,
+                        text2: text2,
+                      ),
+                      _InfoRow(
+                        label: 'Build',
+                        value: _buildDate,
+                        border: border,
+                        text1: text1,
+                        text2: text2,
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Footer ───────────────────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: border)),
+                  ),
+                  child: Text(
+                    '© 2026 Kivo TV',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: text2),
+                  ),
+                ),
+              ],
             ),
-
-            // ── Body ───────────────────────────────────────────────────────
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
-                children: [
-                  _SectionLabel('Appearance', color: text2),
-                  _ToggleRow(
-                    icon:      Icons.dark_mode_rounded,
-                    title:     'Dark mode',
-                    subtitle:  isDark ? 'Dark mode active' : 'Light mode active',
-                    value:     isDark,
-                    autofocus: true, // D-pad lands here when the panel opens
-                    onToggle:  () => ref.read(themeModeProvider.notifier)
-                        .toggle(systemIsDark: isDark),
-                    border:    border,
-                    isDark:    isDark,
-                  ),
-
-                  const SizedBox(height: AppSpacing.md),
-                  _SectionLabel('Sources', color: text2),
-                  _RefreshRow(
-                    fetching: ref.watch(isFetchingProvider).asData?.value ?? false,
-                    onTap:    () => ref.read(repositoryProvider).manualRefresh(),
-                    isDark:   isDark,
-                  ),
-
-                  const SizedBox(height: AppSpacing.md),
-                  _SectionLabel('About', color: text2),
-                  _InfoRow(label: 'Version', value: _version,
-                      border: border, text1: text1, text2: text2),
-                  _InfoRow(label: 'Build', value: _buildDate,
-                      border: border, text1: text1, text2: text2,
-                      showDivider: false),
-                ],
-              ),
-            ),
-
-            // ── Footer ───────────────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: border)),
-              ),
-              child: Text(
-                '© 2026 Kivo TV',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: text2),
-              ),
-            ),
-          ],
-        ),
-        ),
+          ),
         ),
       ),
     );
@@ -166,7 +187,8 @@ class _BrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = AppColors.primary(isDark);
     return Container(
-      width: 34, height: 34,
+      width: 34,
+      height: 34,
       decoration: BoxDecoration(
         color: primary,
         borderRadius: BorderRadius.circular(9),
@@ -181,28 +203,35 @@ class _BrandMark extends StatelessWidget {
 
 class _CloseButton extends StatelessWidget {
   const _CloseButton({required this.isDark, required this.onTap});
-  final bool         isDark;
+  final bool isDark;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.focus(isDark);
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final text2  = isDark
+    final text2 = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
     return FocusableTap(
       onTap: onTap,
       builder: (_, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        width: 36, height: 36,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
-          border: Border.all(color: focused ? accent : border, width: focused ? 2 : 1),
+          border: Border.all(
+            color: focused ? accent : border,
+            width: focused ? 2 : 1,
+          ),
         ),
-        child: Icon(Icons.close_rounded, size: 18,
-            color: focused ? accent : text2),
+        child: Icon(
+          Icons.close_rounded,
+          size: 18,
+          color: focused ? accent : text2,
+        ),
       ),
     );
   }
@@ -213,7 +242,7 @@ class _CloseButton extends StatelessWidget {
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text, {required this.color});
   final String text;
-  final Color  color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -222,11 +251,11 @@ class _SectionLabel extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          fontFamily:    'Outfit',
-          fontSize:      12,
-          fontWeight:    FontWeight.w600,
+          fontFamily: 'Outfit',
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
           letterSpacing: 1.6,
-          color:         color,
+          color: color,
         ),
       ),
     );
@@ -247,21 +276,21 @@ class _ToggleRow extends StatelessWidget {
     this.autofocus = false,
   });
 
-  final IconData     icon;
-  final String       title;
-  final String       subtitle;
-  final bool         value;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
   final VoidCallback onToggle;
-  final Color        border;
-  final bool         isDark;
-  final bool         autofocus;
+  final Color border;
+  final bool isDark;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     final primary = AppColors.primary(isDark);
-    final accent  = AppColors.focus(isDark);
-    final text1   = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2   = isDark
+    final accent = AppColors.focus(isDark);
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
 
@@ -282,7 +311,8 @@ class _ToggleRow extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 38, height: 38,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: AppColors.primarySub(isDark),
                 borderRadius: BorderRadius.circular(10),
@@ -294,11 +324,20 @@ class _ToggleRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(color: text1, fontWeight: FontWeight.w500)),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: text1,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 1),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: text2)),
+                  Text(
+                    subtitle,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: text2),
+                  ),
                 ],
               ),
             ),
@@ -313,30 +352,38 @@ class _ToggleRow extends StatelessWidget {
 /// Compact pill switch mirroring the mockup's toggle.
 class _Switch extends StatelessWidget {
   const _Switch({required this.value, required this.primary});
-  final bool  value;
+  final bool value;
   final Color primary;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
-      curve:    Curves.easeOut,
-      width: 48, height: 26,
+      curve: Curves.easeOut,
+      width: 48,
+      height: 26,
       decoration: BoxDecoration(
         color: value ? primary : const Color(0xFF9EAAB5),
         borderRadius: BorderRadius.circular(99),
       ),
       child: AnimatedAlign(
         duration: const Duration(milliseconds: 220),
-        curve:    Curves.easeOut,
+        curve: Curves.easeOut,
         alignment: value ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
           margin: const EdgeInsets.all(3),
-          width: 20, height: 20,
+          width: 20,
+          height: 20,
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Color(0x47000000), blurRadius: 4, offset: Offset(0, 1))],
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x47000000),
+                blurRadius: 4,
+                offset: Offset(0, 1),
+              ),
+            ],
           ),
         ),
       ),
@@ -354,16 +401,16 @@ class _RefreshRow extends StatelessWidget {
     required this.isDark,
   });
 
-  final bool         fetching;
+  final bool fetching;
   final VoidCallback onTap;
-  final bool         isDark;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     final primary = AppColors.primary(isDark);
-    final accent  = AppColors.focus(isDark);
-    final text1   = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2   = isDark
+    final accent = AppColors.focus(isDark);
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
         ? AppColors.darkOnSurfaceVariant
         : AppColors.lightOnSurfaceVariant;
 
@@ -383,7 +430,8 @@ class _RefreshRow extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 38, height: 38,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: AppColors.primarySub(isDark),
                 borderRadius: BorderRadius.circular(10),
@@ -395,20 +443,33 @@ class _RefreshRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Refresh now',
-                      style: Theme.of(context).textTheme.titleSmall
-                          ?.copyWith(color: text1, fontWeight: FontWeight.w500)),
+                  Text(
+                    'Refresh now',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: text1,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 1),
-                  Text(fetching ? 'Updating channels…' : 'Re-fetch live matches + playlists',
-                      style: Theme.of(context).textTheme.bodySmall
-                          ?.copyWith(color: text2)),
+                  Text(
+                    fetching
+                        ? 'Updating channels…'
+                        : 'Re-fetch live matches + playlists',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: text2),
+                  ),
                 ],
               ),
             ),
             if (fetching)
               SizedBox(
-                width: 20, height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4, color: primary),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: primary,
+                ),
               ),
           ],
         ),
@@ -431,27 +492,34 @@ class _InfoRow extends StatelessWidget {
 
   final String label;
   final String value;
-  final Color  border;
-  final Color  text1;
-  final Color  text2;
-  final bool   showDivider;
+  final Color border;
+  final Color text1;
+  final Color text2;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 10),
       decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: border))
-            : null,
+        border: showDivider ? Border(bottom: BorderSide(color: border)) : null,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: text2)),
-          Text(value, style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: text1, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: text2),
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: text1,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );

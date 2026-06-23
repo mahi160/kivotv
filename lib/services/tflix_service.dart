@@ -20,7 +20,8 @@ class TflixService {
   static const _home = 'https://tflix.pro/';
 
   Future<List<Channel>> fetchLiveMatches() async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     try {
       return parseLiveMatches(await httpGetString(client, Uri.parse(_home)));
     } finally {
@@ -35,8 +36,11 @@ final _cardRe = RegExp(
   r'''data-status="(live|upcoming)"\s+onclick="location\.href='(play\.php/[^']+)'"''',
   caseSensitive: false,
 );
-final _teamRe = RegExp(r'team-name">\s*([^<]+?)\s*</div>', caseSensitive: false);
-final _tagRe  = RegExp(r'class="tag">\s*([^<]+?)\s*<', caseSensitive: false);
+final _teamRe = RegExp(
+  r'team-name">\s*([^<]+?)\s*</div>',
+  caseSensitive: false,
+);
+final _tagRe = RegExp(r'class="tag">\s*([^<]+?)\s*<', caseSensitive: false);
 
 /// Parses tflix.pro's homepage into LIVE matches. Upcoming matches are skipped
 /// (no stream exists yet). Each match card carries its status + play.php path;
@@ -49,8 +53,8 @@ List<Channel> parseLiveMatches(String html) {
     final card = cards[i];
     if (card.group(1)!.toLowerCase() != 'live') continue;
 
-    final path   = card.group(2)!; // play.php/<teams>/match_<id>
-    final end    = i + 1 < cards.length ? cards[i + 1].start : html.length;
+    final path = card.group(2)!; // play.php/<teams>/match_<id>
+    final end = i + 1 < cards.length ? cards[i + 1].start : html.length;
     final window = html.substring(card.end, end);
 
     final teams = _teamRe
@@ -61,9 +65,13 @@ List<Channel> parseLiveMatches(String html) {
         .toList();
     final tag = _cleanTag(_tagRe.firstMatch(window)?.group(1));
 
-    final ref  = 'tflix://${path.substring('play.php/'.length)}';
-    final name = teams.length == 2 ? '${teams[0]} vs ${teams[1]}' : _humanize(path);
-    out.add(Channel(id: ref, name: name, url: ref, group: tag ?? 'Live Sports'));
+    final ref = 'tflix://${path.substring('play.php/'.length)}';
+    final name = teams.length == 2
+        ? '${teams[0]} vs ${teams[1]}'
+        : _humanize(path);
+    out.add(
+      Channel(id: ref, name: name, url: ref, group: tag ?? 'Live Sports'),
+    );
   }
   return out;
 }
@@ -75,7 +83,7 @@ String? _cleanTag(String? tag) {
 }
 
 String _humanize(String path) {
-  final segs  = path.split('/');
+  final segs = path.split('/');
   final teams = segs.length > 1 ? segs[1] : path;
   return teams
       .split(RegExp(r'[_-]+'))

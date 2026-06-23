@@ -70,38 +70,24 @@ class PlaylistRepository {
   ];
 
   Future<void> _bootstrap() async {
-    await _storeBuiltInChannels();
-    await _storeBdixChannel();
-    await _storeStreamcrichdChannels();
-
-    final storedCount = await DatabaseService.instance.channelCount();
-    channelCount.value = storedCount;
-    _bumpAll();
-
-    _bootstrapped = true;
+    try {
+      await _storeBuiltInChannels();
+      await _storeStreamcrichdChannels();
+      final storedCount = await DatabaseService.instance.channelCount();
+      channelCount.value = storedCount;
+      _bumpAll();
+    } catch (e) {
+      // Store failures are non-fatal — channels from previous launches may
+      // already exist in the DB. Log and continue so the app never hangs.
+      debugPrint('kivo bootstrap store error: $e');
+    } finally {
+      _bootstrapped = true;
+    }
     // Fire-and-forget intentionally: bootstrap returns quickly so the UI can
     // show cached channels while the network refresh runs in the background.
     // _bootstrapped == true does NOT mean the refresh is complete.
     // ignore: unawaited_futures
     _seedAndRefresh();
-  }
-
-  Future<void> _storeBdixChannel() async {
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'BDIX TV',
-      url: 'kivo://bdixtv',
-    );
-    await DatabaseService.instance.replaceChannels(
-      playlistId: playlistId,
-      channels: const [
-        Channel(
-          id: 'bdixtv-onair',
-          name: 'BDIX TV Live',
-          url: 'bdixtv://onair',
-          group: 'Live Sports',
-        ),
-      ],
-    );
   }
 
   Future<void> _storeBuiltInChannels() async {
@@ -317,6 +303,12 @@ class PlaylistRepository {
 
   Future<List<Channel>> recentlyWatched() =>
       DatabaseService.instance.recentlyWatched();
+
+  Future<void> updateChannelName(Channel channel, String name) async {
+    await DatabaseService.instance.updateChannelName(channel.url, name);
+    // Name change is visible on cards in all sections — bump everything.
+    _bumpAll();
+  }
 
   Future<void> setFavorite(Channel channel, bool favorite) async {
     await DatabaseService.instance.setFavorite(channel.url, favorite);

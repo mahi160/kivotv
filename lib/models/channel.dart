@@ -12,21 +12,21 @@ class Channel {
     this.isFavorite = false,
   });
 
-  final String  id;
-  final String  name;
-  final String  url;
+  final String id;
+  final String name;
+  final String url;
   final String? logo;
   final String? group;
-  final int?    playlistId;
-  final bool    isFavorite;
+  final int? playlistId;
+  final bool isFavorite;
 
   factory Channel.fromDb(Map<String, Object?> map) {
     return Channel(
-      id:         map['id']         as String,
-      name:       map['name']       as String,
-      url:        map['url']        as String,
-      logo:       map['logo']       as String?,
-      group:      map['group_name'] as String?,
+      id: map['id'] as String,
+      name: map['name'] as String,
+      url: map['url'] as String,
+      logo: map['logo'] as String?,
+      group: map['group_name'] as String?,
       playlistId: map['playlist_id'] as int?,
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
     );
@@ -36,31 +36,34 @@ class Channel {
     String? id,
     String? name,
     String? url,
-    Object? logo       = _sentinel,
-    Object? group      = _sentinel,
+    Object? logo = _sentinel,
+    Object? group = _sentinel,
     Object? playlistId = _sentinel,
-    bool?   isFavorite,
+    bool? isFavorite,
   }) {
     return Channel(
-      id:         id         ?? this.id,
-      name:       name       ?? this.name,
-      url:        url        ?? this.url,
-      logo:       logo       == _sentinel ? this.logo       : logo       as String?,
-      group:      group      == _sentinel ? this.group      : group      as String?,
-      playlistId: playlistId == _sentinel ? this.playlistId : playlistId as int?,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      url: url ?? this.url,
+      logo: logo == _sentinel ? this.logo : logo as String?,
+      group: group == _sentinel ? this.group : group as String?,
+      playlistId: playlistId == _sentinel
+          ? this.playlistId
+          : playlistId as int?,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 
   Map<String, Object?> toDb({required int playlistId}) {
     return {
-      'id':          id,
+      'id': id,
       'playlist_id': playlistId,
-      'name':        name,
-      'url':         url,
-      'logo':        logo,
-      'group_name':  group,
-      'search_text': '${name.toLowerCase()} ${(group ?? '').toLowerCase()}'.trim(),
+      'name': name,
+      'url': url,
+      'logo': logo,
+      'group_name': group,
+      'search_text': '${name.toLowerCase()} ${(group ?? '').toLowerCase()}'
+          .trim(),
       'is_favorite': isFavorite ? 1 : 0,
     };
   }

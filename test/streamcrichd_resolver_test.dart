@@ -75,6 +75,12 @@ function pltHrtgteU() {
       expect(r.httpHeaders?['Referer'], 'https://executeandship.com/');
     });
 
+    test('derives channelName from fid in HLS path', () {
+      final r = StreamcrichdResolver.parsePlayerPage(body);
+      // "asportshd" → suffix "HD" stripped, remainder "asports" → "Asports HD"
+      expect(r.channelName, 'Asports HD');
+    });
+
     test('parses expires query parameter', () {
       final r = StreamcrichdResolver.parsePlayerPage(body);
       expect(

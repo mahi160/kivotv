@@ -25,15 +25,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   static const _pageSize = 60;
 
   final _controller = TextEditingController();
-  final _focus      = FocusNode();
-  final _scroll     = ScrollController();
+  final _focus = FocusNode();
+  final _scroll = ScrollController();
   final List<Channel> _results = [];
 
-  String _query   = '';
+  String _query = '';
   Timer? _debounce;
-  bool   _loading = false;
-  bool   _hasMore = false;
-  int    _offset  = 0;
+  bool _loading = false;
+  bool _hasMore = false;
+  int _offset = 0;
 
   @override
   void initState() {
@@ -55,9 +55,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       setState(() {
-        _query   = value.trim();
+        _query = value.trim();
         _results.clear();
-        _offset  = 0;
+        _offset = 0;
         _hasMore = _query.isNotEmpty;
         _loading = false;
       });
@@ -69,12 +69,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (_loading || !_hasMore || _query.isEmpty) return;
     // Capture before the await — if the user changes the query while we're
     // fetching, we discard the page instead of mixing it into the new query.
-    final capturedQuery  = _query;
+    final capturedQuery = _query;
     final capturedOffset = _offset;
     setState(() => _loading = true);
     try {
-      final page = await ref.read(repositoryProvider).channels(
-          query: capturedQuery, limit: _pageSize, offset: capturedOffset);
+      final page = await ref
+          .read(repositoryProvider)
+          .channels(
+            query: capturedQuery,
+            limit: _pageSize,
+            offset: capturedOffset,
+          );
       if (!mounted) return;
       if (_query != capturedQuery || _offset != capturedOffset) {
         // Stale result — query or pagination changed while we were fetching.
@@ -83,9 +88,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
       setState(() {
         _results.addAll(page);
-        _offset  += page.length;
-        _hasMore  = page.length == _pageSize;
-        _loading  = false;
+        _offset += page.length;
+        _hasMore = page.length == _pageSize;
+        _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -117,7 +122,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           variant: GradientVariant.list,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.tvEdgeSm, AppSpacing.md, AppSpacing.tvEdgeSm, AppSpacing.sm),
+              AppSpacing.tvEdgeSm,
+              AppSpacing.md,
+              AppSpacing.tvEdgeSm,
+              AppSpacing.sm,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -140,8 +149,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           }
                           // Consume ↑ ← → so the TV focus system can’t steal
                           // focus away from the field and dismiss the keyboard.
-                          if (k == LogicalKeyboardKey.arrowUp   ||
-                              k == LogicalKeyboardKey.arrowLeft  ||
+                          if (k == LogicalKeyboardKey.arrowUp ||
+                              k == LogicalKeyboardKey.arrowLeft ||
                               k == LogicalKeyboardKey.arrowRight) {
                             return KeyEventResult.handled;
                           }
@@ -149,13 +158,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         },
                         child: TextField(
                           controller: _controller,
-                          focusNode:  _focus,
-                          autofocus:  true,
-                          onChanged:  _onChanged,
+                          focusNode: _focus,
+                          autofocus: true,
+                          onChanged: _onChanged,
                           style: Theme.of(context).textTheme.titleMedium,
                           decoration: const InputDecoration(
-                            filled:     true,
-                            hintText:   'Search channels & matches…',
+                            filled: true,
+                            hintText: 'Search channels & matches…',
                             prefixIcon: Icon(Icons.search_rounded, size: 24),
                           ),
                         ),
@@ -188,26 +197,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return GridView.builder(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxl),
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.xxl,
+      ),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: AppSpacing.tvGridCardMaxExtent,
-        crossAxisSpacing:   AppSpacing.md,
-        mainAxisSpacing:    AppSpacing.md,
-        mainAxisExtent:     AppSpacing.tvGridCardExtent,
+        crossAxisSpacing: AppSpacing.md,
+        mainAxisSpacing: AppSpacing.md,
+        mainAxisExtent: AppSpacing.tvGridCardExtent,
       ),
       itemCount: count,
       itemBuilder: (ctx, i) {
         if (i >= _results.length) {
           return const Center(
-            child: SizedBox(width: 32, height: 32,
-                child: CircularProgressIndicator(strokeWidth: 2.5)));
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          );
         }
         final c = _results[i];
         return ChannelCard(
-          key:       ValueKey(c.url),
-          channel:   c,
+          key: ValueKey(c.url),
+          channel: c,
           autofocus: i == 0,
-          onTap:     () => _open(c),
+          onTap: () => _open(c),
         );
       },
     );

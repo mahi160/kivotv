@@ -26,16 +26,24 @@ class DatabaseService {
       dbPath,
       version: 7,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-      onCreate:    (db, _) => _createSchema(db),
+      onCreate: (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
         // v1 → v2: added is_pinned, is_broken, recently_watched table.
         // is_broken column stays in old DBs (can't DROP COLUMN in old SQLite)
         // but is no longer read or written by the app as of v4.
         if (oldVersion < 2) {
           await _addColumnIfMissing(
-              db, 'channels', 'is_pinned', 'INTEGER NOT NULL DEFAULT 0');
+            db,
+            'channels',
+            'is_pinned',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _addColumnIfMissing(
-              db, 'channels', 'is_broken', 'INTEGER NOT NULL DEFAULT 0');
+            db,
+            'channels',
+            'is_broken',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await db.execute('''
 CREATE TABLE IF NOT EXISTS recently_watched (
   channel_url TEXT PRIMARY KEY,
@@ -50,7 +58,11 @@ CREATE TABLE IF NOT EXISTS recently_watched (
         // v2 → v3: added is_favorite.
         if (oldVersion < 3) {
           await _addColumnIfMissing(
-              db, 'channels', 'is_favorite', 'INTEGER NOT NULL DEFAULT 0');
+            db,
+            'channels',
+            'is_favorite',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_channels_favorite'
             ' ON channels(is_favorite)',
@@ -61,7 +73,8 @@ CREATE TABLE IF NOT EXISTS recently_watched (
         // Clear any leftover flags so those channels become visible again.
         if (oldVersion < 4) {
           await db.execute(
-              'UPDATE channels SET is_broken = 0 WHERE is_broken = 1');
+            'UPDATE channels SET is_broken = 0 WHERE is_broken = 1',
+          );
         }
         // v4 → v5: composite index so channelsByGroup() ORDER BY group_name,
         // name can use an index scan instead of sorting all rows in memory.
@@ -84,7 +97,8 @@ CREATE TABLE IF NOT EXISTS recently_watched (
             await db.execute(_ftsCreateSql);
             // Populate the index from existing rows.
             await db.execute(
-                "INSERT INTO channels_fts(channels_fts) VALUES('rebuild')");
+              "INSERT INTO channels_fts(channels_fts) VALUES('rebuild')",
+            );
           } catch (_) {
             // FTS5 unavailable — hasFts() will return false and search
             // transparently falls back to the old LIKE path.
@@ -140,16 +154,23 @@ CREATE TABLE recently_watched (
   FOREIGN KEY (channel_url) REFERENCES channels (url) ON DELETE CASCADE
 )''');
     await db.execute('CREATE INDEX idx_channels_name      ON channels(name)');
-    await db.execute('CREATE INDEX idx_channels_group     ON channels(group_name)');
+    await db.execute(
+      'CREATE INDEX idx_channels_group     ON channels(group_name)',
+    );
     // Composite index for ORDER BY group_name, name (home dashboard).
     await db.execute(
       'CREATE INDEX idx_channels_group_name'
       ' ON channels(group_name COLLATE NOCASE, name COLLATE NOCASE)',
     );
-    await db.execute('CREATE INDEX idx_channels_search    ON channels(search_text)');
-    await db.execute('CREATE INDEX idx_channels_favorite  ON channels(is_favorite)');
     await db.execute(
-      'CREATE INDEX idx_recent_watched_at ON recently_watched(watched_at DESC)');
+      'CREATE INDEX idx_channels_search    ON channels(search_text)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_channels_favorite  ON channels(is_favorite)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_recent_watched_at ON recently_watched(watched_at DESC)',
+    );
     // FTS5 virtual table + sync triggers. Skipped gracefully when FTS5 is
     // unavailable (SQLite < 3.9 / Android < 7) — search falls back to LIKE.
     try {
@@ -195,7 +216,7 @@ END''';
   Future<bool> _hasFts() async {
     if (_ftsEnabled != null) return _ftsEnabled!;
     final db = await database;
-    final r  = await db.rawQuery(
+    final r = await db.rawQuery(
       "SELECT 1 FROM sqlite_master WHERE type='table' AND name='channels_fts' LIMIT 1",
     );
     return _ftsEnabled = r.isNotEmpty;
@@ -213,7 +234,7 @@ END''';
         // Strip characters that have FTS5 syntax meaning outside quotes.
         .map((t) => t.replaceAll('"', ''))
         .where((t) => t.isNotEmpty)
-        .map((t) => '"$t"*')   // quoted token + prefix wildcard
+        .map((t) => '"$t"*') // quoted token + prefix wildcard
         .toList();
     return tokens.join(' '); // implicit AND between tokens
   }
@@ -225,7 +246,7 @@ END''';
     String definition,
   ) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
-    final exists  = columns.any((row) => row['name'] == column);
+    final exists = columns.any((row) => row['name'] == column);
     if (!exists) {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
     }
@@ -237,29 +258,35 @@ END''';
     required String name,
     required String url,
   }) async {
-    final db  = await database;
+    final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
-    await db.insert(
-      'playlists',
-      {'name': name, 'url': url, 'last_refreshed_at': now},
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert('playlists', {
+      'name': name,
+      'url': url,
+      'last_refreshed_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
     await db.update(
       'playlists',
       {'name': name, 'last_refreshed_at': now},
-      where: 'url = ?', whereArgs: [url],
+      where: 'url = ?',
+      whereArgs: [url],
     );
     final rows = await db.query(
-      'playlists', columns: ['id'], where: 'url = ?',
-      whereArgs: [url], limit: 1,
+      'playlists',
+      columns: ['id'],
+      where: 'url = ?',
+      whereArgs: [url],
+      limit: 1,
     );
     return rows.single['id'] as int;
   }
 
   Future<List<Playlist>> playlists() async {
-    final db   = await database;
-    final rows = await db.query('playlists',
-        orderBy: 'name COLLATE NOCASE ASC');
+    final db = await database;
+    final rows = await db.query(
+      'playlists',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
     return rows.map(Playlist.fromDb).toList();
   }
 
@@ -269,7 +296,7 @@ END''';
   /// Deletes only URLs that disappeared upstream; upserts the rest in-place so
   /// is_favorite / recently_watched history are preserved.
   Future<void> replaceChannels({
-    required int          playlistId,
+    required int playlistId,
     required List<Channel> channels,
   }) async {
     final db = await database;
@@ -277,8 +304,10 @@ END''';
       final newUrls = {for (final c in channels) c.url};
 
       final existing = await txn.query(
-        'channels', columns: ['url'],
-        where: 'playlist_id = ?', whereArgs: [playlistId],
+        'channels',
+        columns: ['url'],
+        where: 'playlist_id = ?',
+        whereArgs: [playlistId],
       );
       final toDelete = [
         for (final row in existing)
@@ -287,10 +316,15 @@ END''';
 
       const chunkSize = 500;
       for (var i = 0; i < toDelete.length; i += chunkSize) {
-        final slice        = toDelete.sublist(i, math.min(i + chunkSize, toDelete.length));
+        final slice = toDelete.sublist(
+          i,
+          math.min(i + chunkSize, toDelete.length),
+        );
         final placeholders = List.filled(slice.length, '?').join(',');
         await txn.rawDelete(
-            'DELETE FROM channels WHERE url IN ($placeholders)', slice);
+          'DELETE FROM channels WHERE url IN ($placeholders)',
+          slice,
+        );
       }
 
       final batch = txn.batch();
@@ -317,8 +351,13 @@ ON CONFLICT(url) DO UPDATE SET
   search_text = excluded.search_text
 ''',
           [
-            data['id'],  data['playlist_id'], data['name'], data['url'],
-            data['logo'], data['group_name'], data['search_text'],
+            data['id'],
+            data['playlist_id'],
+            data['name'],
+            data['url'],
+            data['logo'],
+            data['group_name'],
+            data['search_text'],
             data['is_favorite'],
           ],
         );
@@ -332,21 +371,21 @@ ON CONFLICT(url) DO UPDATE SET
   // ── Channels — queries ─────────────────────────────────────────────────────
 
   Future<int> channelCount() async {
-    final db     = await database;
+    final db = await database;
     final result = await db.rawQuery('SELECT COUNT(*) AS count FROM channels');
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<List<Channel>> channels({
-    String  query  = '',
+    String query = '',
     String? group,
-    int     limit  = 100,
-    int     offset = 0,
+    int limit = 100,
+    int offset = 0,
   }) async {
-    final db              = await database;
+    final db = await database;
     final normalizedQuery = query.trim().toLowerCase();
-    final where           = <String>[];
-    final args            = <Object?>[];
+    final where = <String>[];
+    final args = <Object?>[];
 
     if (normalizedQuery.isNotEmpty) {
       final ftsQ = _ftsQuery(normalizedQuery);
@@ -372,14 +411,15 @@ ON CONFLICT(url) DO UPDATE SET
 
     final rows = await db.query(
       'channels',
-      where:     where.isEmpty ? null : where.join(' AND '),
-      whereArgs: args.isEmpty  ? null : args,
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args.isEmpty ? null : args,
       // Cluster by category (grouped channels first, A–Z within each group;
       // ungrouped last) rather than one flat alphabetical list.
-      orderBy:   'group_name IS NULL, group_name COLLATE NOCASE ASC, '
-                 'name COLLATE NOCASE ASC',
-      limit:     limit,
-      offset:    offset,
+      orderBy:
+          'group_name IS NULL, group_name COLLATE NOCASE ASC, '
+          'name COLLATE NOCASE ASC',
+      limit: limit,
+      offset: offset,
     );
     return rows.map(Channel.fromDb).toList();
   }
@@ -391,11 +431,12 @@ ON CONFLICT(url) DO UPDATE SET
   /// Requires SQLite 3.25+ / Android 9+ (window functions). Already required
   /// by the existing schema — no additional compatibility concern.
   Future<List<MapEntry<String, List<Channel>>>> channelsByGroup({
-    int groupLimit    = 15,
+    int groupLimit = 15,
     int perGroupLimit = 30,
   }) async {
-    final db   = await database;
-    final rows = await db.rawQuery('''
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
 WITH top_groups AS (
   SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
   FROM   channels
@@ -417,7 +458,9 @@ ranked AS (
 )
 SELECT * FROM ranked WHERE _rn <= ?
 ORDER BY _g COLLATE NOCASE ASC, name COLLATE NOCASE ASC
-''', [groupLimit, perGroupLimit]);
+''',
+      [groupLimit, perGroupLimit],
+    );
 
     final groupMap = <String, List<Channel>>{};
     for (final row in rows) {
@@ -426,47 +469,48 @@ ORDER BY _g COLLATE NOCASE ASC, name COLLATE NOCASE ASC
     }
 
     // Other pushed last; remainder A–Z.
-    return (groupMap.entries.toList()
-      ..sort((a, b) {
-        if (a.key == 'Other' && b.key != 'Other') return  1;
-        if (b.key == 'Other' && a.key != 'Other') return -1;
-        return a.key.toLowerCase().compareTo(b.key.toLowerCase());
-      }));
+    return (groupMap.entries.toList()..sort((a, b) {
+      if (a.key == 'Other' && b.key != 'Other') return 1;
+      if (b.key == 'Other' && a.key != 'Other') return -1;
+      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+    }));
   }
 
   Future<List<Channel>> favoriteChannels({int limit = 12}) async {
-    final db   = await database;
+    final db = await database;
     final rows = await db.query(
       'channels',
-      where:   'is_favorite = 1',
+      where: 'is_favorite = 1',
       orderBy: 'name COLLATE NOCASE ASC',
-      limit:   limit,
+      limit: limit,
     );
     return rows.map(Channel.fromDb).toList();
   }
 
   /// Live channels shown in the "Live Now" dashboard row.
-  /// Includes tflix matches (`tflix://`) and built-in live streams (`bdixtv://`).
   Future<List<Channel>> liveMatches({int limit = 40}) async {
-    final db   = await database;
+    final db = await database;
     final rows = await db.query(
       'channels',
-      where:   "url LIKE 'tflix://%' OR url LIKE 'bdixtv://%'",
+      where: "url LIKE 'tflix://%'",
       orderBy: 'name COLLATE NOCASE ASC',
-      limit:   limit,
+      limit: limit,
     );
     return rows.map(Channel.fromDb).toList();
   }
 
   Future<List<Channel>> recentlyWatched({int limit = 12}) async {
-    final db   = await database;
-    final rows = await db.rawQuery('''
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
 SELECT channels.*
 FROM   recently_watched
 JOIN   channels ON channels.url = recently_watched.channel_url
 ORDER  BY recently_watched.watched_at DESC
 LIMIT  ?
-''', [limit]);
+''',
+      [limit],
+    );
     return rows.map(Channel.fromDb).toList();
   }
 
@@ -474,24 +518,36 @@ LIMIT  ?
 
   Future<void> setFavorite(String channelUrl, bool favorite) async {
     final db = await database;
-    await db.update('channels', {'is_favorite': favorite ? 1 : 0},
-        where: 'url = ?', whereArgs: [channelUrl]);
+    await db.update(
+      'channels',
+      {'is_favorite': favorite ? 1 : 0},
+      where: 'url = ?',
+      whereArgs: [channelUrl],
+    );
+  }
+
+  Future<void> updateChannelName(String channelUrl, String name) async {
+    final db = await database;
+    await db.update(
+      'channels',
+      {'name': name, 'search_text': name.toLowerCase()},
+      where: 'url = ?',
+      whereArgs: [channelUrl],
+    );
   }
 
   Future<void> markWatched(String channelUrl) async {
     final db = await database;
-    await db.insert(
-      'recently_watched',
-      {'channel_url': channelUrl,
-       'watched_at':  DateTime.now().millisecondsSinceEpoch},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('recently_watched', {
+      'channel_url': channelUrl,
+      'watched_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   String _escapeLike(String input) => input
       .replaceAll(r'\', r'\\')
-      .replaceAll('%',  r'\%')
-      .replaceAll('_',  r'\_');
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 }

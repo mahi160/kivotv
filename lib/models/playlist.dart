@@ -31,11 +31,7 @@ class Playlist {
   }
 
   Map<String, Object?> toDb() {
-    return {
-      'name': name,
-      'url': url,
-      'last_refreshed_at': lastRefreshedAt,
-    };
+    return {'name': name, 'url': url, 'last_refreshed_at': lastRefreshedAt};
   }
 
   Playlist copyWith({

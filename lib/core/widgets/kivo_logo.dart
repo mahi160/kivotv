@@ -10,7 +10,7 @@ class KivoLogo extends StatelessWidget {
   const KivoLogo({super.key, this.size = 48, this.color = Colors.white});
 
   final double size;
-  final Color  color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +33,8 @@ class _KivoLogoPainter extends CustomPainter {
     // the requested paint size so the mark stays crisp at any dimension.
     final s = size.width / 38.0;
     final paint = Paint()
-      ..color       = color
-      ..style       = PaintingStyle.fill
+      ..color = color
+      ..style = PaintingStyle.fill
       ..isAntiAlias = true;
 
     // ── Vertical bar (the "spine") ──────────────────────────────────────────
@@ -54,5 +54,6 @@ class _KivoLogoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_KivoLogoPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_KivoLogoPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

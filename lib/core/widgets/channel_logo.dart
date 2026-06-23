@@ -28,18 +28,18 @@ class ChannelLogo extends StatelessWidget {
     final bg = backgroundColor ?? Colors.white.withValues(alpha: 0.10);
 
     Widget placeholder() => Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(borderRadius),
-          ),
-          child: Icon(
-            Icons.live_tv_rounded,
-            size: size * 0.5,
-            color: AppColors.darkOnSurfaceVariant,
-          ),
-        );
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: Icon(
+        Icons.live_tv_rounded,
+        size: size * 0.5,
+        color: AppColors.darkOnSurfaceVariant,
+      ),
+    );
 
     final url = logoUrl;
     if (url == null || url.isEmpty) return placeholder();
@@ -55,13 +55,10 @@ class ChannelLogo extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.contain,
-        memCacheWidth:  (size * dpr).ceil(),
+        memCacheWidth: (size * dpr).ceil(),
         memCacheHeight: (size * dpr).ceil(),
-        placeholder: (context, url) => Container(
-          width: size,
-          height: size,
-          color: bg,
-        ),
+        placeholder: (context, url) =>
+            Container(width: size, height: size, color: bg),
         errorWidget: (context, url, error) => placeholder(),
       ),
     );

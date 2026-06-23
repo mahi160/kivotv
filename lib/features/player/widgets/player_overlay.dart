@@ -29,18 +29,18 @@ class PlayerOverlay extends StatelessWidget {
     required this.playFocusNode,
   });
 
-  final Channel      channel;
-  final int          channelIndex;
-  final int          channelTotal;
-  final Player       player;
-  final bool         showingList;
+  final Channel channel;
+  final int channelIndex;
+  final int channelTotal;
+  final Player player;
+  final bool showingList;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onInteraction;
   final VoidCallback onBack;
   final VoidCallback onToggleList;
   final VoidCallback onToggleFavorite;
-  final FocusNode    playFocusNode;
+  final FocusNode playFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -51,16 +51,18 @@ class PlayerOverlay extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin:  Alignment.topCenter,
-          end:    Alignment.bottomCenter,
-          colors: [Color(0xCC000000), Colors.transparent, Color(0xCC000000)],
-          stops:  [0.0, 0.42, 1.0],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x99000000), Colors.transparent, Color(0xAA000000)],
+          stops: [0.0, 0.48, 1.0],
         ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-          AppSpacing.tvEdge, AppSpacing.md,
-          AppSpacing.tvEdge, AppSpacing.tvEdge,
+          AppSpacing.tvEdge,
+          AppSpacing.sm,
+          AppSpacing.tvEdge,
+          AppSpacing.md,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,10 +75,14 @@ class PlayerOverlay extends StatelessWidget {
                 // gets the same gold glow ring as every other focusable
                 // in the app rather than Material's grey-highlight box.
                 FocusableTap(
-                  onTap: () { onInteraction(); onBack(); },
+                  onTap: () {
+                    onInteraction();
+                    onBack();
+                  },
                   builder: (_, focused) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: 44, height: 44,
+                    duration: const Duration(milliseconds: 110),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: focused
@@ -88,20 +94,11 @@ class PlayerOverlay extends StatelessWidget {
                             : Colors.white30,
                         width: focused ? 2 : 1,
                       ),
-                      boxShadow: focused
-                          ? [
-                              BoxShadow(
-                                color: AppColors.accent
-                                    .withValues(alpha: 0.55),
-                                blurRadius:   24,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
+                      boxShadow: null,
                     ),
                     child: Icon(
                       Icons.arrow_back_rounded,
-                      size:  24,
+                      size: 22,
                       color: focused ? Colors.black87 : Colors.white,
                     ),
                   ),
@@ -118,11 +115,8 @@ class PlayerOverlay extends StatelessWidget {
                           Flexible(
                             child: Text(
                               channel.name,
-                              style: Theme.of(context).textTheme.headlineMedium
-                                  ?.copyWith(
-                                color: Colors.white,
-                                shadows: [const Shadow(blurRadius: 8)],
-                              ),
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(color: Colors.white),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -148,20 +142,22 @@ class PlayerOverlay extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Channel number — left, in a legible pill
-                if (chNum.isNotEmpty)
-                  _ChannelNumberPill(text: chNum),
+                if (chNum.isNotEmpty) _ChannelNumberPill(text: chNum),
 
                 const Spacer(),
 
                 // Playback controls — centre. Play/pause is the big primary.
                 CtrlBtn(
-                  icon:      Icons.skip_previous_rounded,
+                  icon: Icons.skip_previous_rounded,
                   autofocus: false,
-                  onPressed: () { onInteraction(); onPrevious(); },
+                  onPressed: () {
+                    onInteraction();
+                    onPrevious();
+                  },
                 ),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.sm),
                 StreamBuilder<bool>(
-                  stream:      player.stream.playing,
+                  stream: player.stream.playing,
                   initialData: false,
                   builder: (ctx, snap) {
                     final playing = snap.data ?? false;
@@ -170,38 +166,50 @@ class PlayerOverlay extends StatelessWidget {
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
                       autofocus: true,
-                      primary:   true,
+                      primary: true,
                       focusNode: playFocusNode,
-                      onPressed: () { onInteraction(); player.playOrPause(); },
+                      onPressed: () {
+                        onInteraction();
+                        player.playOrPause();
+                      },
                     );
                   },
                 ),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.sm),
                 CtrlBtn(
-                  icon:      Icons.skip_next_rounded,
+                  icon: Icons.skip_next_rounded,
                   autofocus: false,
-                  onPressed: () { onInteraction(); onNext(); },
+                  onPressed: () {
+                    onInteraction();
+                    onNext();
+                  },
                 ),
 
                 const Spacer(),
 
                 // Icon actions — right
                 IconAction(
-                  icon:      Icons.format_list_bulleted_rounded,
-                  active:    showingList,
-                  tooltip:   'Channel list',
-                  onPressed: () { onInteraction(); onToggleList(); },
+                  icon: Icons.format_list_bulleted_rounded,
+                  active: showingList,
+                  tooltip: 'Channel list',
+                  onPressed: () {
+                    onInteraction();
+                    onToggleList();
+                  },
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 IconAction(
                   icon: channel.isFavorite
                       ? Icons.star_rounded
                       : Icons.star_border_rounded,
-                  active:    channel.isFavorite,
-                  tooltip:   channel.isFavorite
+                  active: channel.isFavorite,
+                  tooltip: channel.isFavorite
                       ? 'Remove from favourites'
                       : 'Add to favourites',
-                  onPressed: () { onInteraction(); onToggleFavorite(); },
+                  onPressed: () {
+                    onInteraction();
+                    onToggleFavorite();
+                  },
                 ),
               ],
             ),
@@ -222,27 +230,20 @@ class _CategoryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-        border: Border.all(color: Colors.white24),
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: Colors.white12),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.sell_rounded, size: 15, color: AppColors.accentBright),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              color:      Colors.white,
-              fontSize:   15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'Outfit',
+          color: Colors.white70,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -267,20 +268,23 @@ class _LiveBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: const [
           SizedBox(
-            width: 8, height: 8,
+            width: 8,
+            height: 8,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white, shape: BoxShape.circle),
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
           SizedBox(width: 7),
           Text(
             'LIVE',
             style: TextStyle(
-              fontFamily:    'Outfit',
-              color:         Colors.white,
-              fontSize:      13,
-              fontWeight:    FontWeight.w700,
+              fontFamily: 'Outfit',
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
               letterSpacing: 1.8,
             ),
           ),
@@ -301,20 +305,20 @@ class _ChannelNumberPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-        border: Border.all(color: Colors.white24),
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: Colors.white12),
       ),
       child: Text(
         text,
         style: const TextStyle(
-          fontFamily:    'Outfit',
-          color:         Colors.white,
-          fontSize:      18,
-          fontWeight:    FontWeight.w600,
-          letterSpacing: 0.5,
+          fontFamily: 'Outfit',
+          color: Colors.white70,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.3,
         ),
       ),
     );
