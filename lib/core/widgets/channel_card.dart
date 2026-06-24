@@ -48,15 +48,17 @@ class ChannelCard extends StatelessWidget {
       autofocus: autofocus,
       onTap: onTap,
       builder: (context, focused) {
-        return AnimatedScale(
-          // Kept inside the row/grid gap so a later-painted neighbour never
-          // clips the focused card's ring or glow.
-          scale: focused ? 1.03 : 1.0,
-          duration: const Duration(milliseconds: 110),
-          curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 110),
+        // Single AnimatedContainer handles both scale + decoration so Flutter
+        // only schedules one animation ticker and one repaint per focus change.
+        return AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
             curve: Curves.easeOut,
+            transform: Matrix4.diagonal3Values(
+              focused ? 1.03 : 1.0,
+              focused ? 1.03 : 1.0,
+              1.0,
+            ),
+            transformAlignment: Alignment.center,
             decoration: BoxDecoration(
               color: surfaceColor,
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -65,15 +67,6 @@ class ChannelCard extends StatelessWidget {
                 width: focused ? 2 : 1,
                 strokeAlign: BorderSide.strokeAlignOutside,
               ),
-              boxShadow: focused
-                  ? [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.22),
-                        blurRadius: 12,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -159,7 +152,6 @@ class ChannelCard extends StatelessWidget {
                 ],
               ),
             ),
-          ),
         );
       },
     );

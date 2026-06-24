@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
 import '../core/db/database_service.dart';
-import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
 import 'tflix_service.dart';
 
@@ -60,7 +59,10 @@ class PlaylistRepository {
   static const _refreshThreshold = Duration(hours: 24);
   static const _streamcrichdChannelCount = 51; // 0–50 inclusive.
 
-  static const _seededKey = 'kivo_playlists_seeded_v3';
+  static const _seededKey        = 'kivo_playlists_seeded_v3';
+  /// Bumping this key forces built-in channels to re-seed on next launch
+  /// (e.g. when the StreamCricHD channel count changes).
+  static const _builtinSeededKey = 'kivo_builtin_seeded_v1';
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
@@ -70,15 +72,20 @@ class PlaylistRepository {
   ];
 
   Future<void> _bootstrap() async {
+    final prefs       = await SharedPreferences.getInstance();
+    final builtinDone = prefs.getBool(_builtinSeededKey) ?? false;
     try {
-      await _storeBuiltInChannels();
-      await _storeStreamcrichdChannels();
+      // Only seed / clean built-ins once per install (or after a key bump).
+      // Skipping on subsequent launches saves ~100 SQLite ops per start.
+      if (!builtinDone) {
+        await _removeIptvidnIfPresent();
+        await _storeStreamcrichdChannels();
+        await prefs.setBool(_builtinSeededKey, true);
+      }
       final storedCount = await DatabaseService.instance.channelCount();
       channelCount.value = storedCount;
       _bumpAll();
     } catch (e) {
-      // Store failures are non-fatal — channels from previous launches may
-      // already exist in the DB. Log and continue so the app never hangs.
       debugPrint('kivo bootstrap store error: $e');
     } finally {
       _bootstrapped = true;
@@ -90,15 +97,10 @@ class PlaylistRepository {
     _seedAndRefresh();
   }
 
-  Future<void> _storeBuiltInChannels() async {
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'IPTV IDN',
-      url: 'kivo://iptvidn',
-    );
-    await DatabaseService.instance.replaceChannels(
-      playlistId: playlistId,
-      channels: iptvidnChannels,
-    );
+  /// Removes the old IPTV IDN built-in playlist and its channels.
+  /// Safe to call repeatedly — no-ops when the playlist is already gone.
+  Future<void> _removeIptvidnIfPresent() async {
+    await DatabaseService.instance.deletePlaylistByUrl('kivo://iptvidn');
   }
 
   Future<void> _storeStreamcrichdChannels() async {

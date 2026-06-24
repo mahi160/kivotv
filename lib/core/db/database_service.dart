@@ -25,7 +25,7 @@ class DatabaseService {
     final opened = await openDatabase(
       dbPath,
       version: 7,
-      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+      onConfigure: (db) => db.execute('PRAGMA foreign_keys=ON'),
       onCreate: (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
         // v1 → v2: added is_pinned, is_broken, recently_watched table.
@@ -122,6 +122,14 @@ CREATE TABLE IF NOT EXISTS recently_watched (
       },
     );
     _db = opened;
+    // Best-effort performance tuning. Silently ignored on devices whose
+    // SQLite build doesn't support WAL (returns 'delete' instead of 'wal')
+    // or rejects cache_size — DB still works with default settings.
+    try {
+      await opened.rawQuery('PRAGMA journal_mode=WAL');
+      await opened.execute('PRAGMA synchronous=NORMAL');
+      await opened.execute('PRAGMA cache_size=-8000');
+    } catch (_) {}
     return opened;
   }
 
@@ -281,6 +289,12 @@ END''';
     return rows.single['id'] as int;
   }
 
+  Future<void> deletePlaylistByUrl(String url) async {
+    final db = await database;
+    await db.delete('playlists', where: 'url = ?', whereArgs: [url]);
+    // Channels are removed by the ON DELETE CASCADE foreign key.
+  }
+
   Future<List<Playlist>> playlists() async {
     final db = await database;
     final rows = await db.query(
@@ -432,36 +446,29 @@ END''';
   }) async {
     final db = await database;
 
-    // Step 1: find the top groups by channel count.
-    final topGroupRows = await db.rawQuery(
-      '''
-SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g, COUNT(*) AS cnt
-FROM   channels
-WHERE  url NOT LIKE 'tflix://%'
-GROUP  BY _g
-ORDER  BY cnt DESC
-LIMIT  ?
-''',
-      [groupLimit],
-    );
-    if (topGroupRows.isEmpty) return [];
-    final topGroups = topGroupRows.map((r) => r['_g'] as String).toList();
-
-    // Step 2: fetch all channels that belong to those groups, ordered
-    // alphabetically so the per-group head-slice is already sorted.
-    final placeholders = List.filled(topGroups.length, '?').join(',');
+    // Single query: inline the top-groups subquery so we avoid a second
+    // round-trip to SQLite. The subquery is cheap (one index scan) and
+    // SQLite caches it inside the same statement.
     final rows = await db.rawQuery(
       '''
 SELECT c.*,
        COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g
 FROM   channels c
 WHERE  c.url NOT LIKE 'tflix://%'
-  AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN ($placeholders)
+  AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN (
+         SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
+         FROM   channels
+         WHERE  url NOT LIKE 'tflix://%'
+         GROUP  BY _g
+         ORDER  BY COUNT(*) DESC
+         LIMIT  ?
+       )
 ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
           c.name COLLATE NOCASE ASC
 ''',
-      topGroups,
+      [groupLimit],
     );
+    if (rows.isEmpty) return [];
 
     // Step 3: group in Dart and cap each bucket at perGroupLimit.
     final groupMap = <String, List<Channel>>{};

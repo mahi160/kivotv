@@ -394,13 +394,15 @@ class _LiveMatchCard extends StatelessWidget {
     return FocusableTap(
       autofocus: autofocus,
       onTap: onTap,
-      builder: (_, focused) => AnimatedScale(
-        scale: focused ? 1.03 : 1.0,
-        duration: const Duration(milliseconds: 110),
-        curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 110),
+      builder: (_, focused) => AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
           curve: Curves.easeOut,
+          transform: Matrix4.diagonal3Values(
+            focused ? 1.03 : 1.0,
+            focused ? 1.03 : 1.0,
+            1.0,
+          ),
+          transformAlignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: surface.withValues(alpha: 0.92),
@@ -410,14 +412,6 @@ class _LiveMatchCard extends StatelessWidget {
               width: focused ? 2 : 1,
               strokeAlign: BorderSide.strokeAlignOutside,
             ),
-            boxShadow: focused
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.20),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
           ),
           child: Row(
             children: [
@@ -441,7 +435,6 @@ class _LiveMatchCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
       ),
     );
   }
