@@ -63,8 +63,11 @@ final groupsProvider =
 // at most once from this provider.
 
 final dashboardReadyProvider = Provider.autoDispose<bool>((ref) {
-  return ref.watch(liveMatchesProvider).hasValue &&
-      ref.watch(favoritesProvider).hasValue &&
-      ref.watch(recentProvider).hasValue &&
-      ref.watch(groupsProvider).hasValue;
+  // hasValue is true for AsyncData; hasError covers AsyncError so a single
+  // failing provider never blocks the whole screen in skeleton forever.
+  bool settled(AsyncValue<dynamic> v) => v.hasValue || v.hasError;
+  return settled(ref.watch(liveMatchesProvider)) &&
+      settled(ref.watch(favoritesProvider)) &&
+      settled(ref.watch(recentProvider)) &&
+      settled(ref.watch(groupsProvider));
 });

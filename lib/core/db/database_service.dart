@@ -327,38 +327,34 @@ END''';
         );
       }
 
+      // Two-step upsert compatible with all SQLite versions (no 3.24+ upsert
+      // syntax needed). INSERT OR IGNORE adds new rows; UPDATE refreshes
+      // metadata on existing rows. is_favorite is never touched by either.
       final batch = txn.batch();
       for (final channel in channels) {
         final data = channel.toDb(playlistId: playlistId);
+        // Step 1: insert if not already present (conflict = skip).
         batch.rawInsert(
-          '''
-INSERT INTO channels
-  (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
--- Global URL uniqueness is intentional: the same live stream URL can only
--- belong to one playlist at a time. When two playlists contain the same URL,
--- the last refreshed playlist wins (playlist_id is reassigned here). This
--- prevents duplicate rows for shared streams (e.g. BDIX/IPTV mirrors that
--- appear in multiple sources). If independent-playlist ownership is ever
--- needed, change the UNIQUE constraint to (playlist_id, url) and update
--- the favorite/recently-watched foreign keys accordingly.
-ON CONFLICT(url) DO UPDATE SET
-  id          = excluded.id,
-  playlist_id = excluded.playlist_id,
-  name        = excluded.name,
-  logo        = excluded.logo,
-  group_name  = excluded.group_name,
-  search_text = excluded.search_text
-''',
+          'INSERT OR IGNORE INTO channels'
+          ' (id, playlist_id, name, url, logo, group_name, search_text, is_favorite)'
+          ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [
-            data['id'],
-            data['playlist_id'],
-            data['name'],
-            data['url'],
-            data['logo'],
-            data['group_name'],
-            data['search_text'],
+            data['id'], data['playlist_id'], data['name'], data['url'],
+            data['logo'], data['group_name'], data['search_text'],
             data['is_favorite'],
+          ],
+        );
+        // Step 2: refresh metadata for rows that already existed.
+        // is_favorite is intentionally excluded so user choices survive
+        // a playlist refresh.
+        batch.rawUpdate(
+          'UPDATE channels'
+          ' SET id=?, playlist_id=?, name=?, logo=?, group_name=?, search_text=?'
+          ' WHERE url=?',
+          [
+            data['id'], data['playlist_id'], data['name'],
+            data['logo'], data['group_name'], data['search_text'],
+            data['url'],
           ],
         );
       }
@@ -425,55 +421,63 @@ ON CONFLICT(url) DO UPDATE SET
   }
 
   /// Top [groupLimit] groups by channel count, each capped at [perGroupLimit]
-  /// channels, for the Netflix-style Home rows. Both limits are applied in SQL
-  /// so only the rows that will actually be displayed transfer to Dart.
+  /// channels, for the Netflix-style Home rows.
   ///
-  /// Requires SQLite 3.25+ / Android 9+ (window functions). Already required
-  /// by the existing schema — no additional compatibility concern.
+  /// Deliberately avoids SQLite window functions (ROW_NUMBER OVER) so it
+  /// works on every Android SQLite build including older OEM builds that
+  /// ship SQLite < 3.25. Per-group capping is done in Dart after the query.
   Future<List<MapEntry<String, List<Channel>>>> channelsByGroup({
     int groupLimit = 15,
     int perGroupLimit = 30,
   }) async {
     final db = await database;
+
+    // Step 1: find the top groups by channel count.
+    final topGroupRows = await db.rawQuery(
+      '''
+SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g, COUNT(*) AS cnt
+FROM   channels
+WHERE  url NOT LIKE 'tflix://%'
+GROUP  BY _g
+ORDER  BY cnt DESC
+LIMIT  ?
+''',
+      [groupLimit],
+    );
+    if (topGroupRows.isEmpty) return [];
+    final topGroups = topGroupRows.map((r) => r['_g'] as String).toList();
+
+    // Step 2: fetch all channels that belong to those groups, ordered
+    // alphabetically so the per-group head-slice is already sorted.
+    final placeholders = List.filled(topGroups.length, '?').join(',');
     final rows = await db.rawQuery(
       '''
-WITH top_groups AS (
-  SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
-  FROM   channels
-  WHERE  url NOT LIKE 'tflix://%' AND url NOT LIKE 'bdixtv://%'
-  GROUP  BY _g
-  ORDER  BY COUNT(*) DESC
-  LIMIT  ?
-),
-ranked AS (
-  SELECT c.*,
-         COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g,
-         ROW_NUMBER() OVER (
-           PARTITION BY COALESCE(NULLIF(c.group_name, ''), 'Other')
-           ORDER BY c.name COLLATE NOCASE
-         ) AS _rn
-  FROM   channels c
-  WHERE  c.url NOT LIKE 'tflix://%'
-    AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN (SELECT _g FROM top_groups)
-)
-SELECT * FROM ranked WHERE _rn <= ?
-ORDER BY _g COLLATE NOCASE ASC, name COLLATE NOCASE ASC
+SELECT c.*,
+       COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g
+FROM   channels c
+WHERE  c.url NOT LIKE 'tflix://%'
+  AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN ($placeholders)
+ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
+          c.name COLLATE NOCASE ASC
 ''',
-      [groupLimit, perGroupLimit],
+      topGroups,
     );
 
+    // Step 3: group in Dart and cap each bucket at perGroupLimit.
     final groupMap = <String, List<Channel>>{};
     for (final row in rows) {
       final g = row['_g'] as String;
-      (groupMap[g] ??= []).add(Channel.fromDb(row));
+      final list = groupMap[g] ??= [];
+      if (list.length < perGroupLimit) list.add(Channel.fromDb(row));
     }
 
-    // Other pushed last; remainder A–Z.
-    return (groupMap.entries.toList()..sort((a, b) {
-      if (a.key == 'Other' && b.key != 'Other') return 1;
-      if (b.key == 'Other' && a.key != 'Other') return -1;
-      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
-    }));
+    // Other pushed last; remainder in the order returned by step 1 (desc count).
+    return (groupMap.entries.toList()
+      ..sort((a, b) {
+        if (a.key == 'Other' && b.key != 'Other') return 1;
+        if (b.key == 'Other' && a.key != 'Other') return -1;
+        return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+      }));
   }
 
   Future<List<Channel>> favoriteChannels({int limit = 12}) async {

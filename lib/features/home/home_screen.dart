@@ -556,18 +556,28 @@ class _HomeSkeleton extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: AppSpacing.tvRowCardHeight,
-            child: Row(
-              children: [
-                for (var j = 0; j < 6; j++) ...[
-                  _SkeletonRect(
-                    color: color,
-                    width: AppSpacing.tvRowCardWidth,
-                    height: AppSpacing.tvRowCardHeight,
-                    radius: AppSpacing.radiusMd,
-                  ),
-                  if (j < 5) const SizedBox(width: AppSpacing.tvRowGap),
-                ],
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Fit as many cards as the available width allows.
+                final count = ((constraints.maxWidth + AppSpacing.tvRowGap) /
+                        (AppSpacing.tvRowCardWidth + AppSpacing.tvRowGap))
+                    .floor()
+                    .clamp(1, 10);
+                return Row(
+                  children: [
+                    for (var j = 0; j < count; j++) ...[  
+                      _SkeletonRect(
+                        color: color,
+                        width: AppSpacing.tvRowCardWidth,
+                        height: AppSpacing.tvRowCardHeight,
+                        radius: AppSpacing.radiusMd,
+                      ),
+                      if (j < count - 1)
+                        const SizedBox(width: AppSpacing.tvRowGap),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           if (i < 2) const SizedBox(height: AppSpacing.tvSectionGap),
