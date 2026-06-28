@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/channel.dart';
+import '../models/playlist.dart';
 import 'notifier_stream.dart';
 import 'repository_provider.dart';
 
@@ -24,6 +25,12 @@ final _groupsVersionStream = StreamProvider.autoDispose<int>(
   (ref) =>
       valueNotifierStream(ref, ref.watch(repositoryProvider).groupsVersion),
 );
+final _playlistsVersionStream = StreamProvider.autoDispose<int>(
+  (ref) => valueNotifierStream(
+    ref,
+    ref.watch(repositoryProvider).playlistsVersion,
+  ),
+);
 
 // ── Section data providers ────────────────────────────────────────────────────
 
@@ -46,6 +53,11 @@ final recentProvider = FutureProvider.autoDispose<List<Channel>>((ref) async {
   return ref.watch(repositoryProvider).recentlyWatched();
 });
 
+final playlistsProvider = FutureProvider.autoDispose<List<Playlist>>((ref) async {
+  ref.watch(_playlistsVersionStream);
+  return ref.watch(repositoryProvider).playlists();
+});
+
 final groupsProvider =
     FutureProvider.autoDispose<List<MapEntry<String, List<Channel>>>>((
       ref,
@@ -63,11 +75,10 @@ final groupsProvider =
 // at most once from this provider.
 
 final dashboardReadyProvider = Provider.autoDispose<bool>((ref) {
-  // hasValue is true for AsyncData; hasError covers AsyncError so a single
+  // !isLoading is true for both AsyncData and AsyncError, so a single
   // failing provider never blocks the whole screen in skeleton forever.
-  bool settled(AsyncValue<dynamic> v) => v.hasValue || v.hasError;
-  return settled(ref.watch(liveMatchesProvider)) &&
-      settled(ref.watch(favoritesProvider)) &&
-      settled(ref.watch(recentProvider)) &&
-      settled(ref.watch(groupsProvider));
+  return !ref.watch(liveMatchesProvider).isLoading &&
+      !ref.watch(favoritesProvider).isLoading &&
+      !ref.watch(recentProvider).isLoading &&
+      !ref.watch(groupsProvider).isLoading;
 });

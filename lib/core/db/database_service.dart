@@ -24,7 +24,7 @@ class DatabaseService {
     final dbPath = p.join(await getDatabasesPath(), 'kivo.db');
     final opened = await openDatabase(
       dbPath,
-      version: 7,
+      version: 8,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys=ON'),
       onCreate: (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
@@ -119,6 +119,15 @@ CREATE TABLE IF NOT EXISTS recently_watched (
             } catch (_) {}
           }
         }
+        // v7 → v8: source toggle — enabled column on playlists.
+        if (oldVersion < 8) {
+          await _addColumnIfMissing(
+            db,
+            'playlists',
+            'enabled',
+            'INTEGER NOT NULL DEFAULT 1',
+          );
+        }
       },
     );
     _db = opened;
@@ -136,10 +145,11 @@ CREATE TABLE IF NOT EXISTS recently_watched (
   Future<void> _createSchema(Database db) async {
     await db.execute('''
 CREATE TABLE playlists (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  name             TEXT    NOT NULL,
-  url              TEXT    NOT NULL UNIQUE,
-  last_refreshed_at INTEGER
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  name              TEXT    NOT NULL,
+  url               TEXT    NOT NULL UNIQUE,
+  last_refreshed_at INTEGER,
+  enabled           INTEGER NOT NULL DEFAULT 1
 )''');
     // is_pinned / is_broken were dropped from the app layer; new installs
     // never create those columns (legacy DBs keep them, harmlessly ignored).
@@ -262,9 +272,20 @@ END''';
 
   // ── Playlists ──────────────────────────────────────────────────────────────
 
+  Future<void> setPlaylistEnabled(int id, {required bool enabled}) async {
+    final db = await database;
+    await db.update(
+      'playlists',
+      {'enabled': enabled ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<int> upsertPlaylist({
     required String name,
     required String url,
+    bool defaultEnabled = true, // only applied on INSERT; existing rows keep their enabled state
   }) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -272,6 +293,7 @@ END''';
       'name': name,
       'url': url,
       'last_refreshed_at': now,
+      'enabled': defaultEnabled ? 1 : 0,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     await db.update(
       'playlists',
@@ -287,6 +309,12 @@ END''';
       limit: 1,
     );
     return rows.single['id'] as int;
+  }
+
+  Future<void> deletePlaylistById(int id) async {
+    final db = await database;
+    await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
+    // Channels removed by ON DELETE CASCADE.
   }
 
   Future<void> deletePlaylistByUrl(String url) async {
@@ -397,6 +425,11 @@ END''';
     final where = <String>[];
     final args = <Object?>[];
 
+    // Always restrict to channels from enabled playlists.
+    where.add(
+      'playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
+    );
+
     if (normalizedQuery.isNotEmpty) {
       final ftsQ = _ftsQuery(normalizedQuery);
       if (ftsQ.isEmpty) return []; // no valid tokens — bail early
@@ -455,10 +488,14 @@ SELECT c.*,
        COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g
 FROM   channels c
 WHERE  c.url NOT LIKE 'tflix://%'
+  AND  c.url NOT LIKE 'bdixtv://%'
+  AND  c.playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
   AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN (
          SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
          FROM   channels
          WHERE  url NOT LIKE 'tflix://%'
+           AND  url NOT LIKE 'bdixtv://%'
+           AND  playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
          GROUP  BY _g
          ORDER  BY COUNT(*) DESC
          LIMIT  ?
@@ -470,7 +507,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
     );
     if (rows.isEmpty) return [];
 
-    // Step 3: group in Dart and cap each bucket at perGroupLimit.
+    // Group in Dart and cap each bucket at perGroupLimit.
     final groupMap = <String, List<Channel>>{};
     for (final row in rows) {
       final g = row['_g'] as String;
@@ -491,7 +528,9 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where: 'is_favorite = 1',
+      where:
+          'is_favorite = 1'
+          ' AND playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
@@ -503,7 +542,9 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where: "url LIKE 'tflix://%'",
+      where:
+          "url LIKE 'tflix://%'"
+          ' AND playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
@@ -517,6 +558,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
 SELECT channels.*
 FROM   recently_watched
 JOIN   channels ON channels.url = recently_watched.channel_url
+WHERE  channels.playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
 ORDER  BY recently_watched.watched_at DESC
 LIMIT  ?
 ''',
