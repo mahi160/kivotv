@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/channel_card.dart';
+import '../../core/widgets/focusable_tap.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
 
@@ -102,7 +104,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (pos.pixels >= pos.maxScrollExtent - 600) _loadNextPage();
   }
 
-  void _open(Channel c) => context.push('/player', extra: {'channel': c});
+  void _open(Channel c) =>
+      context.push('/player', extra: {'channel': c});
+
+  void _goBack() {
+    if (_focus.hasFocus) {
+      _focus.unfocus();
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,12 +125,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Close the keyboard first if it's up; otherwise go Home.
-        if (_focus.hasFocus) {
-          _focus.unfocus();
-          return;
-        }
-        context.go('/');
+        _goBack();
       },
       child: Scaffold(
         body: GradientBackground(
@@ -132,10 +142,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, size: 28),
-                      onPressed: () => context.go('/'),
-                    ),
+                    _BackButton(onTap: _goBack),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Focus(
@@ -227,6 +234,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           onTap: () => _open(c),
         );
       },
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Back button with the app-standard gold focus ring
+// ───────────────────────────────────────────────────────────────────────────────
+
+class _BackButton extends StatelessWidget {
+  const _BackButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = AppColors.focus(isDark);
+    return FocusableTap(
+      onTap: onTap,
+      builder: (_, focused) => AnimatedContainer(
+        duration: const Duration(milliseconds: 110),
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: focused ? Colors.white : Colors.black.withValues(alpha: 0.55),
+          border: Border.all(
+            color: focused ? accent : Colors.white30,
+            width: focused ? 2 : 1,
+          ),
+        ),
+        child: Icon(
+          Icons.arrow_back_rounded,
+          size: 22,
+          color: focused ? Colors.black87 : Colors.white,
+        ),
+      ),
     );
   }
 }
