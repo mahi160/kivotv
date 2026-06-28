@@ -40,6 +40,37 @@ Future<void> showSettings(BuildContext context) {
   );
 }
 
+/// Confirm before deleting a user playlist — a single D-pad mispress would
+/// otherwise silently wipe the source and all its channel history.
+Future<void> _confirmDelete(
+  BuildContext context,
+  WidgetRef ref,
+  Playlist playlist,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Remove source?'),
+      content: Text(
+        '"${playlist.name}" and all its channels will be removed.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
+        ),
+      ],
+    ),
+  );
+  if (ok == true && context.mounted) {
+    ref.read(repositoryProvider).deletePlaylist(playlist.id);
+  }
+}
+
 /// Settings content: a left-edge panel surfacing only settings that map to
 /// real app behaviour — the persisted light/dark theme toggle and About info.
 /// (The mockup's quality / stream-server / notifications rows are omitted: the
@@ -152,9 +183,7 @@ class SettingsPanel extends ConsumerWidget {
                                   ),
                               onDelete: p.isBuiltIn
                                   ? null
-                                  : () => ref
-                                        .read(repositoryProvider)
-                                        .deletePlaylist(p.id),
+                                  : () => _confirmDelete(context, ref, p),
                             ),
                           ) ??
                           [],
