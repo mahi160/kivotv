@@ -55,11 +55,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── playback-failure handling ───────────────────────────────────────────────
   // How long to wait for a stream to start before giving up and skipping.
-  // Live IPTV on a low-power box legitimately takes up to ~10s to first frame
-  // (resolve + playlist + segment fill), so this is generous to avoid killing
-  // a stream that was about to play. A genuinely dead link errors out far
-  // sooner via the player's error stream; this only backstops a silent stall.
-  static const _streamTimeout = Duration(seconds: 20);
+  // Hard errors (404, refused connection) fire immediately via the error
+  // stream; this watchdog only backstops silent stalls (stream connects but
+  // never delivers data). 8s covers legitimate slow HLS fills (~6s on a
+  // reasonable connection) without making dead streams feel unresponsive.
+  static const _streamTimeout = Duration(seconds: 15);
   Timer? _loadWatchdog;
   String? _error;
   // Consecutive auto-skips since the last successful play. Bounded so an
@@ -69,6 +69,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // channel (never played → auto-skip) from a mid-watch token expiry
   // (played, then failed → re-resolve the same channel).
   bool _hasPlayed = false;
+  // How many times we've re-resolved the current channel without a confirmed
+  // play. Capped at 1: a second failure means the stream is truly dead, skip.
+  // Reset in _open() when the channel actually changes.
+  int _reResolveCount = 0;
   // Re-resolves the current channel ~60s before its token expires, so a long
   // watch never hits a 403. Scoped to the playing channel only — not a cron.
   Timer? _expiryTimer;
@@ -78,6 +82,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── subscriptions ──────────────────────────────────────────────────────────
   StreamSubscription<bool>? _playingSubscription;
+  StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<String>? _errorSubscription;
 
   // ── sidebar scroll + focus tracking ────────────────────────────────────────
@@ -106,19 +111,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _currentChannel = widget.channel;
     _player = Player(
       configuration: const PlayerConfiguration(
-        // 16 MB demuxer buffer: enough to ride out jitter (~30s at SD bitrates)
-        // without prebuffering so much that first-frame is slow to appear.
-        bufferSize: 16 * 1024 * 1024,
+        // 32 MB demuxer buffer: ~10s headroom at 4K HEVC (25 Mbps).
+        // 16 MB was sufficient for SD/HD but borderline for 4K live streams.
+        bufferSize: 32 * 1024 * 1024,
       ),
     );
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(
         enableHardwareAcceleration: true,
-        // Do NOT set vo/hwdec here. Hardcoding 'mediacodec_embed' breaks
-        // playback on SoCs that use their own video pipeline (e.g. Realtek
-        // RTD6748 on TCL TVs). Let media_kit auto-select the best VO for
-        // the device; hwdec is set to mediacodec-copy in _configurePlayer.
+        // Do NOT set vo/hwdec here. Let media_kit auto-select the VO;
+        // hwdec + codec tuning is done in _configurePlayer() via NativePlayer.
       ),
     );
 
@@ -136,6 +139,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _markedWatched = true;
         ref.read(repositoryProvider).markWatched(_currentChannel);
       }
+    });
+
+    // Buffering watchdog: restart the load-watchdog every time buffering
+    // begins. Fixes the main infinite-spinner bug:
+    //   1. _player.open() fires playing=true almost immediately (before any
+    //      frame arrives), which cancels the load watchdog too early.
+    //   2. The stream then stalls in buffering state indefinitely — no error
+    //      event fires, no watchdog is running, so we never skip.
+    // By restarting the watchdog on every buffering=true, a stream that stays
+    // buffered for 8s will always be caught and skipped.
+    //
+    // NOTE: we do NOT cancel the watchdog on buffering=false. _player.stop()
+    // fires buffering=false asynchronously, which would race with the newly
+    // started watchdog and cancel it. Cancellation is handled by playing=true
+    // (stream healthy) or by _startWatchdog() itself (cancels previous timer).
+    _bufferingSubscription = _player.stream.buffering.listen((buffering) {
+      if (!mounted || !buffering) return;
+      _startWatchdog();
     });
 
     // A player error (dead link, bad codec, refused connection) → skip on.
@@ -156,27 +177,54 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _scheduleOverlayHide();
   }
 
-  /// libmpv tuning for live IPTV on low-power Android TV SoCs. Best-effort:
-  /// silently no-ops on platforms without a [NativePlayer] backend.
-  /// (hwdec/vo are set on the VideoController above.)
-  /// - video-sync=audio: make the audio clock the master so video can't drift.
-  /// - framedrop=vo: drop late video frames instead of letting the picture
-  ///   fall behind the audio when the decoder can't keep up — the usual cause
-  ///   of "audio and video out of sync" on weak hardware.
-  /// - cache + small readahead: smooth jitter without delaying first frame.
-  ///   readahead was 20s (slow to start); 4s starts far quicker on live HLS
-  ///   while still absorbing normal network wobble.
+  /// libmpv tuning for live IPTV on Android TV. Best-effort — silently
+  /// no-ops on platforms without a [NativePlayer] backend.
   Future<void> _configurePlayer() async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     try {
-      // mediacodec-copy: hardware decode on all Android TV SoCs (including
-      // Realtek RTD6748) by copying decoded frames into a GPU texture rather
-      // than rendering direct-to-surface. Less zero-copy than mediacodec_embed
-      // but universally compatible.
-      await platform.setProperty('hwdec', 'mediacodec-copy');
+      // ── Decode ────────────────────────────────────────────────────────
+      // mediacodec (no -copy): HW decode via MediaCodec → SurfaceTexture
+      // → OpenGL. Zero CPU copy, zero gralloc lock/unlock by mpv.
+      // Avoids the Amlogic/Mali gralloc unlock bug that caused a GPU
+      // compositor stall on every frame with mediacodec-copy/auto-safe.
+      // Auto-falls-back to FFmpeg SW decode if MediaCodec unavailable.
+      await platform.setProperty('hwdec', 'mediacodec');
+      // HW-accelerate all codecs: H265, VP9, AV1, etc., not just H264.
+      await platform.setProperty('hwdec-codecs', 'all');
+      // Fast-decode mode for FFmpeg SW fallback on low-end SoCs.
+      // Minor quality trade-off; notable speed gain on Cortex-A55 class.
+      await platform.setProperty('vd-lavc-fast', 'yes');
+      // All CPU cores for SW decode fallback.
+      await platform.setProperty('vd-lavc-threads', '0');
+
+      // ── Sync ──────────────────────────────────────────────────────────
+      // Audio clock is master — live IPTV has no reference clock.
       await platform.setProperty('video-sync', 'audio');
+      // Drop frames only at the VO (display) stage, never at the decoder.
+      // Decoder-level drops (framedrop=decoder+vo) punch holes in the
+      // video PTS stream that audio doesn't have → A/V desync.
       await platform.setProperty('framedrop', 'vo');
+
+      // ── GPU render pipeline ───────────────────────────────────────────
+      // mpv defaults to 'mitchell' (multi-tap convolution) for scaling —
+      // expensive on every frame. 'bilinear' is a single GPU-native pass,
+      // near-zero cost, and IPTV source quality doesn't justify mitchell.
+      await platform.setProperty('scale', 'bilinear');
+      await platform.setProperty('cscale', 'bilinear'); // chroma
+      await platform.setProperty('dscale', 'bilinear'); // downscale
+      // Disable extra render passes that add per-frame GPU cost with no
+      // visible benefit on broadcast-quality IPTV.
+      await platform.setProperty('sigmoid-upscaling', 'no');
+      await platform.setProperty('correct-downscaling', 'no');
+      await platform.setProperty('linear-downscaling', 'no');
+      // Dithering is unnecessary for 8-bit TV output.
+      await platform.setProperty('dither-depth', 'no');
+      // Skip the per-frame HDR peak-luminance compute pass.
+      await platform.setProperty('hdr-compute-peak', 'no');
+
+      // ── Network buffer ────────────────────────────────────────────────
+      // 4s readahead: absorbs jitter without delaying first frame.
       await platform.setProperty('cache', 'yes');
       await platform.setProperty('demuxer-readahead-secs', '4');
       await platform.setProperty('cache-secs', '4');
@@ -193,6 +241,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _loadWatchdog?.cancel();
     _expiryTimer?.cancel();
     _playingSubscription?.cancel();
+    _bufferingSubscription?.cancel();
     _errorSubscription?.cancel();
     _sidebarScroll.dispose();
     _currentSidebarFocus.dispose();
@@ -276,6 +325,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     if (resetSkipBudget) _autoSkipCount = 0;
+    _reResolveCount = 0; // new channel — re-resolve budget resets
     setState(() => _currentChannel = channel);
     _recomputeIndex();
     await _load();
@@ -369,7 +419,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _startWatchdog() {
     _loadWatchdog?.cancel();
     _loadWatchdog = Timer(_streamTimeout, () {
-      if (mounted && !_player.state.playing) _handleStreamFailure();
+      // Treat "playing but buffering" as a stall — same as not playing.
+      if (mounted && (!_player.state.playing || _player.state.buffering)) {
+        _handleStreamFailure();
+      }
     });
   }
 
@@ -377,13 +430,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// channel, but stops and shows an error once it has skipped through a
   /// bounded number of dead channels (so an all-dead playlist can't loop).
   void _handleStreamFailure() {
-    if (!mounted || _player.state.playing) return;
+    // Skip if actually playing and not stalled. A stream that is playing but
+    // buffering (stalled mid-watch) is treated as a failure — same as not
+    // playing at all.
+    if (!mounted || (_player.state.playing && !_player.state.buffering)) return;
     _loadWatchdog?.cancel();
 
-    // Played fine, then dropped → almost always token expiry. Re-resolve the
-    // same channel instead of skipping away. _load() clears _hasPlayed, so a
-    // re-resolve that also fails falls through to the auto-skip below.
-    if (_hasPlayed) {
+    // Played fine, then dropped → almost always token expiry. Re-resolve
+    // the same channel once. If that also fails (_reResolveCount already
+    // at 1), fall through to auto-skip — the stream is truly dead.
+    if (_hasPlayed && _reResolveCount < 1) {
+      _reResolveCount++;
       _load();
       return;
     }
