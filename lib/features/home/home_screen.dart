@@ -551,11 +551,14 @@ class _HomeSkeleton extends StatelessWidget {
             height: AppSpacing.tvRowCardHeight,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // Fit as many cards as the available width allows.
+                // Fit as many cards as the available width allows, capped at
+                // perGroupLimit (30) so we never render more skeletons than the
+                // real row would show.
+                const maxSkeletonCards = 30;
                 final count = ((constraints.maxWidth + AppSpacing.tvRowGap) /
                         (AppSpacing.tvRowCardWidth + AppSpacing.tvRowGap))
                     .floor()
-                    .clamp(1, 10);
+                    .clamp(1, maxSkeletonCards);
                 return Row(
                   children: [
                     for (var j = 0; j < count; j++) ...[  
