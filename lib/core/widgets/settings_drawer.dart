@@ -2,9 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../../models/playlist.dart';
+import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
 import '../../providers/theme_mode_provider.dart';
 import '../../providers/repository_provider.dart';
@@ -41,11 +44,12 @@ Future<void> showSettings(BuildContext context) {
 /// real app behaviour — the persisted light/dark theme toggle and About info.
 /// (The mockup's quality / stream-server / notifications rows are omitted: the
 /// app has no such switches, so showing them would be fake chrome.)
+final _packageInfoProvider = FutureProvider<PackageInfo>(
+  (_) => PackageInfo.fromPlatform(),
+);
+
 class SettingsPanel extends ConsumerWidget {
   const SettingsPanel({super.key});
-
-  static const _version = '1.0.0';
-  static const _buildDate = '2026.06.21';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,19 +135,42 @@ class SettingsPanel extends ConsumerWidget {
                             ref.read(repositoryProvider).manualRefresh(),
                         isDark: isDark,
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ...ref
+                          .watch(playlistsProvider)
+                          .asData
+                          ?.value
+                          .map(
+                            (p) => _SourceRow(
+                              playlist: p,
+                              isDark: isDark,
+                              onToggle: () => ref
+                                  .read(repositoryProvider)
+                                  .setPlaylistEnabled(
+                                    p.id,
+                                    enabled: !p.enabled,
+                                  ),
+                              onDelete: p.isBuiltIn
+                                  ? null
+                                  : () => ref
+                                        .read(repositoryProvider)
+                                        .deletePlaylist(p.id),
+                            ),
+                          ) ??
+                          [],
 
                       const SizedBox(height: AppSpacing.md),
                       _SectionLabel('About', color: text2),
                       _InfoRow(
                         label: 'Version',
-                        value: _version,
+                        value: ref.watch(_packageInfoProvider).asData?.value.version ?? '—',
                         border: border,
                         text1: text1,
                         text2: text2,
                       ),
                       _InfoRow(
                         label: 'Build',
-                        value: _buildDate,
+                        value: ref.watch(_packageInfoProvider).asData?.value.buildNumber ?? '—',
                         border: border,
                         text1: text1,
                         text2: text2,
@@ -185,17 +212,7 @@ class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = AppColors.primary(isDark);
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: primary,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: const KivoLogo(),
-    );
+    return const KivoLogo(size: 34);
   }
 }
 
@@ -471,6 +488,129 @@ class _RefreshRow extends StatelessWidget {
                   color: primary,
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Source row ─────────────────────────────────────────────────────────────────
+
+/// One row per playlist in the Sources section — shows name + enabled toggle.
+class _SourceRow extends StatelessWidget {
+  const _SourceRow({
+    required this.playlist,
+    required this.isDark,
+    required this.onToggle,
+    this.onDelete,
+  });
+
+  final Playlist playlist;
+  final bool isDark;
+  final VoidCallback onToggle;
+  /// Non-null only for user-added (non-built-in) playlists.
+  final VoidCallback? onDelete;
+
+  String get _subtitle {
+    if (playlist.isBuiltIn) return 'Built-in source';
+    final uri = Uri.tryParse(playlist.url);
+    return uri?.host ?? playlist.url;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = AppColors.primary(isDark);
+    final accent = AppColors.focus(isDark);
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
+        ? AppColors.darkOnSurfaceVariant
+        : AppColors.lightOnSurfaceVariant;
+
+    return FocusableTap(
+      onTap: onToggle,
+      builder: (_, focused) => AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          border: Border.all(
+            color: focused ? accent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.primarySub(isDark),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                playlist.url.startsWith('kivo://footmad/')
+                    ? Icons.sports_soccer_rounded
+                    : playlist.isBuiltIn
+                        ? Icons.live_tv_rounded
+                        : Icons.playlist_play_rounded,
+                size: 19,
+                color: primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: text1,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    _subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: text2),
+                  ),
+                ],
+              ),
+            ),
+            _Switch(value: playlist.enabled, primary: primary),
+            if (onDelete != null) ...[
+              const SizedBox(width: 4),
+              FocusableTap(
+                onTap: onDelete!,
+                builder: (_, focused) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: focused
+                        ? Colors.red.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: focused ? Colors.redAccent : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: focused ? Colors.redAccent : text2,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
