@@ -6,7 +6,10 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
+import '../models/playlist.dart';
 import '../core/db/database_service.dart';
+import 'footmad_service.dart';
+import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
 import 'tflix_service.dart';
 
@@ -47,6 +50,8 @@ class PlaylistRepository {
   final favVersion = DebouncedVersion();
   final recentVersion = DebouncedVersion();
   final groupsVersion = DebouncedVersion();
+  /// Bumped whenever the playlist list itself changes (add, remove, toggle).
+  final playlistsVersion = DebouncedVersion();
 
   bool _bootstrapped = false;
   Future<void>? _bootstrapFuture;
@@ -59,15 +64,24 @@ class PlaylistRepository {
   static const _refreshThreshold = Duration(hours: 24);
   static const _streamcrichdChannelCount = 51; // 0–50 inclusive.
 
-  static const _seededKey        = 'kivo_playlists_seeded_v3';
+  static const _seededKey        = 'kivo_playlists_seeded_v4';
   /// Bumping this key forces built-in channels to re-seed on next launch
   /// (e.g. when the StreamCricHD channel count changes).
-  static const _builtinSeededKey = 'kivo_builtin_seeded_v1';
+  static const _builtinSeededKey = 'kivo_builtin_seeded_v3';
+
+  // kivo://footmad/<name> — one playlist per FootMad category.
+  static const _footmadPrefix = 'kivo://footmad/';
+  // These three are enabled on first discovery; all others default off.
+  static const _footmadDefaultOn = {'Bangladesh', 'SportsOnly', 'BDIX'};
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
       url:
           'https://raw.githubusercontent.com/mahi160/iptv_list/refs/heads/main/Ultimate.m3u',
+    ),
+    (
+      name: 'Bengali (IPTV-org)',
+      url: 'https://iptv-org.github.io/iptv/languages/ben.m3u',
     ),
   ];
 
@@ -78,13 +92,16 @@ class PlaylistRepository {
       // Only seed / clean built-ins once per install (or after a key bump).
       // Skipping on subsequent launches saves ~100 SQLite ops per start.
       if (!builtinDone) {
-        await _removeIptvidnIfPresent();
+        await _storeIptvidnChannels();
         await _storeStreamcrichdChannels();
+        // Remove old single-playlist footmad entry if present.
+        await DatabaseService.instance.deletePlaylistByUrl('kivo://footmad');
         await prefs.setBool(_builtinSeededKey, true);
       }
       final storedCount = await DatabaseService.instance.channelCount();
       channelCount.value = storedCount;
       _bumpAll();
+      playlistsVersion.bump();
     } catch (e) {
       debugPrint('kivo bootstrap store error: $e');
     } finally {
@@ -94,13 +111,87 @@ class PlaylistRepository {
     // show cached channels while the network refresh runs in the background.
     // _bootstrapped == true does NOT mean the refresh is complete.
     // ignore: unawaited_futures
-    _seedAndRefresh();
+    _seedAndRefresh(prefs);
   }
 
-  /// Removes the old IPTV IDN built-in playlist and its channels.
-  /// Safe to call repeatedly — no-ops when the playlist is already gone.
-  Future<void> _removeIptvidnIfPresent() async {
-    await DatabaseService.instance.deletePlaylistByUrl('kivo://iptvidn');
+  /// Fetches the FootMad catalog and upserts a playlist row for every visible
+  /// category. New categories default to enabled only if in [_footmadDefaultOn];
+  /// existing rows keep whatever the user last set.
+  Future<void> _syncFootmadCategories() async {
+    try {
+      final cats = await FootmadService.instance.fetchCategories();
+      for (final cat in cats) {
+        final url = '$_footmadPrefix${Uri.encodeComponent(cat.name)}';
+        await DatabaseService.instance.upsertPlaylist(
+          name: cat.name,
+          url: url,
+          defaultEnabled: _footmadDefaultOn.contains(cat.name),
+        );
+      }
+      playlistsVersion.bump();
+    } catch (e) {
+      debugPrint('kivo footmad sync error: $e');
+    }
+  }
+
+  /// Refresh only when at least one enabled FootMad category is stale.
+  Future<void> _refreshFootmadIfStale() async {
+    final playlists = await DatabaseService.instance.playlists();
+    final enabled = playlists
+        .where((p) => p.url.startsWith(_footmadPrefix) && p.enabled)
+        .toList();
+    if (enabled.isEmpty) return;
+    final now = DateTime.now();
+    final anyStale = enabled.any((p) {
+      final last = p.lastRefreshedDateTime;
+      return last == null || now.difference(last) > _refreshThreshold;
+    });
+    if (anyStale) await _refreshFootmadEnabled();
+  }
+
+  Future<void> _refreshFootmadEnabled() async {
+    List<FootmadCategory> cats;
+    try {
+      cats = await FootmadService.instance.fetchCategories();
+    } catch (e) {
+      debugPrint('kivo footmad catalog error: $e');
+      return;
+    }
+    final apiByName = {for (final c in cats) c.name: c.apiUrl};
+
+    final playlists = await DatabaseService.instance.playlists();
+    final enabled = playlists
+        .where((p) => p.url.startsWith(_footmadPrefix) && p.enabled)
+        .toList();
+
+    await Future.wait(enabled.map((p) async {
+      final apiUrl = apiByName[p.name];
+      if (apiUrl == null) return; // category removed from API
+      try {
+        final channels =
+            await FootmadService.instance.fetchCategoryChannels(apiUrl);
+        await DatabaseService.instance.replaceChannels(
+          playlistId: p.id,
+          channels: channels,
+        );
+      } catch (e) {
+        debugPrint('kivo footmad refresh [${p.name}]: $e');
+      }
+    }));
+
+    channelCount.value = await DatabaseService.instance.channelCount();
+    _bumpAll();
+  }
+
+  Future<void> _storeIptvidnChannels() async {
+    final playlistId = await DatabaseService.instance.upsertPlaylist(
+      name: 'IPTV IDN',
+      url: 'kivo://iptvidn',
+    );
+    await DatabaseService.instance.replaceChannels(
+      playlistId: playlistId,
+      channels: iptvidnChannels,
+    );
   }
 
   Future<void> _storeStreamcrichdChannels() async {
@@ -121,13 +212,14 @@ class PlaylistRepository {
     );
   }
 
-  Future<void> _seedAndRefresh() async {
+  Future<void> _seedAndRefresh(SharedPreferences prefs) async {
     isFetching.value = true;
     fetchError.value = null;
     try {
       await refreshTflixMatches();
+      await _syncFootmadCategories();
+      await _refreshFootmadIfStale();
 
-      final prefs = await SharedPreferences.getInstance();
       final alreadyDone = prefs.getBool(_seededKey) ?? false;
 
       if (!alreadyDone) {
@@ -143,7 +235,7 @@ class PlaylistRepository {
       if (userPlaylists.isEmpty) return;
 
       final now = DateTime.now();
-      final stale = userPlaylists.where((p) {
+      final stale = userPlaylists.where((p) => p.enabled).where((p) {
         final last = p.lastRefreshedDateTime;
         if (last == null) return true;
         return now.difference(last) > _refreshThreshold;
@@ -184,6 +276,11 @@ class PlaylistRepository {
 
   Future<void> _doRefreshTflix() async {
     try {
+      // Skip network fetch if the TFLIX source is disabled.
+      final playlists = await DatabaseService.instance.playlists();
+      final tflix = playlists.where((p) => p.url == 'kivo://tflix').firstOrNull;
+      if (tflix != null && !tflix.enabled) return;
+
       final matches = await TflixService.instance.fetchLiveMatches();
       _lastTflixScrape = DateTime.now();
       final playlistId = await DatabaseService.instance.upsertPlaylist(
@@ -207,6 +304,8 @@ class PlaylistRepository {
     try {
       await _clearImageCache();
       await refreshTflixMatches(force: true);
+      await _syncFootmadCategories();
+      await _refreshFootmadEnabled();
       await refreshAllPlaylists();
     } finally {
       isFetching.value = false;
@@ -226,7 +325,8 @@ class PlaylistRepository {
 
   Future<int> refreshAllPlaylists() async {
     final playlists = await DatabaseService.instance.playlists();
-    final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
+    final userPlaylists =
+        playlists.where((p) => !p.isBuiltIn && p.enabled).toList();
     var failed = 0;
 
     for (final playlist in userPlaylists) {
@@ -328,6 +428,24 @@ class PlaylistRepository {
   }
 
   // ── Bump helpers ──────────────────────────────────────────────────────────
+
+  Future<void> setPlaylistEnabled(int playlistId, {required bool enabled}) async {
+    await DatabaseService.instance.setPlaylistEnabled(
+      playlistId,
+      enabled: enabled,
+    );
+    _bumpAll();
+    playlistsVersion.bump();
+  }
+
+  Future<void> deletePlaylist(int id) async {
+    await DatabaseService.instance.deletePlaylistById(id);
+    _bumpAll();
+    playlistsVersion.bump();
+  }
+
+  Future<List<Playlist>> playlists() =>
+      DatabaseService.instance.playlists();
 
   void _bumpAll() {
     liveVersion.bump();
