@@ -73,8 +73,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// zap-list length so an all-dead playlist can't loop forever.
   int _autoSkipCount = 0;
 
+  /// True once the current channel produced video frames. If it drops after
+  /// playing, attempt one silent re-resolve before skipping (covers mid-watch
+  /// token expiry that _scheduleExpiryRefresh missed, e.g. app was backgrounded).
+  bool _channelDidPlay = false;
+  int _reResolveCount = 0;
+
   // ── auto-skip toast ────────────────────────────────────────────────────────
   String? _autoSkipToast;
+  String? _lastToastMessage; // kept alive during fade-out
   Timer? _toastTimer;
 
   // ── expiry refresh ─────────────────────────────────────────────────────────
@@ -135,11 +142,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       ),
     );
 
-    // Healthy play → cancel watchdog, reset skip budget, clear error.
+    // Healthy play → cancel watchdog, reset skip budget, mark played, clear error.
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (!playing) return;
       _loadWatchdog?.cancel();
       _autoSkipCount = 0;
+      _channelDidPlay = true;
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
@@ -274,19 +282,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     if (resetSkipBudget) _autoSkipCount = 0;
+    _channelDidPlay = false;
+    _reResolveCount = 0;
     setState(() => _currentChannel = channel);
     await _load();
     if (mounted) _showControls();
   }
 
+  /// Resolves (if needed) and opens the current channel. A generation counter
+  /// guards every async suspension point so a superseded call can't clobber
+  /// the stream a newer call already opened.
   Future<void> _load() async {
     final gen = ++_loadGeneration;
     _markedWatched = false;
     _expiryTimer?.cancel();
     if (_error != null) setState(() => _error = null);
 
+    // Stop before resolving so stale events don't leak to the new channel.
+    // Watchdog starts AFTER _player.open() below — not here — so that
+    // slow token resolution doesn't count against the 20 s timeout.
     _player.stop();
-    _startWatchdog();
 
     final reference = _currentChannel.url;
     final String playable;
@@ -325,7 +340,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await _player.open(Media(playable, httpHeaders: headers), play: true);
     if (!mounted || gen != _loadGeneration) {
       _player.stop();
+      return;
     }
+    // Watchdog starts here, after open(). The buffering subscription restarts
+    // it on each subsequent stall so continuous hangs are also caught.
+    _startWatchdog();
   }
 
   void _scheduleExpiryRefresh(DateTime? expiresAt) {
@@ -359,6 +378,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!mounted || (_player.state.playing && !_player.state.buffering)) return;
     _loadWatchdog?.cancel();
 
+    // Channel was playing then dropped → likely token expiry the proactive timer
+    // missed (e.g. app was backgrounded over the expiry window). One silent retry.
+    if (_channelDidPlay &&
+        _reResolveCount < 1 &&
+        StreamResolver.isResolvable(_currentChannel.url)) {
+      _reResolveCount++;
+      _load();
+      return;
+    }
+
     final zapList = _effectiveZapList;
     if (zapList.length < 2) {
       _showError('This channel is unavailable.');
@@ -377,7 +406,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _showAutoSkipToast(String channelName) {
     _toastTimer?.cancel();
-    setState(() => _autoSkipToast = 'Skipped · $channelName unavailable');
+    _lastToastMessage = 'Skipped · $channelName unavailable';
+    setState(() => _autoSkipToast = _lastToastMessage);
     _toastTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _autoSkipToast = null);
     });
@@ -473,9 +503,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── back navigation ────────────────────────────────────────────────────────
 
+  // Guard against double-back from TV firmware delivering KEYCODE_BACK through
+  // both the key pipeline and onBackPressed simultaneously.
+  bool _goingHome = false;
+
   void _goHome() {
-    if (!mounted) return;
-    context.go('/');
+    if (!mounted || _goingHome) return;
+    _goingHome = true;
+    // pop() returns to the previous route (home or search), so search results
+    // survive opening and closing a channel.
+    context.pop();
   }
 
   // ── navigation ─────────────────────────────────────────────────────────────
@@ -526,14 +563,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           key == LogicalKeyboardKey.arrowUp ||
           key == LogicalKeyboardKey.channelUp;
       if (_channels.isNotEmpty) {
+        // At the list boundary: swallow silently. No wrap-around teleport.
         if (isDown && _sidebarFocusedIndex >= _channels.length - 1) {
-          setState(() => _showChannelList = false);
-          _open(_channels.first);
           return KeyEventResult.handled;
         }
         if (isUp && _sidebarFocusedIndex == 0) {
-          setState(() => _showChannelList = false);
-          _open(_channels.last);
           return KeyEventResult.handled;
         }
       }
@@ -685,7 +719,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       currentChannel: _currentChannel,
                       scrollController: _sidebarScroll,
                       onSelectChannel: (ch) {
-                        setState(() => _showChannelList = false);
+                        // Picking from the full sidebar exits the fav-zap context;
+                        // subsequent zapping uses all channels.
+                        setState(() {
+                          _showChannelList = false;
+                          _zapList = const [];
+                        });
                         _open(ch);
                       },
                       onToggleFavorite: _toggleSidebarFavorite,
@@ -697,15 +736,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               ),
 
               // ── Auto-skip toast ───────────────────────────────────────────
-              if (_autoSkipToast != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 80,
-                  child: Center(
-                    child: _AutoSkipToast(message: _autoSkipToast!),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 80,
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: _autoSkipToast != null ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    // _lastToastMessage keeps the text alive during fade-out
+                    // so it doesn't vanish before the opacity reaches 0.
+                    child: _AutoSkipToast(
+                      message: _autoSkipToast ?? _lastToastMessage ?? '',
+                    ),
                   ),
                 ),
+              ),
             ],
           ),
         ),
