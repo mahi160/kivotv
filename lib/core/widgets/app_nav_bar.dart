@@ -65,20 +65,7 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = AppColors.primary(isDark);
-    const size = 34.0;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: primary,
-        borderRadius: BorderRadius.circular(9),
-        boxShadow: null,
-      ),
-      padding: const EdgeInsets.all(6),
-      child: const KivoLogo(),
-    );
+    return const KivoLogo(size: 34);
   }
 }
 
@@ -115,6 +102,7 @@ class _CircleNavButton extends StatelessWidget {
           curve: Curves.easeOut,
           width: 40,
           height: 40,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: focused ? AppColors.focusFill(isDark) : Colors.transparent,

@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import 'channel_logo.dart';
 import 'focusable_tap.dart';
 import '../../models/channel.dart';
+import '../../providers/dashboard_provider.dart';
 
 // ── Public card ───────────────────────────────────────────────────────────────
 
@@ -16,7 +18,7 @@ import '../../models/channel.dart';
 /// available, otherwise a coloured abbreviation tile) and a footer carrying the
 /// channel name and its group. On focus it lifts + scales on an accent glow —
 /// the strongest possible "this is selected" cue from across the room.
-class ChannelCard extends StatelessWidget {
+class ChannelCard extends ConsumerWidget {
   const ChannelCard({
     super.key,
     required this.channel,
@@ -32,8 +34,16 @@ class ChannelCard extends StatelessWidget {
   final bool autofocus;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Resolve the playlist name once per card build. playlistsProvider is
+    // async but almost always already loaded before cards render.
+    final source = ref
+        .watch(playlistsProvider)
+        .asData?.value
+        .where((p) => p.id == channel.playlistId)
+        .map((p) => p.name)
+        .firstOrNull;
     final surfaceColor = isDark ? AppColors.oceanDeep : AppColors.lightSurface;
     final accent = AppColors.focus(isDark);
     final swatch = _swatch(channel.name);
@@ -134,15 +144,35 @@ class ChannelCard extends StatelessWidget {
                               height: 1.2,
                             ),
                           ),
-                          if (group != null && group.isNotEmpty) ...[
+                          if (group != null && group.isNotEmpty || source != null) ...[
                             const SizedBox(height: 3),
-                            Text(
-                              group,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.copyWith(color: text2),
+                            Row(
+                              children: [
+                                if (group != null && group.isNotEmpty)
+                                  Expanded(
+                                    child: Text(
+                                      group,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme
+                                          .bodySmall?.copyWith(color: text2),
+                                    ),
+                                  )
+                                else
+                                  const Spacer(),
+                                if (source != null) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    source,
+                                    maxLines: 1,
+                                    style: Theme.of(context).textTheme
+                                        .bodySmall?.copyWith(
+                                          color: text2.withValues(alpha: 0.5),
+                                          fontSize: 10,
+                                        ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ],
                         ],
