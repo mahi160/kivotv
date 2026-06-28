@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'core/theme/app_colors.dart';
@@ -83,7 +82,7 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
       _autoOpenDone = true;
       // Defer one frame so the router widget is in the tree, then pass the
       // live BuildContext so navigation uses the mounted navigator.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _autoOpen(context));
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoOpen());
     }
 
     // Map the TV remote SELECT / OK key to ActivateIntent at the app root.
@@ -115,17 +114,17 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _autoOpen(BuildContext context) async {
+  Future<void> _autoOpen() async {
     final recent = await ref.read(repositoryProvider).recentlyWatched();
-    // Guard after the async gap: widget may have unmounted, or the user may
-    // have already navigated away during the DB read.
+    // Guard after the async gap: widget may have unmounted.
     if (!mounted || recent.isEmpty) return;
-    final currentPath = appRouter.routerDelegate.currentConfiguration.uri.path;
-    if (currentPath != '/') return;
-    // context.go uses the mounted navigator — safer than appRouter.go which
-    // is a global and doesn't verify the navigator is ready.
-    if (context.mounted) {
-      context.go('/player', extra: {'channel': recent.first});
+    try {
+      final currentPath =
+          appRouter.routerDelegate.currentConfiguration.uri.path;
+      if (currentPath != '/') return;
+      appRouter.go('/player', extra: {'channel': recent.first});
+    } catch (_) {
+      // Router not yet ready — shouldn't happen post-bootstrap, but safe.
     }
   }
 }
@@ -148,23 +147,7 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppColors.oceanDeepBlue,
-                borderRadius: BorderRadius.circular(26),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.oceanDeepBlue.withValues(alpha: 0.45),
-                    blurRadius: 32,
-                    spreadRadius: 4,
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(14),
-              child: const KivoLogo(),
-            ),
+            const KivoLogo(size: 100),
             const SizedBox(height: 28),
             Text('Kivo', style: Theme.of(context).textTheme.displayLarge),
             const SizedBox(height: 8),

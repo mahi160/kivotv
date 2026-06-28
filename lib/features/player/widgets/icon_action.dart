@@ -37,6 +37,7 @@ class IconAction extends StatelessWidget {
             curve: Curves.easeOut,
             width: 52,
             height: 52,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: focused

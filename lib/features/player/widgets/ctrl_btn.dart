@@ -39,6 +39,7 @@ class CtrlBtn extends StatelessWidget {
         curve: Curves.easeOut,
         width: diameter,
         height: diameter,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           // White fill on focus gives strong contrast on the dark video bg.

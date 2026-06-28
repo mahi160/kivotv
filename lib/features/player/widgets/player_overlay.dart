@@ -83,6 +83,7 @@ class PlayerOverlay extends StatelessWidget {
                     duration: const Duration(milliseconds: 110),
                     width: 40,
                     height: 40,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: focused
