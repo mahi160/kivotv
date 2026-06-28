@@ -104,10 +104,21 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
         darkTheme: AppTheme.dark(),
         themeMode: themeMode,
         builder: (context, child) {
-          return bootstrap.when(
-            data: (_) => child!,
-            error: (err, _) => _BootstrapError(error: err),
-            loading: () => const _SplashScreen(),
+          // TV UIs are pre-sized for 10-foot viewing; accessibility text scale
+          // should not apply or it will overflow fixed-height cards and rows.
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaler: mq.textScaler.clamp(
+                minScaleFactor: 1.0,
+                maxScaleFactor: 1.0,
+              ),
+            ),
+            child: bootstrap.when(
+              data: (_) => child!,
+              error: (err, _) => _BootstrapError(error: err),
+              loading: () => const _SplashScreen(),
+            ),
           );
         },
       ),
@@ -115,14 +126,21 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
   }
 
   Future<void> _autoOpen() async {
+    // Only auto-resume if the user was watching within the last 24 hours.
+    // A cold install or long-idle device should start at Home, not jump
+    // straight into a stream the user may have forgotten about.
+    final lastWatched = await ref.read(repositoryProvider).lastWatchedAt();
+    if (!mounted || lastWatched == null) return;
+    if (DateTime.now().difference(lastWatched) > const Duration(hours: 24)) return;
+
     final recent = await ref.read(repositoryProvider).recentlyWatched();
-    // Guard after the async gap: widget may have unmounted.
     if (!mounted || recent.isEmpty) return;
     try {
       final currentPath =
           appRouter.routerDelegate.currentConfiguration.uri.path;
       if (currentPath != '/') return;
-      appRouter.go('/player', extra: {'channel': recent.first});
+      // push (not go) so back from the player returns to Home.
+      appRouter.push('/player', extra: {'channel': recent.first});
     } catch (_) {
       // Router not yet ready — shouldn't happen post-bootstrap, but safe.
     }
