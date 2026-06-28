@@ -72,6 +72,7 @@ flutter:
   # List only the fonts actually used in code — avoids bundling the Inter
   # family (2 MB, zero code references) into every release build.
   assets:
+    - assets/iptvidn_channels.json
     - assets/fonts/Outfit-Regular.ttf
     - assets/fonts/Outfit-Medium.ttf
     - assets/fonts/Outfit-SemiBold.ttf

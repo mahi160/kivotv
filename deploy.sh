@@ -9,7 +9,7 @@ APK="build/app/outputs/flutter-apk/app-release.apk" # Standard location
 export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
 
 echo "Building..."
-flutter build apk --release --target-platform android-arm || {
+flutter build apk --release --target-platform android-arm,android-arm64 || {
   echo "Build failed"
   exit 1
 }

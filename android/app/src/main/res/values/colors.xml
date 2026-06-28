@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon background — matches AppColors.oceanDeep (#0E1929). -->
+    <color name="ic_launcher_background">#0E1929</color>
+</resources>

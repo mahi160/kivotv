@@ -1,0 +1,884 @@
+[
+  {
+    "id": "1LIVE",
+    "name": "1live",
+    "url": "iptvidn://1LIVE",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live",
+    "name": "Fifa World Cup Live",
+    "url": "iptvidn://FIFA-World-Cup-Live",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-1",
+    "name": "Fifa World Cup Live 1",
+    "url": "iptvidn://FIFA-World-Cup-Live-1",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-2",
+    "name": "Fifa World Cup Live 2",
+    "url": "iptvidn://FIFA-World-Cup-Live-2",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-3",
+    "name": "Fifa World Cup Live 3",
+    "url": "iptvidn://FIFA-World-Cup-Live-3",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-4",
+    "name": "Fifa World Cup Live 4",
+    "url": "iptvidn://FIFA-World-Cup-Live-4",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-5",
+    "name": "Fifa World Cup Live 5",
+    "url": "iptvidn://FIFA-World-Cup-Live-5",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-6",
+    "name": "Fifa World Cup Live 6",
+    "url": "iptvidn://FIFA-World-Cup-Live-6",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-7",
+    "name": "Fifa World Cup Live 7",
+    "url": "iptvidn://FIFA-World-Cup-Live-7",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-8",
+    "name": "Fifa World Cup Live 8",
+    "url": "iptvidn://FIFA-World-Cup-Live-8",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "FIFA-World-Cup-Live-9",
+    "name": "Fifa World Cup Live 9",
+    "url": "iptvidn://FIFA-World-Cup-Live-9",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/FIFA-2026.jpg"
+  },
+  {
+    "id": "2LIVE",
+    "name": "2live",
+    "url": "iptvidn://2LIVE",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/Live2.jpeg"
+  },
+  {
+    "id": "LIVE-CRICKET",
+    "name": "Live Cricket",
+    "url": "iptvidn://LIVE-CRICKET",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/LIVE-CRICKET.jpg"
+  },
+  {
+    "id": "LIVE-CRICKET-1",
+    "name": "Live Cricket 1",
+    "url": "iptvidn://LIVE-CRICKET-1",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/LIVE-CRICKET.jpg"
+  },
+  {
+    "id": "LIVE-FOOTBALL",
+    "name": "Live Football",
+    "url": "iptvidn://LIVE-FOOTBALL",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/LIVE-FOOTBALL.jpg"
+  },
+  {
+    "id": "LIVE-FOOTBALL-1",
+    "name": "Live Football 1",
+    "url": "iptvidn://LIVE-FOOTBALL-1",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/LIVE-FOOTBALL.jpg"
+  },
+  {
+    "id": "LIVE-FOOTBALL-2",
+    "name": "Live Football 2",
+    "url": "iptvidn://LIVE-FOOTBALL-2",
+    "group": "Live Sports",
+    "logo": "http://iptvidn.com/assets/images/LIVE-FOOTBALL.jpg"
+  },
+  {
+    "id": "STAR-SPORTS-1",
+    "name": "Star Sports 1",
+    "url": "iptvidn://STAR-SPORTS-1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/starsports1.jpg"
+  },
+  {
+    "id": "STAR-SPORTS-2",
+    "name": "Star Sports 2",
+    "url": "iptvidn://STAR-SPORTS-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/starsports2.jpg"
+  },
+  {
+    "id": "PTV",
+    "name": "PTV",
+    "url": "iptvidn://PTV",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/ptvsports.jpg"
+  },
+  {
+    "id": "Afgan-Sports",
+    "name": "Afgan Sports",
+    "url": "iptvidn://Afgan-Sports",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/AFGAN.jpg"
+  },
+  {
+    "id": "SUPERSPORTS-CRICKET",
+    "name": "Supersports Cricket",
+    "url": "iptvidn://SUPERSPORTS-CRICKET",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/Supersportscricket.jpeg"
+  },
+  {
+    "id": "SUPERSPORTS-FOOTBALL",
+    "name": "Supersports Football",
+    "url": "iptvidn://SUPERSPORTS-FOOTBALL",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/Supersportsfootball.jpeg"
+  },
+  {
+    "id": "SUPERSPORTS-LALIGA",
+    "name": "Supersports Laliga",
+    "url": "iptvidn://SUPERSPORTS-LALIGA",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/laliga.jpg"
+  },
+  {
+    "id": "SUPERSPORTS-PREMIER-LEAGUE",
+    "name": "Supersports Premier League",
+    "url": "iptvidn://SUPERSPORTS-PREMIER-LEAGUE",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/premer league.jpg"
+  },
+  {
+    "id": "Sportv",
+    "name": "Sportv",
+    "url": "iptvidn://Sportv",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/sportv.jpeg"
+  },
+  {
+    "id": "SSC1",
+    "name": "Ssc1",
+    "url": "iptvidn://SSC1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/SSC.jpg"
+  },
+  {
+    "id": "GEO-SPORTS",
+    "name": "GEO Sports",
+    "url": "iptvidn://GEO-SPORTS",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/geosuper.jpg"
+  },
+  {
+    "id": "MUTV",
+    "name": "Mutv",
+    "url": "iptvidn://MUTV",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/mutv.jpg"
+  },
+  {
+    "id": "Bein-hd",
+    "name": "Bein Hd",
+    "url": "iptvidn://Bein-hd",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/bein1.jpg"
+  },
+  {
+    "id": "BEIN-SPORTS-2",
+    "name": "Bein Sports 2",
+    "url": "iptvidn://BEIN-SPORTS-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/bein2.jpg"
+  },
+  {
+    "id": "BEIN-SPORTS-3",
+    "name": "Bein Sports 3",
+    "url": "iptvidn://BEIN-SPORTS-3",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/bein3.jpg"
+  },
+  {
+    "id": "Bein-Sports-4",
+    "name": "Bein Sports 4",
+    "url": "iptvidn://Bein-Sports-4",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/bein4.jpg"
+  },
+  {
+    "id": "Ten-Cricket-HD",
+    "name": "Ten Cricket HD",
+    "url": "iptvidn://Ten-Cricket-HD",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/tencricket.jpg"
+  },
+  {
+    "id": "TNT-Sports-1",
+    "name": "TNT Sports 1",
+    "url": "iptvidn://TNT-Sports-1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/tntsports1.jpeg"
+  },
+  {
+    "id": "TNT-Sports-2",
+    "name": "TNT Sports 2",
+    "url": "iptvidn://TNT-Sports-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/tntsports2.jpeg"
+  },
+  {
+    "id": "TNT-Sports-3",
+    "name": "TNT Sports 3",
+    "url": "iptvidn://TNT-Sports-3",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/tntsports3.jpeg"
+  },
+  {
+    "id": "Uk-TNT-4",
+    "name": "Uk TNT 4",
+    "url": "iptvidn://Uk-TNT-4",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/tnt sports4.jpg"
+  },
+  {
+    "id": "FOX-SPORTS",
+    "name": "FOX Sports",
+    "url": "iptvidn://FOX-SPORTS",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/fox.jpg"
+  },
+  {
+    "id": "FOX-SPORTS1",
+    "name": "FOX Sports1",
+    "url": "iptvidn://FOX-SPORTS1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/foxsports1.jpg"
+  },
+  {
+    "id": "willow",
+    "name": "Willow",
+    "url": "iptvidn://willow",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/willowhd.jpg"
+  },
+  {
+    "id": "Sky-Sports-Main-Event",
+    "name": "Sky Sports Main Event",
+    "url": "iptvidn://Sky-Sports-Main-Event",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/skymainevent.jpg"
+  },
+  {
+    "id": "Sky-Sports-Cricket",
+    "name": "Sky Sports Cricket",
+    "url": "iptvidn://Sky-Sports-Cricket",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/skycricket.jpg"
+  },
+  {
+    "id": "SKY-Sports-Football",
+    "name": "SKY Sports Football",
+    "url": "iptvidn://SKY-Sports-Football",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/skyfootball.jpg"
+  },
+  {
+    "id": "Sky-Sports-premier-League",
+    "name": "Sky Sports Premier League",
+    "url": "iptvidn://Sky-Sports-premier-League",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/skypremierleague.jpg"
+  },
+  {
+    "id": "Star-sports-select-1",
+    "name": "Star Sports Select 1",
+    "url": "iptvidn://Star-sports-select-1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/starselect1.jpg"
+  },
+  {
+    "id": "Star-sports-select-2",
+    "name": "Star Sports Select 2",
+    "url": "iptvidn://Star-sports-select-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/starselect2.jpg"
+  },
+  {
+    "id": "Sony-TEN-1",
+    "name": "Sony TEN 1",
+    "url": "iptvidn://Sony-TEN-1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/sonyten-1.png"
+  },
+  {
+    "id": "sony-TEN-2",
+    "name": "Sony TEN 2",
+    "url": "iptvidn://sony-TEN-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/sonyten2.png"
+  },
+  {
+    "id": "sony-ten3",
+    "name": "Sony Ten3",
+    "url": "iptvidn://sony-ten3",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/ten3hd.jpg"
+  },
+  {
+    "id": "Sony-TEN-5",
+    "name": "Sony TEN 5",
+    "url": "iptvidn://Sony-TEN-5",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/sonyten5.png"
+  },
+  {
+    "id": "SPORTS-18",
+    "name": "Sports 18",
+    "url": "iptvidn://SPORTS-18",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/Sports18-S1.jpg"
+  },
+  {
+    "id": "Eurosports",
+    "name": "Eurosports",
+    "url": "iptvidn://Eurosports",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/eurosports1.jpg"
+  },
+  {
+    "id": "Star-sport-3",
+    "name": "Star Sport 3",
+    "url": "iptvidn://Star-sport-3",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/starsports3.jpg"
+  },
+  {
+    "id": "A-SPORTS",
+    "name": "A Sports",
+    "url": "iptvidn://A-SPORTS",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/a-sports.jpg"
+  },
+  {
+    "id": "DUBAI-SPORTS-2",
+    "name": "Dubai Sports 2",
+    "url": "iptvidn://DUBAI-SPORTS-2",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/dubai sports.jpg"
+  },
+  {
+    "id": "dubai-sports-3",
+    "name": "Dubai Sports 3",
+    "url": "iptvidn://dubai-sports-3",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/dubai sports.jpg"
+  },
+  {
+    "id": "AND-XPLORE",
+    "name": "AND Xplore",
+    "url": "iptvidn://AND-XPLORE",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/band sports.jpg"
+  },
+  {
+    "id": "ESPN-1",
+    "name": "Espn 1",
+    "url": "iptvidn://ESPN-1",
+    "group": "Sports",
+    "logo": "http://iptvidn.com/assets/images/espnhd.jpg"
+  },
+  {
+    "id": "BBC-NEWS",
+    "name": "BBC News",
+    "url": "iptvidn://BBC-NEWS",
+    "group": "News",
+    "logo": "http://iptvidn.com/assets/images/bbcnews.jpg"
+  },
+  {
+    "id": "BBC-Earth",
+    "name": "BBC Earth",
+    "url": "iptvidn://BBC-Earth",
+    "group": "News",
+    "logo": "http://iptvidn.com/assets/images/bbcearthhd.jpg"
+  },
+  {
+    "id": "CNN",
+    "name": "CNN",
+    "url": "iptvidn://CNN",
+    "group": "News",
+    "logo": "http://iptvidn.com/assets/images/cnnnews.jpg"
+  },
+  {
+    "id": "JALSHA-MOVIES",
+    "name": "Jalsha Movies",
+    "url": "iptvidn://JALSHA-MOVIES",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/jalshamovies.jpg"
+  },
+  {
+    "id": "Star_jalsha",
+    "name": "Star Jalsha",
+    "url": "iptvidn://Star_jalsha",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/starjalsha.jpg"
+  },
+  {
+    "id": "zee-bangla",
+    "name": "Zee Bangla",
+    "url": "iptvidn://zee-bangla",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/zeebanglahd.jpg"
+  },
+  {
+    "id": "madani-channel-bangla",
+    "name": "Madani Channel Bangla",
+    "url": "iptvidn://madani-channel-bangla",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/madanichannel.jpg"
+  },
+  {
+    "id": "AND-TV",
+    "name": "AND TV",
+    "url": "iptvidn://AND-TV",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/and tv.jpeg"
+  },
+  {
+    "id": "RUPOSHI-BANGLA",
+    "name": "Ruposhi Bangla",
+    "url": "iptvidn://RUPOSHI-BANGLA",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/Rupasi bangla.jpeg"
+  },
+  {
+    "id": "Sony-Aath",
+    "name": "Sony Aath",
+    "url": "iptvidn://Sony-Aath",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/sonyaath.jpg"
+  },
+  {
+    "id": "ZEE-24-GHANTA",
+    "name": "ZEE 24 Ghanta",
+    "url": "iptvidn://ZEE-24-GHANTA",
+    "group": "Bangla",
+    "logo": "http://iptvidn.com/assets/images/zee 24.jpeg"
+  },
+  {
+    "id": "Colors-Bangla",
+    "name": "Colors Bangla",
+    "url": "iptvidn://Colors-Bangla",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/colorsbangla.jpg"
+  },
+  {
+    "id": "COLORS-BANGLA-CINEMA",
+    "name": "Colors Bangla Cinema",
+    "url": "iptvidn://COLORS-BANGLA-CINEMA",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/colar-bangla-cinema.jpg"
+  },
+  {
+    "id": "ZEE-BANGLA-CINEMA",
+    "name": "ZEE Bangla Cinema",
+    "url": "iptvidn://ZEE-BANGLA-CINEMA",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/zeebanglacinema.jpg"
+  },
+  {
+    "id": "Zee-Cinema-HD",
+    "name": "Zee Cinema HD",
+    "url": "iptvidn://Zee-Cinema-HD",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/zee cinema.jpeg"
+  },
+  {
+    "id": "zee-tv-hd",
+    "name": "Zee Tv Hd",
+    "url": "iptvidn://zee-tv-hd",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/zee tv.jpeg"
+  },
+  {
+    "id": "ZEE-ANMOL-CHANEMA",
+    "name": "ZEE Anmol Chanema",
+    "url": "iptvidn://ZEE-ANMOL-CHANEMA",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/zeeanmol.jpg"
+  },
+  {
+    "id": "HBO",
+    "name": "HBO",
+    "url": "iptvidn://HBO",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/hbohd.jpg"
+  },
+  {
+    "id": "B4U-MOVIES",
+    "name": "B4U Movies",
+    "url": "iptvidn://B4U-MOVIES",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/b4umovies.jpg"
+  },
+  {
+    "id": "my-time",
+    "name": "My Time",
+    "url": "iptvidn://my-time",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/my time.jpg"
+  },
+  {
+    "id": "AXN",
+    "name": "AXN",
+    "url": "iptvidn://AXN",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/axn.jpg"
+  },
+  {
+    "id": "STAR-PLUS",
+    "name": "Star Plus",
+    "url": "iptvidn://STAR-PLUS",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/starplushd.jpg"
+  },
+  {
+    "id": "STAR-MOVIES-SELECT",
+    "name": "Star Movies Select",
+    "url": "iptvidn://STAR-MOVIES-SELECT",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/starmovieshd.jpg"
+  },
+  {
+    "id": "star-gold",
+    "name": "Star Gold",
+    "url": "iptvidn://star-gold",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/stargold.jpg"
+  },
+  {
+    "id": "star-gold-2",
+    "name": "Star Gold 2",
+    "url": "iptvidn://star-gold-2",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/stargold2.jpg"
+  },
+  {
+    "id": "STAR-GOLD-THRILLS",
+    "name": "Star Gold Thrills",
+    "url": "iptvidn://STAR-GOLD-THRILLS",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/stargoldthrills.jpg"
+  },
+  {
+    "id": "STAR-GOLD-ROMANCE",
+    "name": "Star Gold Romance",
+    "url": "iptvidn://STAR-GOLD-ROMANCE",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/stargoldromance.jpg"
+  },
+  {
+    "id": "STAR-BHARAT",
+    "name": "Star Bharat",
+    "url": "iptvidn://STAR-BHARAT",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/starbharat.jpg"
+  },
+  {
+    "id": "SONY-TV",
+    "name": "Sony TV",
+    "url": "iptvidn://SONY-TV",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/sonytv.jpg"
+  },
+  {
+    "id": "HUM-TV",
+    "name": "HUM TV",
+    "url": "iptvidn://HUM-TV",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/humtvhd.jpg"
+  },
+  {
+    "id": "Hum-masala",
+    "name": "Hum Masala",
+    "url": "iptvidn://Hum-masala",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/hum masala.jpg"
+  },
+  {
+    "id": "Hum-Sitarey",
+    "name": "Hum Sitarey",
+    "url": "iptvidn://Hum-Sitarey",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/hum sitarey.jpg"
+  },
+  {
+    "id": "SONY-MAX",
+    "name": "Sony MAX",
+    "url": "iptvidn://SONY-MAX",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/sonymaxhd.jpg"
+  },
+  {
+    "id": "sony-max2",
+    "name": "Sony Max2",
+    "url": "iptvidn://sony-max2",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/sony max2.jpeg"
+  },
+  {
+    "id": "SONY-SAB",
+    "name": "Sony SAB",
+    "url": "iptvidn://SONY-SAB",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/sonysabhd.jpg"
+  },
+  {
+    "id": "sony-WAH",
+    "name": "Sony WAH",
+    "url": "iptvidn://sony-WAH",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/sony wah.jpeg"
+  },
+  {
+    "id": "Colors-HD",
+    "name": "Colors HD",
+    "url": "iptvidn://Colors-HD",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/colorshd.jpg"
+  },
+  {
+    "id": "SONY-YAY",
+    "name": "Sony YAY",
+    "url": "iptvidn://SONY-YAY",
+    "group": "Kids",
+    "logo": "http://iptvidn.com/assets/images/sonyyay.jpg"
+  },
+  {
+    "id": "SONY-KAL",
+    "name": "Sony KAL",
+    "url": "iptvidn://SONY-KAL",
+    "group": "Hindi",
+    "logo": "http://iptvidn.com/assets/images/sony kal.jpeg"
+  },
+  {
+    "id": "sony-pix-hd",
+    "name": "Sony Pix Hd",
+    "url": "iptvidn://sony-pix-hd",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/sonypix.jpg"
+  },
+  {
+    "id": "mtv-beats",
+    "name": "Mtv Beats",
+    "url": "iptvidn://mtv-beats",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/mtvbeats.jpg"
+  },
+  {
+    "id": "AND-FLIX",
+    "name": "AND Flix",
+    "url": "iptvidn://AND-FLIX",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/andflixhd.jpg"
+  },
+  {
+    "id": "and-picture-HD",
+    "name": "And Picture HD",
+    "url": "iptvidn://and-picture-HD",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/andpictureshd.jpg"
+  },
+  {
+    "id": "animalplanent",
+    "name": "Animalplanent",
+    "url": "iptvidn://animalplanent",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/animalplanetnew.jpg"
+  },
+  {
+    "id": "National-geo-graphy-bangla",
+    "name": "National Geo Graphy Bangla",
+    "url": "iptvidn://National-geo-graphy-bangla",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/nationalgeo.jpg"
+  },
+  {
+    "id": "nat-geo-wild",
+    "name": "Nat Geo Wild",
+    "url": "iptvidn://nat-geo-wild",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/natgeowildhd.jpg"
+  },
+  {
+    "id": "DISCOVERY-HD",
+    "name": "Discovery HD",
+    "url": "iptvidn://DISCOVERY-HD",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/discoveryhd.jpg"
+  },
+  {
+    "id": "travel-xp",
+    "name": "Travel Xp",
+    "url": "iptvidn://travel-xp",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/travelxphd.jpg"
+  },
+  {
+    "id": "tlc-hd",
+    "name": "Tlc Hd",
+    "url": "iptvidn://tlc-hd",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/tlchd.jpg"
+  },
+  {
+    "id": "REDBOL-TV",
+    "name": "Redbol TV",
+    "url": "iptvidn://REDBOL-TV",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/red bull.jpg"
+  },
+  {
+    "id": "DMAX",
+    "name": "Dmax",
+    "url": "iptvidn://DMAX",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/dmax.jpg"
+  },
+  {
+    "id": "LOVE-NATURE",
+    "name": "Love Nature",
+    "url": "iptvidn://LOVE-NATURE",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/love nature.jpg"
+  },
+  {
+    "id": "Wild-Earth",
+    "name": "Wild Earth",
+    "url": "iptvidn://Wild-Earth",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/wild earth.jpg"
+  },
+  {
+    "id": "Discovery-Science",
+    "name": "Discovery Science",
+    "url": "iptvidn://Discovery-Science",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/discoveryscience.jpg"
+  },
+  {
+    "id": "Discovery-Turbo",
+    "name": "Discovery Turbo",
+    "url": "iptvidn://Discovery-Turbo",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/discovery turbo.jpg"
+  },
+  {
+    "id": "Investigation-Discovery",
+    "name": "Investigation Discovery",
+    "url": "iptvidn://Investigation-Discovery",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/investigation discovery.jpg"
+  },
+  {
+    "id": "DISCOVERY-BANGLA",
+    "name": "Discovery Bangla",
+    "url": "iptvidn://DISCOVERY-BANGLA",
+    "group": "Documentary",
+    "logo": "http://iptvidn.com/assets/images/discoverybangla.jpg"
+  },
+  {
+    "id": "DISNEY-HINDI",
+    "name": "Disney Hindi",
+    "url": "iptvidn://DISNEY-HINDI",
+    "group": "Kids",
+    "logo": "http://iptvidn.com/assets/images/disneychannel.jpg"
+  },
+  {
+    "id": "DISCOVERY-KIDS",
+    "name": "Discovery Kids",
+    "url": "iptvidn://DISCOVERY-KIDS",
+    "group": "Kids",
+    "logo": "http://iptvidn.com/assets/images/discoverykids.jpg"
+  },
+  {
+    "id": "cn",
+    "name": "Cn",
+    "url": "iptvidn://cn",
+    "group": "Kids",
+    "logo": "http://iptvidn.com/assets/images/cartoonnetwork.jpg"
+  },
+  {
+    "id": "POGO",
+    "name": "Pogo",
+    "url": "iptvidn://POGO",
+    "group": "Kids",
+    "logo": "http://iptvidn.com/assets/images/pogo.jpg"
+  },
+  {
+    "id": "MN-Plus",
+    "name": "MN Plus",
+    "url": "iptvidn://MN-Plus",
+    "group": "Movies",
+    "logo": "http://iptvidn.com/assets/images/mnplushd.jpg"
+  },
+  {
+    "id": "SANGEET-BANGLA",
+    "name": "Sangeet Bangla",
+    "url": "iptvidn://SANGEET-BANGLA",
+    "group": "Music",
+    "logo": "http://iptvidn.com/assets/images/Sangeetbangla.jpg"
+  },
+  {
+    "id": "9XM",
+    "name": "9XM",
+    "url": "iptvidn://9XM",
+    "group": "Music",
+    "logo": "http://iptvidn.com/assets/images/9xm.jpg"
+  },
+  {
+    "id": "9X-JALWA",
+    "name": "9X Jalwa",
+    "url": "iptvidn://9X-JALWA",
+    "group": "Music",
+    "logo": "http://iptvidn.com/assets/images/9xjalwa.jpg"
+  },
+  {
+    "id": "B4U-MUSIC",
+    "name": "B4U Music",
+    "url": "iptvidn://B4U-MUSIC",
+    "group": "Music",
+    "logo": "http://iptvidn.com/assets/images/b4umusic.jpg"
+  },
+  {
+    "id": "xite-music",
+    "name": "Xite Music",
+    "url": "iptvidn://xite-music",
+    "group": "Music",
+    "logo": "http://iptvidn.com/assets/images/Xitemusic.jpeg"
+  }
+]

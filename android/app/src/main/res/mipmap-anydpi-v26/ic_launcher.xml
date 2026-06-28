@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive icon for Android 8.0+ (API 26). The launcher clips both layers
+    to its preferred shape (circle on Google TV / Xiaomi TV, squircle on Pixel).
+    Using a vector foreground means the icon is sharp at any resolution —
+    1080p, 4K, or any future display density — with no upscaling blur.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

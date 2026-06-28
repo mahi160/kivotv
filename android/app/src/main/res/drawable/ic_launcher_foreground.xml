@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Kivo launcher icon foreground — vector equivalent of KivoLogo CustomPainter.
+    Coordinates computed from the same proportions used by the Flutter painter
+    so the launcher icon and in-app logo are pixel-identical at any resolution.
+
+    Viewport: 108×108 (standard adaptive icon size).
+    All icon content sits inside the 18–90 safe zone (72×72 centre) so it is
+    never clipped by the circular/squircle launcher mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ── TV body (amber rounded rect) ──────────────────────────────────── -->
+    <path
+        android:fillColor="#E5803A"
+        android:pathData="
+            M 38.556,43.560
+            L 69.444,43.560
+            Q 77.400,43.560 77.400,51.516
+            L 77.400,73.044
+            Q 77.400,81.000 69.444,81.000
+            L 38.556,81.000
+            Q 30.600,81.000 30.600,73.044
+            L 30.600,51.516
+            Q 30.600,43.560 38.556,43.560
+            Z" />
+
+    <!-- ── Screen interior (dark navy) ───────────────────────────────────── -->
+    <path
+        android:fillColor="#070D1A"
+        android:pathData="
+            M 38.556,45.720
+            L 69.444,45.720
+            Q 75.240,45.720 75.240,51.516
+            L 75.240,73.044
+            Q 75.240,78.840 69.444,78.840
+            L 38.556,78.840
+            Q 32.760,78.840 32.760,73.044
+            L 32.760,51.516
+            Q 32.760,45.720 38.556,45.720
+            Z" />
+
+    <!-- ── Left antenna ───────────────────────────────────────────────────── -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E5803A"
+        android:strokeWidth="2.484"
+        android:strokeLineCap="round"
+        android:pathData="M 44.640,43.560 L 38.106,31.680" />
+
+    <!-- ── Right antenna ──────────────────────────────────────────────────── -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E5803A"
+        android:strokeWidth="2.484"
+        android:strokeLineCap="round"
+        android:pathData="M 63.360,43.560 L 69.894,31.680" />
+
+    <!-- ── Base bar (amber pill) ──────────────────────────────────────────── -->
+    <path
+        android:fillColor="#E5803A"
+        android:pathData="
+            M 47.358,82.296
+            Q 46.278,82.296 46.278,83.376
+            Q 46.278,84.456 47.358,84.456
+            L 60.642,84.456
+            Q 61.722,84.456 61.722,83.376
+            Q 61.722,82.296 60.642,82.296
+            Z" />
+
+    <!-- ── Vertical bar — amber (Kivo mark left element) ─────────────────── -->
+    <path
+        android:fillColor="#E5803A"
+        android:pathData="
+            M 50.520,57.260
+            Q 51.635,57.260 51.635,58.376
+            L 51.635,66.184
+            Q 51.635,67.301 50.520,67.301
+            Q 49.404,67.301 49.404,66.184
+            L 49.404,58.376
+            Q 49.404,57.260 50.520,57.260
+            Z" />
+
+    <!-- ── Play triangle — steel blue (Kivo mark right element) ──────────── -->
+    <path
+        android:fillColor="#6B8CAE"
+        android:pathData="M 52.751,57.539 L 60.002,62.280 L 52.751,67.021 Z" />
+
+</vector>
