@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,7 +11,6 @@ import '../models/channel.dart';
 import '../models/playlist.dart';
 import '../core/db/database_service.dart';
 import 'footmad_service.dart';
-import 'iptvidn_channels.dart';
 import 'playlist_service.dart';
 import 'tflix_service.dart';
 
@@ -188,9 +189,22 @@ class PlaylistRepository {
       name: 'IPTV IDN',
       url: 'kivo://iptvidn',
     );
+    final json = await rootBundle.loadString('assets/iptvidn_channels.json');
+    final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+    final channels = list
+        .map(
+          (m) => Channel(
+            id: m['id'] as String,
+            name: m['name'] as String,
+            url: m['url'] as String,
+            logo: m['logo'] as String?,
+            group: m['group'] as String?,
+          ),
+        )
+        .toList();
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
-      channels: iptvidnChannels,
+      channels: channels,
     );
   }
 
@@ -327,13 +341,26 @@ class PlaylistRepository {
     final playlists = await DatabaseService.instance.playlists();
     final userPlaylists =
         playlists.where((p) => !p.isBuiltIn && p.enabled).toList();
-    var failed = 0;
 
-    for (final playlist in userPlaylists) {
+    // Fetch all playlists in parallel — the slow part is the network.
+    // DB writes are kept sequential to avoid SQLite write-lock contention.
+    final fetched = await Future.wait(
+      userPlaylists.map((p) async {
+        try {
+          return (p, await PlaylistService.instance.fetchChannels(url: p.url));
+        } catch (_) {
+          return (p, null);
+        }
+      }),
+    );
+
+    var failed = 0;
+    for (final (playlist, channels) in fetched) {
+      if (channels == null) {
+        failed++;
+        continue;
+      }
       try {
-        final channels = await PlaylistService.instance.fetchChannels(
-          url: playlist.url,
-        );
         await DatabaseService.instance.replaceChannels(
           playlistId: playlist.id,
           channels: channels,
@@ -443,6 +470,9 @@ class PlaylistRepository {
     _bumpAll();
     playlistsVersion.bump();
   }
+
+  Future<DateTime?> lastWatchedAt() =>
+      DatabaseService.instance.lastWatchedAt();
 
   Future<List<Playlist>> playlists() =>
       DatabaseService.instance.playlists();
