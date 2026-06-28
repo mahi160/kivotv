@@ -43,8 +43,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _mountedAt = DateTime.now();
   }
 
-  void _open(Channel channel) {
-    context.push('/player', extra: {'channel': channel});
+  void _open(Channel channel, [List<Channel> zapChannels = const []]) {
+    context.push('/player', extra: {'channel': channel, 'zapChannels': zapChannels});
   }
 
   @override
@@ -109,7 +109,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 /// so only the affected row rebuilds on data changes.
 class _DashboardList extends ConsumerWidget {
   const _DashboardList({required this.onOpen});
-  final ValueChanged<Channel> onOpen;
+  final void Function(Channel, List<Channel>) onOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -146,24 +146,25 @@ class _DashboardList extends ConsumerWidget {
           channels: live,
           title: 'Live Now',
           live: true,
-          onOpen: onOpen,
+          onOpen: (ch) => onOpen(ch, const []),
           makeCountLabel: (ch) => '${ch.length} matches',
           autofocusFirst: autofocusLive,
         ),
         _ChannelSection(
           channels: favs,
           title: 'Favourites',
-          onOpen: onOpen,
+          // ponytail: zap list = snapshot of favs at open time, session-scoped
+          onOpen: (ch) => onOpen(ch, favs),
           makeCountLabel: (ch) => '${ch.length} channels',
           autofocusFirst: autofocusFavs,
         ),
         _ChannelSection(
           channels: recent,
           title: 'Recently watched',
-          onOpen: onOpen,
+          onOpen: (ch) => onOpen(ch, const []),
           autofocusFirst: autofocusRecent,
         ),
-        _GroupsSection(onOpen: onOpen, autofocusFirst: autofocusGroups),
+        _GroupsSection(onOpen: (ch) => onOpen(ch, const []), autofocusFirst: autofocusGroups),
       ],
     );
   }

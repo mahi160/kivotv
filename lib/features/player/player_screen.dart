@@ -20,9 +20,16 @@ import 'widgets/player_overlay.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class PlayerScreen extends ConsumerStatefulWidget {
-  const PlayerScreen({super.key, required this.channel});
+  const PlayerScreen({
+    super.key,
+    required this.channel,
+    this.zapChannels = const [],
+  });
 
   final Channel channel;
+
+  /// Channels to zap through with prev/next. Empty = use the full channel list.
+  final List<Channel> zapChannels;
 
   @override
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
@@ -35,9 +42,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final VideoController _controller;
 
   // ── channel state ──────────────────────────────────────────────────────────
+  /// Full channel list — used for the sidebar panel.
   List<Channel> _channels = const [];
+
+  /// Zap list — used for prev/next and auto-skip.
+  /// Set from [PlayerScreen.zapChannels]; falls back to [_channels] when empty.
+  List<Channel> _zapList = const [];
+
   late Channel _currentChannel;
-  int _currentIndexCache = -1;
 
   // ── overlay ────────────────────────────────────────────────────────────────
   bool _showOverlay = true;
@@ -48,36 +60,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _markedWatched = false;
 
   // ── load generation ────────────────────────────────────────────────────────
-  // Incremented at the start of every _load() call. Each async step checks
-  // that the generation hasn't changed before proceeding, so a superseded
-  // resolve/open can't race ahead and clobber a newer channel switch.
   int _loadGeneration = 0;
 
-  // ── playback-failure handling ───────────────────────────────────────────────
-  // How long to wait for a stream to start before giving up and skipping.
-  // Hard errors (404, refused connection) fire immediately via the error
-  // stream; this watchdog only backstops silent stalls (stream connects but
-  // never delivers data). 8s covers legitimate slow HLS fills (~6s on a
-  // reasonable connection) without making dead streams feel unresponsive.
-  static const _streamTimeout = Duration(seconds: 15);
+  // ── playback-failure / auto-skip ───────────────────────────────────────────
+  // If a stream errors or delivers no data within [_streamTimeout], the player
+  // acts as if the user pressed "next" and shows a brief toast.
+  static const _streamTimeout = Duration(seconds: 20);
   Timer? _loadWatchdog;
   String? _error;
-  // Consecutive auto-skips since the last successful play. Bounded so an
-  // all-dead playlist can't loop forever.
+
+  /// How many consecutive channels have been auto-skipped. Capped at the
+  /// zap-list length so an all-dead playlist can't loop forever.
   int _autoSkipCount = 0;
-  // True once the current channel has actually played. Distinguishes a dead
-  // channel (never played → auto-skip) from a mid-watch token expiry
-  // (played, then failed → re-resolve the same channel).
-  bool _hasPlayed = false;
-  // How many times we've re-resolved the current channel without a confirmed
-  // play. Capped at 1: a second failure means the stream is truly dead, skip.
-  // Reset in _open() when the channel actually changes.
-  int _reResolveCount = 0;
-  // Re-resolves the current channel ~60s before its token expires, so a long
-  // watch never hits a 403. Scoped to the playing channel only — not a cron.
+
+  // ── auto-skip toast ────────────────────────────────────────────────────────
+  String? _autoSkipToast;
+  Timer? _toastTimer;
+
+  // ── expiry refresh ─────────────────────────────────────────────────────────
   Timer? _expiryTimer;
-  // Remembers whether playback was active when the app went to background,
-  // so we don't force-play a stream the user had manually paused.
+
+  // ── app lifecycle ──────────────────────────────────────────────────────────
   bool _wasPlayingBeforePause = false;
 
   // ── subscriptions ──────────────────────────────────────────────────────────
@@ -87,18 +90,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── sidebar scroll + focus tracking ────────────────────────────────────────
   final _sidebarScroll = ScrollController();
-  // Which sidebar row currently has D-pad focus (updated via callback).
-  // Used to detect list boundaries for wrap-around navigation.
   int _sidebarFocusedIndex = -1;
-
-  // Dedicated FocusNode for the current channel’s sidebar row, so we can
-  // call requestFocus() on it directly when the sidebar opens.
   final _currentSidebarFocus = FocusNode();
 
   // ── focus ──────────────────────────────────────────────────────────────────
   final _rootFocus = FocusNode();
   final _playFocusNode = FocusNode();
   final _sidebarScopeNode = FocusScopeNode();
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+
+  /// Channels to zap through: the fixed subset if provided, else all channels.
+  List<Channel> get _effectiveZapList =>
+      _zapList.isNotEmpty ? _zapList : _channels;
+
+  /// Position of the current channel in [_effectiveZapList] (for the number pill and nav).
+  int get _zapIndex =>
+      _effectiveZapList.indexWhere((c) => c.url == _currentChannel.url);
+
+  /// Position of the current channel in [_channels] (for sidebar scroll).
+  int get _sidebarIndex =>
+      _channels.indexWhere((c) => c.url == _currentChannel.url);
 
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -108,11 +120,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     WakelockPlus.enable();
 
+    _zapList = List.of(widget.zapChannels);
     _currentChannel = widget.channel;
+
     _player = Player(
       configuration: const PlayerConfiguration(
-        // 32 MB demuxer buffer: ~10s headroom at 4K HEVC (25 Mbps).
-        // 16 MB was sufficient for SD/HD but borderline for 4K live streams.
         bufferSize: 32 * 1024 * 1024,
       ),
     );
@@ -120,20 +132,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _player,
       configuration: const VideoControllerConfiguration(
         enableHardwareAcceleration: true,
-        // Do NOT set vo/hwdec here. Let media_kit auto-select the VO;
-        // hwdec + codec tuning is done in _configurePlayer() via NativePlayer.
       ),
     );
 
-    // A playing event means the current stream is healthy: cancel the
-    // watchdog, reset the skip budget, clear any error, and mark watched.
-    // Stale playing events from a previous open() are prevented by the
-    // _player.stop() call at the start of every _load().
+    // Healthy play → cancel watchdog, reset skip budget, clear error.
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (!playing) return;
       _loadWatchdog?.cancel();
       _autoSkipCount = 0;
-      _hasPlayed = true;
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
@@ -141,33 +147,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     });
 
-    // Buffering watchdog: restart the load-watchdog every time buffering
-    // begins. Fixes the main infinite-spinner bug:
-    //   1. _player.open() fires playing=true almost immediately (before any
-    //      frame arrives), which cancels the load watchdog too early.
-    //   2. The stream then stalls in buffering state indefinitely — no error
-    //      event fires, no watchdog is running, so we never skip.
-    // By restarting the watchdog on every buffering=true, a stream that stays
-    // buffered for 8s will always be caught and skipped.
-    //
-    // NOTE: we do NOT cancel the watchdog on buffering=false. _player.stop()
-    // fires buffering=false asynchronously, which would race with the newly
-    // started watchdog and cancel it. Cancellation is handled by playing=true
-    // (stream healthy) or by _startWatchdog() itself (cancels previous timer).
+    // Restart the watchdog on every buffering=true so silent stalls are caught.
+    // We do NOT cancel on buffering=false: _player.stop() fires buffering=false
+    // asynchronously, which would race with and cancel the newly started watchdog.
+    // Cancellation is handled by playing=true (healthy) or _startWatchdog() itself.
     _bufferingSubscription = _player.stream.buffering.listen((buffering) {
       if (!mounted || !buffering) return;
       _startWatchdog();
     });
 
-    // A player error (dead link, bad codec, refused connection) → skip on.
+    // Hard error (404, refused, bad codec) → immediate auto-skip.
     _errorSubscription = _player.stream.error.listen(
       (_) => _handleStreamFailure(),
     );
 
     _loadChannels();
 
-    // Tune libmpv, then open media after the first frame so the Video
-    // surface is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _configurePlayer();
@@ -183,48 +178,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     try {
-      // ── Decode ────────────────────────────────────────────────────────
-      // mediacodec (no -copy): HW decode via MediaCodec → SurfaceTexture
-      // → OpenGL. Zero CPU copy, zero gralloc lock/unlock by mpv.
-      // Avoids the Amlogic/Mali gralloc unlock bug that caused a GPU
-      // compositor stall on every frame with mediacodec-copy/auto-safe.
-      // Auto-falls-back to FFmpeg SW decode if MediaCodec unavailable.
+      // mediacodec (no -copy): HW decode via MediaCodec → SurfaceTexture → OpenGL.
+      // Avoids the Amlogic/Mali gralloc unlock bug that caused a GPU compositor
+      // stall on every frame with mediacodec-copy/auto-safe.
       await platform.setProperty('hwdec', 'mediacodec');
-      // HW-accelerate all codecs: H265, VP9, AV1, etc., not just H264.
-      await platform.setProperty('hwdec-codecs', 'all');
-      // Fast-decode mode for FFmpeg SW fallback on low-end SoCs.
-      // Minor quality trade-off; notable speed gain on Cortex-A55 class.
-      await platform.setProperty('vd-lavc-fast', 'yes');
-      // All CPU cores for SW decode fallback.
-      await platform.setProperty('vd-lavc-threads', '0');
-
-      // ── Sync ──────────────────────────────────────────────────────────
-      // Audio clock is master — live IPTV has no reference clock.
-      await platform.setProperty('video-sync', 'audio');
-      // Drop frames only at the VO (display) stage, never at the decoder.
-      // Decoder-level drops (framedrop=decoder+vo) punch holes in the
-      // video PTS stream that audio doesn't have → A/V desync.
+      await platform.setProperty('hwdec-codecs', 'all'); // H265, VP9, AV1, not just H264
+      await platform.setProperty('vd-lavc-fast', 'yes'); // fast SW fallback on low-end SoCs
+      await platform.setProperty('vd-lavc-threads', '0'); // all cores for SW decode
+      await platform.setProperty('video-sync', 'audio'); // audio clock master for live IPTV
+      // Drop frames at the VO stage only — decoder-level drops punch holes in the
+      // video PTS stream that audio doesn't have, causing A/V desync.
       await platform.setProperty('framedrop', 'vo');
-
-      // ── GPU render pipeline ───────────────────────────────────────────
-      // mpv defaults to 'mitchell' (multi-tap convolution) for scaling —
-      // expensive on every frame. 'bilinear' is a single GPU-native pass,
-      // near-zero cost, and IPTV source quality doesn't justify mitchell.
+      // bilinear: single GPU-native pass vs mitchell's multi-tap convolution.
+      // IPTV source quality doesn't justify the extra per-frame cost.
       await platform.setProperty('scale', 'bilinear');
       await platform.setProperty('cscale', 'bilinear'); // chroma
       await platform.setProperty('dscale', 'bilinear'); // downscale
-      // Disable extra render passes that add per-frame GPU cost with no
-      // visible benefit on broadcast-quality IPTV.
       await platform.setProperty('sigmoid-upscaling', 'no');
       await platform.setProperty('correct-downscaling', 'no');
       await platform.setProperty('linear-downscaling', 'no');
-      // Dithering is unnecessary for 8-bit TV output.
-      await platform.setProperty('dither-depth', 'no');
-      // Skip the per-frame HDR peak-luminance compute pass.
+      await platform.setProperty('dither-depth', 'no'); // unnecessary for 8-bit TV output
       await platform.setProperty('hdr-compute-peak', 'no');
-
-      // ── Network buffer ────────────────────────────────────────────────
-      // 4s readahead: absorbs jitter without delaying first frame.
       await platform.setProperty('cache', 'yes');
       await platform.setProperty('demuxer-readahead-secs', '4');
       await platform.setProperty('cache-secs', '4');
@@ -240,6 +214,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _hideTimer?.cancel();
     _loadWatchdog?.cancel();
     _expiryTimer?.cancel();
+    _toastTimer?.cancel();
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
     _errorSubscription?.cancel();
@@ -262,32 +237,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             _player.state.playing || _player.state.buffering;
         _player.pause();
       case AppLifecycleState.resumed:
-        // The hardware video surface (mediacodec_embed) is torn down while the
-        // app is backgrounded — just calling play() renders to a dead surface
-        // → the intermittent black screen on reopen. Re-open the current stream
-        // so mpv rebuilds the surface and pulls a fresh live frame. Only when
-        // it was actually playing, so a manual pause isn't overridden.
         if (_wasPlayingBeforePause) _load();
       default:
         break;
     }
   }
 
-  // ── index cache ────────────────────────────────────────────────────────────
-
-  void _recomputeIndex() {
-    _currentIndexCache = _channels.indexWhere(
-      (c) => c.url == _currentChannel.url,
-    );
-  }
-
-  int get _currentIndex => _currentIndexCache;
-
   // ── channel loading ────────────────────────────────────────────────────────
 
   Future<void> _loadChannels() async {
-    // 2000-row pages: reduces SQLite offset-scan overhead ~10× vs 200-row pages
-    // while still providing progressive D-pad feedback before all pages arrive.
     const pageSize = 2000;
     var offset = 0;
     final all = <Channel>[];
@@ -298,17 +256,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       all.addAll(page);
       if (!mounted) return;
       if (page.length < pageSize) {
-        // Final page — sort before surfacing so sidebar + prev/next are alpha.
         all.sort(
           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         );
       }
-      setState(() {
-        _channels = List.of(all);
-        _currentIndexCache = _channels.indexWhere(
-          (c) => c.url == _currentChannel.url,
-        );
-      });
+      setState(() => _channels = List.of(all));
       if (page.length < pageSize) break;
       offset += page.length;
     }
@@ -316,40 +268,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── playback ───────────────────────────────────────────────────────────────
 
-  /// Switches to [channel]. [resetSkipBudget] is false only for auto-skips so
-  /// the loop guard keeps counting; any user-initiated switch resets it.
   Future<void> _open(Channel channel, {bool resetSkipBudget = true}) async {
-    // Skip re-opening the same stream that's already loaded.
     if (channel.url == _currentChannel.url &&
         (_player.state.playing || _player.state.buffering)) {
       return;
     }
     if (resetSkipBudget) _autoSkipCount = 0;
-    _reResolveCount = 0; // new channel — re-resolve budget resets
     setState(() => _currentChannel = channel);
-    _recomputeIndex();
     await _load();
     if (mounted) _showControls();
   }
 
-  /// Resolves (if needed) and opens the *current* channel. Used both for a
-  /// user switch (via [_open]) and for re-resolution when a token expires
-  /// mid-watch — which is why it always reopens and never short-circuits.
-  ///
-  /// A generation counter guards every async suspension point: if a newer
-  /// _load() call starts (rapid channel switches, expiry refresh racing a
-  /// manual switch) the older call bails out silently rather than clobbering
-  /// the stream that the newer call already opened.
   Future<void> _load() async {
     final gen = ++_loadGeneration;
     _markedWatched = false;
-    _hasPlayed = false;
     _expiryTimer?.cancel();
     if (_error != null) setState(() => _error = null);
 
-    // Kill any buffering/in-flight load from the previous channel before we
-    // even start resolving. This prevents an older _player.open() from
-    // delivering stale playing/error events for the wrong channel.
     _player.stop();
     _startWatchdog();
 
@@ -363,8 +298,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         playable = resolved.url;
         headers = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
-        // Lazily update generic channel names (e.g. "StreamCricHD 24" →
-        // "A Sports HD") the first time each channel is resolved.
         final newName = resolved.channelName;
         if (newName != null &&
             RegExp(r'^StreamCricHD \d+$').hasMatch(_currentChannel.name)) {
@@ -390,83 +323,72 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     if (!mounted || gen != _loadGeneration) return;
     await _player.open(Media(playable, httpHeaders: headers), play: true);
-    // Guard after open: if a newer switch started while _player.open() was in
-    // flight, stop what we just opened so the newer call owns playback.
     if (!mounted || gen != _loadGeneration) {
       _player.stop();
     }
   }
 
-  /// Re-resolves the current channel shortly before its token dies, so a long
-  /// continuous watch never hits a 403. One timer for the active channel only.
   void _scheduleExpiryRefresh(DateTime? expiresAt) {
     _expiryTimer?.cancel();
     if (expiresAt == null) return;
     final lead = expiresAt
         .subtract(const Duration(seconds: 60))
         .difference(DateTime.now());
-    if (lead <= Duration.zero) return; // imminent; reactive path will cover it
+    if (lead <= Duration.zero) return;
     _expiryTimer = Timer(lead, () {
       if (!mounted) return;
-      // Only re-resolve if the user is actively watching — don't silently
-      // resume a stream that was manually paused.
       if (_player.state.playing || _player.state.buffering) _load();
     });
   }
 
-  // ── failure handling ────────────────────────────────────────────────────
+  // ── failure handling ────────────────────────────────────────────────────────
 
   void _startWatchdog() {
     _loadWatchdog?.cancel();
     _loadWatchdog = Timer(_streamTimeout, () {
-      // Treat "playing but buffering" as a stall — same as not playing.
       if (mounted && (!_player.state.playing || _player.state.buffering)) {
         _handleStreamFailure();
       }
     });
   }
 
-  /// Called on a stream error or load timeout. Auto-advances to the next
-  /// channel, but stops and shows an error once it has skipped through a
-  /// bounded number of dead channels (so an all-dead playlist can't loop).
+  /// Called on stream error or 20 s timeout. Acts like the user pressed next:
+  /// advances to the next channel in the zap list and shows a brief toast.
+  /// Stops after cycling through the whole zap list to avoid infinite loops.
   void _handleStreamFailure() {
-    // Skip if actually playing and not stalled. A stream that is playing but
-    // buffering (stalled mid-watch) is treated as a failure — same as not
-    // playing at all.
     if (!mounted || (_player.state.playing && !_player.state.buffering)) return;
     _loadWatchdog?.cancel();
 
-    // Played fine, then dropped → almost always token expiry. Re-resolve
-    // the same channel once. If that also fails (_reResolveCount already
-    // at 1), fall through to auto-skip — the stream is truly dead.
-    if (_hasPlayed && _reResolveCount < 1) {
-      _reResolveCount++;
-      _load();
-      return;
-    }
-
-    final idx = _currentIndex;
-    if (idx == -1 || _channels.length < 2) {
+    final zapList = _effectiveZapList;
+    if (zapList.length < 2) {
       _showError('This channel is unavailable.');
       return;
     }
-    final cap = _channels.length > 20 ? 20 : _channels.length;
-    if (_autoSkipCount >= cap) {
-      _showError('No playable channel found nearby.');
+    if (_autoSkipCount >= zapList.length) {
+      _showError('No working channel found.');
       return;
     }
+
+    final skippedName = _currentChannel.name;
     _autoSkipCount++;
-    _open(_channels[(idx + 1) % _channels.length], resetSkipBudget: false);
+    _showAutoSkipToast(skippedName);
+    _playNext(resetSkipBudget: false);
+  }
+
+  void _showAutoSkipToast(String channelName) {
+    _toastTimer?.cancel();
+    setState(() => _autoSkipToast = 'Skipped · $channelName unavailable');
+    _toastTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _autoSkipToast = null);
+    });
   }
 
   void _showError(String message) {
     setState(() => _error = message);
-    // Hand focus back to the root so OK → retry / ▲▼ → change channel work
-    // (the now-hidden overlay controls no longer hold focus).
     _rootFocus.requestFocus();
   }
 
-  // ── favourite helpers — in-place, no full reload ───────────────────────────
+  // ── favourite helpers ──────────────────────────────────────────────────────
 
   Future<void> _toggleCurrentFavorite() async {
     final newValue = !_currentChannel.isFavorite;
@@ -528,8 +450,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _showControls();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _sidebarFocusedIndex = _currentIndex.clamp(0, _channels.length - 1);
-        final idx = _currentIndex;
+        _sidebarFocusedIndex = _sidebarIndex.clamp(0, _channels.length - 1);
+        final idx = _sidebarIndex;
         if (idx >= 0 && _sidebarScroll.hasClients) {
           const itemH = AppSpacing.tvSidebarTile;
           _sidebarScroll.jumpTo(
@@ -539,14 +461,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ),
           );
         }
-        // Focus the current channel’s row directly so the sidebar opens
-        // with the playing channel highlighted, not wherever it was before.
         _currentSidebarFocus.requestFocus();
       });
     } else {
-      // Reschedule a fresh 5-s hide so the overlay doesn’t vanish at some
-      // arbitrary point on the old 12-s timer that was set when the sidebar
-      // opened.
       _scheduleOverlayHide();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _playFocusNode.requestFocus();
@@ -556,14 +473,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── back navigation ────────────────────────────────────────────────────────
 
-  /// Navigate to home.
-  ///
-  /// Always uses `go('/')` rather than `pop()`. Both the Flutter key-event
-  /// pipeline (_onKeyEvent) and the Android activity's onBackPressed()
-  /// independently deliver the back key, so _goHome() can be called twice
-  /// for a single remote press. `go('/')` is idempotent — calling it a
-  /// second time when already on home is a no-op — whereas `pop()` the
-  /// second time would pop the home route and exit the app.
   void _goHome() {
     if (!mounted) return;
     context.go('/');
@@ -571,23 +480,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── navigation ─────────────────────────────────────────────────────────────
 
-  // Channel surfing wraps around: next from the last goes to the first, and
-  // previous from the first goes to the last.
-  void _playPrevious() {
-    if (_channels.isEmpty) return;
-    final idx = _currentIndex;
-    // idx == -1 when channel not found yet; fall back gracefully.
+  void _playPrevious({bool resetSkipBudget = true}) {
+    final list = _effectiveZapList;
+    if (list.isEmpty) return;
+    final idx = _zapIndex;
     _open(
-      _channels[idx < 0
-          ? _channels.length - 1
-          : (idx - 1 + _channels.length) % _channels.length],
+      list[idx < 0 ? list.length - 1 : (idx - 1 + list.length) % list.length],
+      resetSkipBudget: resetSkipBudget,
     );
   }
 
-  void _playNext() {
-    if (_channels.isEmpty) return;
-    final idx = _currentIndex;
-    _open(_channels[idx < 0 ? 0 : (idx + 1) % _channels.length]);
+  void _playNext({bool resetSkipBudget = true}) {
+    final list = _effectiveZapList;
+    if (list.isEmpty) return;
+    final idx = _zapIndex;
+    _open(
+      list[idx < 0 ? 0 : (idx + 1) % list.length],
+      resetSkipBudget: resetSkipBudget,
+    );
   }
 
   // ── key handling ───────────────────────────────────────────────────────────
@@ -608,9 +518,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return KeyEventResult.handled;
       }
 
-      // Sidebar wrap-around: at the last item ↓ wraps to first channel;
-      // at the first item ↑ wraps to last channel. The wrapped channel is
-      // played so the user always lands somewhere playable.
+      // Sidebar wrap-around through all channels (sidebar list).
       final isDown =
           key == LogicalKeyboardKey.arrowDown ||
           key == LogicalKeyboardKey.channelDown;
@@ -639,7 +547,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return KeyEventResult.handled;
     }
 
-    // Up → next channel, Down → previous channel.
+    // Up → next channel, Down → previous (through the active zap list).
     if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.channelUp) {
       _playNext();
@@ -665,7 +573,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.gameButtonA) {
       if (_error != null) {
-        _open(_currentChannel); // retry
+        _open(_currentChannel);
       } else {
         _toggleOverlay();
       }
@@ -708,14 +616,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // ── Video ─────────────────────────────────────────────────────────
+              // ── Video ─────────────────────────────────────────────────────
               Video(
                 controller: _controller,
                 fit: BoxFit.contain,
                 controls: NoVideoControls,
               ),
 
-              // ── Buffering spinner (hidden once an error is shown) ─────────────
+              // ── Buffering spinner ─────────────────────────────────────────
               if (_error == null)
                 StreamBuilder<bool>(
                   stream: _player.stream.buffering,
@@ -724,7 +632,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       : const SizedBox.shrink(),
                 ),
 
-              // ── Stream error ──────────────────────────────────────────────────
+              // ── Stream error ──────────────────────────────────────────────
               if (_error != null)
                 Positioned.fill(
                   child: _StreamErrorView(
@@ -733,7 +641,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ),
                 ),
 
-              // ── Main overlay ──────────────────────────────────────────────────
+              // ── Main overlay ──────────────────────────────────────────────
               AnimatedOpacity(
                 opacity: (_showOverlay && _error == null) ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
@@ -744,8 +652,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     child: FocusTraversalGroup(
                       child: PlayerOverlay(
                         channel: _currentChannel,
-                        channelIndex: _currentIndex,
-                        channelTotal: _channels.length,
+                        channelIndex: _zapIndex,
+                        channelTotal: _effectiveZapList.length,
                         player: _player,
                         showingList: _showChannelList,
                         onPrevious: _playPrevious,
@@ -761,7 +669,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 ),
               ),
 
-              // ── Channel list sidebar ──────────────────────────────────────────
+              // ── Channel list sidebar ──────────────────────────────────────
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOut,
@@ -778,7 +686,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       scrollController: _sidebarScroll,
                       onSelectChannel: (ch) {
                         setState(() => _showChannelList = false);
-                        _open(ch); // user action → resets auto-skip budget
+                        _open(ch);
                       },
                       onToggleFavorite: _toggleSidebarFavorite,
                       onItemFocused: (i) => _sidebarFocusedIndex = i,
@@ -787,6 +695,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ),
                 ),
               ),
+
+              // ── Auto-skip toast ───────────────────────────────────────────
+              if (_autoSkipToast != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 80,
+                  child: Center(
+                    child: _AutoSkipToast(message: _autoSkipToast!),
+                  ),
+                ),
             ],
           ),
         ),
@@ -795,13 +714,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Stream error view
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
-/// Shown over the video when a stream fails or times out and auto-skip has
-/// run out of nearby channels to try. Purely informational — the player's
-/// root key handler maps OK → retry and ▲/▼ → change channel.
 class _StreamErrorView extends StatelessWidget {
   const _StreamErrorView({required this.channelName, required this.message});
 
@@ -847,6 +763,43 @@ class _StreamErrorView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Auto-skip toast
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AutoSkipToast extends StatelessWidget {
+  const _AutoSkipToast({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xE0111827),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.skip_next_rounded, size: 16, color: Colors.white54),
+          const SizedBox(width: 8),
+          Text(
+            message,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

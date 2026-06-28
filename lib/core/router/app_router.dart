@@ -13,10 +13,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/player',
       builder: (_, state) {
-        final channel =
-            (state.extra as Map<String, Object?>?)?['channel'] as Channel?;
+        final extra = state.extra as Map<String, Object?>?;
+        final channel = extra?['channel'] as Channel?;
         if (channel == null) return const HomeScreen();
-        return PlayerScreen(channel: channel);
+        final zapChannels =
+            (extra?['zapChannels'] as List<Channel>?) ?? const [];
+        return PlayerScreen(channel: channel, zapChannels: zapChannels);
       },
     ),
   ],
