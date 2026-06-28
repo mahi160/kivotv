@@ -524,7 +524,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
       }));
   }
 
-  Future<List<Channel>> favoriteChannels({int limit = 12}) async {
+  Future<List<Channel>> favoriteChannels({int limit = 100}) async {
     final db = await database;
     final rows = await db.query(
       'channels',
@@ -598,6 +598,22 @@ LIMIT  ?
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /// Most-recent watch timestamp. Used by auto-open to skip resumption after
+  /// a long idle period.
+  Future<DateTime?> lastWatchedAt() async {
+    final db = await database;
+    final rows = await db.query(
+      'recently_watched',
+      columns: ['watched_at'],
+      orderBy: 'watched_at DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return DateTime.fromMillisecondsSinceEpoch(
+      rows.first['watched_at'] as int,
+    );
+  }
 
   String _escapeLike(String input) => input
       .replaceAll(r'\', r'\\')
