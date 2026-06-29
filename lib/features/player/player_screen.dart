@@ -11,6 +11,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
+import '../../providers/sort_provider.dart';
 import '../../services/stream_resolver.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
@@ -260,14 +261,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     while (true) {
       final page = await ref
           .read(repositoryProvider)
-          .channels(limit: pageSize, offset: offset);
+          .channels(
+            limit: pageSize,
+            offset: offset,
+            sortAlpha: ref.read(sortAlphaProvider),
+          );
       all.addAll(page);
       if (!mounted) return;
-      if (page.length < pageSize) {
-        all.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
-      }
       setState(() => _channels = List.of(all));
       if (page.length < pageSize) break;
       offset += page.length;
@@ -313,6 +313,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         playable = resolved.url;
         headers = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
+        // ClearKey DRM: pass kid→key pairs as mpv decryption-keys option so
+        // libmpv can decrypt CENC DASH segments. Format: kid/key:kid/key...
+        final clearKeys = resolved.drmClearKeys;
+        if (clearKeys != null && clearKeys.isNotEmpty) {
+          final keyStr = clearKeys.entries
+              .map((e) => '${e.key}/${e.value}')
+              .join(':');
+          try {
+            final native = _player.platform as NativePlayer;
+            await native.setProperty('decryption-keys', keyStr);
+          } catch (_) {
+            // mpv build doesn't support this option — ignore and try anyway.
+          }
+        }
         final newName = resolved.channelName;
         if (newName != null &&
             RegExp(r'^StreamCricHD \d+$').hasMatch(_currentChannel.name)) {
