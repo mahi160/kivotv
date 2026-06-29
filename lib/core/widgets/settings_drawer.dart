@@ -9,6 +9,7 @@ import '../theme/app_spacing.dart';
 import '../../models/playlist.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
+import '../../providers/sort_provider.dart';
 import '../../providers/theme_mode_provider.dart';
 import '../../providers/repository_provider.dart';
 import 'focusable_tap.dart';
@@ -40,36 +41,6 @@ Future<void> showSettings(BuildContext context) {
   );
 }
 
-/// Confirm before deleting a user playlist — a single D-pad mispress would
-/// otherwise silently wipe the source and all its channel history.
-Future<void> _confirmDelete(
-  BuildContext context,
-  WidgetRef ref,
-  Playlist playlist,
-) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Remove source?'),
-      content: Text(
-        '"${playlist.name}" and all its channels will be removed.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
-        ),
-      ],
-    ),
-  );
-  if (ok == true && context.mounted) {
-    ref.read(repositoryProvider).deletePlaylist(playlist.id);
-  }
-}
 
 /// Settings content: a left-edge panel surfacing only settings that map to
 /// real app behaviour — the persisted light/dark theme toggle and About info.
@@ -155,38 +126,23 @@ class SettingsPanel extends ConsumerWidget {
                         border: border,
                         isDark: isDark,
                       ),
+                      const SizedBox(height: AppSpacing.sm),
+                      _ToggleRow(
+                        icon: Icons.sort_by_alpha_rounded,
+                        title: 'Sort A–Z',
+                        subtitle: ref.watch(sortAlphaProvider)
+                            ? 'Alphabetical order'
+                            : 'Provider order',
+                        value: ref.watch(sortAlphaProvider),
+                        onToggle: () =>
+                            ref.read(sortAlphaProvider.notifier).toggle(),
+                        border: border,
+                        isDark: isDark,
+                      ),
 
                       const SizedBox(height: AppSpacing.md),
                       _SectionLabel('Sources', color: text2),
-                      _RefreshRow(
-                        fetching:
-                            ref.watch(isFetchingProvider).asData?.value ??
-                            false,
-                        onTap: () =>
-                            ref.read(repositoryProvider).manualRefresh(),
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      ...ref
-                          .watch(playlistsProvider)
-                          .asData
-                          ?.value
-                          .map(
-                            (p) => _SourceRow(
-                              playlist: p,
-                              isDark: isDark,
-                              onToggle: () => ref
-                                  .read(repositoryProvider)
-                                  .setPlaylistEnabled(
-                                    p.id,
-                                    enabled: !p.enabled,
-                                  ),
-                              onDelete: p.isBuiltIn
-                                  ? null
-                                  : () => _confirmDelete(context, ref, p),
-                            ),
-                          ) ??
-                          [],
+                      _SourcesSection(isDark: isDark),
 
                       const SizedBox(height: AppSpacing.md),
                       _SectionLabel('About', color: text2),
@@ -524,22 +480,57 @@ class _RefreshRow extends StatelessWidget {
   }
 }
 
+// ── Sources section (isolated ConsumerWidget to prevent rebuild of the
+//    autofocused dark-mode toggle above it) ────────────────────────────────
+
+class _SourcesSection extends ConsumerWidget {
+  const _SourcesSection({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fetching =
+        ref.watch(isFetchingProvider).asData?.value ?? false;
+    final playlists =
+        ref.watch(playlistsProvider).asData?.value ?? const [];
+
+    return Column(
+      children: [
+        _RefreshRow(
+          fetching: fetching,
+          onTap: () => ref.read(repositoryProvider).manualRefresh(),
+          isDark: isDark,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        ...playlists.map(
+          (p) => _SourceRow(
+            key: ValueKey(p.id),
+            playlist: p,
+            isDark: isDark,
+            onToggle: () => ref
+                .read(repositoryProvider)
+                .setPlaylistEnabled(p.id, enabled: !p.enabled),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Source row ─────────────────────────────────────────────────────────────────
 
 /// One row per playlist in the Sources section — shows name + enabled toggle.
 class _SourceRow extends StatelessWidget {
   const _SourceRow({
+    super.key,
     required this.playlist,
     required this.isDark,
     required this.onToggle,
-    this.onDelete,
   });
 
   final Playlist playlist;
   final bool isDark;
   final VoidCallback onToggle;
-  /// Non-null only for user-added (non-built-in) playlists.
-  final VoidCallback? onDelete;
 
   String get _subtitle {
     if (playlist.isBuiltIn) return 'Built-in source';
@@ -615,31 +606,6 @@ class _SourceRow extends StatelessWidget {
               ),
             ),
             _Switch(value: playlist.enabled, primary: primary),
-            if (onDelete != null) ...[
-              const SizedBox(width: 4),
-              FocusableTap(
-                onTap: onDelete!,
-                builder: (_, focused) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: focused
-                        ? Colors.red.withValues(alpha: 0.15)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: focused ? Colors.redAccent : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: focused ? Colors.redAccent : text2,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
