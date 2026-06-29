@@ -419,6 +419,7 @@ END''';
     String? group,
     int limit = 100,
     int offset = 0,
+    bool sortAlpha = true,
   }) async {
     final db = await database;
     final normalizedQuery = query.trim().toLowerCase();
@@ -456,11 +457,11 @@ END''';
       'channels',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: args.isEmpty ? null : args,
-      // Cluster by category (grouped channels first, A–Z within each group;
-      // ungrouped last) rather than one flat alphabetical list.
-      orderBy:
-          'group_name IS NULL, group_name COLLATE NOCASE ASC, '
-          'name COLLATE NOCASE ASC',
+      // sortAlpha: group → name A–Z. Provider order: M3U insertion order (rowid).
+      orderBy: sortAlpha
+          ? 'group_name IS NULL, group_name COLLATE NOCASE ASC, '
+              'name COLLATE NOCASE ASC'
+          : 'rowid ASC',
       limit: limit,
       offset: offset,
     );
