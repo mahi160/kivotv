@@ -11,6 +11,7 @@ import '../models/channel.dart';
 import '../models/playlist.dart';
 import '../core/db/database_service.dart';
 import 'footmad_service.dart';
+import 'local_iptv_service.dart';
 import 'playlist_service.dart';
 import 'tflix_service.dart';
 
@@ -68,21 +69,25 @@ class PlaylistRepository {
   static const _seededKey        = 'kivo_playlists_seeded_v4';
   /// Bumping this key forces built-in channels to re-seed on next launch
   /// (e.g. when the StreamCricHD channel count changes).
-  static const _builtinSeededKey = 'kivo_builtin_seeded_v3';
+  // Bump this key to force a re-seed of all built-in channels on next launch.
+  // v4: added LocalIptv (http://10.255.255.50) source.
+  static const _builtinSeededKey = 'kivo_builtin_seeded_v4';
 
   // kivo://footmad/<name> — one playlist per FootMad category.
   static const _footmadPrefix = 'kivo://footmad/';
-  // These three are enabled on first discovery; all others default off.
-  static const _footmadDefaultOn = {'Bangladesh', 'SportsOnly', 'BDIX'};
+  // All footmad categories default off; user enables what they want.
+  static const _footmadDefaultOn = <String>{};
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
       url:
           'https://raw.githubusercontent.com/mahi160/iptv_list/refs/heads/main/Ultimate.m3u',
+      defaultEnabled: true,
     ),
     (
       name: 'Bengali (IPTV-org)',
       url: 'https://iptv-org.github.io/iptv/languages/ben.m3u',
+      defaultEnabled: false,
     ),
   ];
 
@@ -95,6 +100,7 @@ class PlaylistRepository {
       if (!builtinDone) {
         await _storeIptvidnChannels();
         await _storeStreamcrichdChannels();
+        await _storeLocalIptvChannels();
         // Remove old single-playlist footmad entry if present.
         await DatabaseService.instance.deletePlaylistByUrl('kivo://footmad');
         await prefs.setBool(_builtinSeededKey, true);
@@ -188,6 +194,7 @@ class PlaylistRepository {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'IPTV IDN',
       url: 'kivo://iptvidn',
+      defaultEnabled: false,
     );
     final json = await rootBundle.loadString('assets/iptvidn_channels.json');
     final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
@@ -208,10 +215,28 @@ class PlaylistRepository {
     );
   }
 
+  Future<void> _storeLocalIptvChannels() async {
+    // Seed whatever the local server has right now. If unreachable (TV is off
+    // the home LAN), LocalIptvService returns [] and we store an empty playlist
+    // — the live channels just won't appear until the next manual refresh.
+    final channels = await LocalIptvService.instance.fetchChannels();
+    final playlistId = await DatabaseService.instance.upsertPlaylist(
+      name: 'Local IPTV',
+      url: 'kivo://localiptv',
+    );
+    if (channels.isNotEmpty) {
+      await DatabaseService.instance.replaceChannels(
+        playlistId: playlistId,
+        channels: channels,
+      );
+    }
+  }
+
   Future<void> _storeStreamcrichdChannels() async {
     final playlistId = await DatabaseService.instance.upsertPlaylist(
       name: 'StreamCricHD',
       url: 'kivo://streamcrichd',
+      defaultEnabled: false,
     );
     await DatabaseService.instance.replaceChannels(
       playlistId: playlistId,
@@ -233,12 +258,17 @@ class PlaylistRepository {
       await refreshTflixMatches();
       await _syncFootmadCategories();
       await _refreshFootmadIfStale();
+      await _refreshLocalIptvIfEnabled();
 
       final alreadyDone = prefs.getBool(_seededKey) ?? false;
 
       if (!alreadyDone) {
         for (final p in _seededPlaylists) {
-          await addAndRefreshPlaylist(p.url, name: p.name);
+          await addAndRefreshPlaylist(
+            p.url,
+            name: p.name,
+            defaultEnabled: p.defaultEnabled,
+          );
         }
         await prefs.setBool(_seededKey, true);
         return;
@@ -311,6 +341,20 @@ class PlaylistRepository {
     } catch (_) {}
   }
 
+  Future<void> _refreshLocalIptvIfEnabled() async {
+    final playlists = await DatabaseService.instance.playlists();
+    final p = playlists.where((p) => p.url == 'kivo://localiptv').firstOrNull;
+    if (p == null || !p.enabled) return;
+    final channels = await LocalIptvService.instance.fetchChannels();
+    if (channels.isEmpty) return; // server unreachable — keep existing data
+    await DatabaseService.instance.replaceChannels(
+      playlistId: p.id,
+      channels: channels,
+    );
+    channelCount.value = await DatabaseService.instance.channelCount();
+    _bumpAll();
+  }
+
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
@@ -320,6 +364,7 @@ class PlaylistRepository {
       await refreshTflixMatches(force: true);
       await _syncFootmadCategories();
       await _refreshFootmadEnabled();
+      await _refreshLocalIptvIfEnabled();
       await refreshAllPlaylists();
     } finally {
       isFetching.value = false;
@@ -382,7 +427,11 @@ class PlaylistRepository {
     return count;
   }
 
-  Future<int> addPlaylist({required String url, String? name}) async {
+  Future<int> addPlaylist({
+    required String url,
+    String? name,
+    bool defaultEnabled = true,
+  }) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       throw ArgumentError('Enter a valid playlist URL');
@@ -390,11 +439,20 @@ class PlaylistRepository {
     return DatabaseService.instance.upsertPlaylist(
       name: name ?? uri.host,
       url: uri.toString(),
+      defaultEnabled: defaultEnabled,
     );
   }
 
-  Future<int> addAndRefreshPlaylist(String url, {String? name}) async {
-    final playlistId = await addPlaylist(url: url, name: name);
+  Future<int> addAndRefreshPlaylist(
+    String url, {
+    String? name,
+    bool defaultEnabled = true,
+  }) async {
+    final playlistId = await addPlaylist(
+      url: url,
+      name: name,
+      defaultEnabled: defaultEnabled,
+    );
     final channels = await PlaylistService.instance.fetchChannels(
       url: url.trim(),
     );
@@ -413,12 +471,14 @@ class PlaylistRepository {
     String? group,
     int limit = 100,
     int offset = 0,
+    bool sortAlpha = true,
   }) {
     return DatabaseService.instance.channels(
       query: query,
       group: group,
       limit: limit,
       offset: offset,
+      sortAlpha: sortAlpha,
     );
   }
 
