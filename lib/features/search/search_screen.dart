@@ -12,6 +12,7 @@ import '../../core/widgets/channel_card.dart';
 import '../../core/widgets/focusable_tap.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
+import '../../providers/sort_provider.dart';
 
 /// Global search across every channel + live match. Reached from the nav-bar
 /// search button. The field autofocuses (TV leanback IME); D-pad Down from the
@@ -81,6 +82,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             query: capturedQuery,
             limit: _pageSize,
             offset: capturedOffset,
+            sortAlpha: ref.read(sortAlphaProvider),
           );
       if (!mounted) return;
       if (_query != capturedQuery || _offset != capturedOffset) {
