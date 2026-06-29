@@ -3,12 +3,15 @@
 /// [expiresAt] is the moment a token in the URL expires (null when there's no
 /// parseable expiry). [httpHeaders] are headers the player must send to fetch
 /// the stream (e.g. a User-Agent some CDNs require); null when none are needed.
+/// [drmClearKeys] carries ClearKey DRM credentials (kid → key, hex) when the
+/// stream uses MPEG-DASH CENC with the ClearKey scheme.
 class ResolvedStream {
   const ResolvedStream({
     required this.url,
     this.expiresAt,
     this.httpHeaders,
     this.channelName,
+    this.drmClearKeys,
   });
 
   final String url;
@@ -19,4 +22,8 @@ class ResolvedStream {
   /// fid). Non-null only when the resolver can infer a better name than what
   /// is stored in the DB.
   final String? channelName;
+
+  /// ClearKey DRM map: kid (hex) → key (hex). Non-null only for DASH CENC
+  /// streams that embed their decryption key in the player page.
+  final Map<String, String>? drmClearKeys;
 }

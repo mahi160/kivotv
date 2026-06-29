@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kivo/services/tflix_service.dart';
 import 'package:kivo/services/tflix_resolver.dart';
@@ -33,6 +35,21 @@ void main() {
       final m = parseLiveMatches(html).single;
       expect(m.url, 'tflix://turkey_paraguay/match_1781165015_4596');
       expect(m.group, 'FIFA World Cup 2026 | Group D');
+    });
+  });
+
+  group('TflixResolver.xorDecrypt', () {
+    test('mirrors the JS atob+XOR scheme (round-trip)', () {
+      const key = 'SecureKey123!';
+      const plain = 'https://example.com/stream.mpd';
+      final keyBytes = utf8.encode(key);
+      final plainBytes = utf8.encode(plain);
+      final xored = List<int>.generate(
+        plainBytes.length,
+        (i) => plainBytes[i] ^ keyBytes[i % keyBytes.length],
+      );
+      final encoded = base64.encode(xored);
+      expect(TflixResolver.xorDecrypt(encoded, key), plain);
     });
   });
 
