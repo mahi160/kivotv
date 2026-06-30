@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -16,6 +18,10 @@ class PlayerOverlay extends StatelessWidget {
   const PlayerOverlay({
     super.key,
     required this.channel,
+    this.providerName,
+    this.driftSec = 0,
+    this.streamOpenedAt,
+    required this.onSync,
     required this.channelIndex,
     required this.channelTotal,
     required this.player,
@@ -30,6 +36,10 @@ class PlayerOverlay extends StatelessWidget {
   });
 
   final Channel channel;
+  final String? providerName;
+  final double driftSec;
+  final DateTime? streamOpenedAt;
+  final VoidCallback onSync;
   final int channelIndex;
   final int channelTotal;
   final Player player;
@@ -108,6 +118,7 @@ class PlayerOverlay extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
@@ -124,6 +135,21 @@ class PlayerOverlay extends StatelessWidget {
                           ),
                         ],
                       ),
+                      if (providerName != null) ...
+                        [
+                          const SizedBox(height: 3),
+                          Text(
+                            providerName!,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              color: Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                     ],
                   ),
                 ),
@@ -137,6 +163,15 @@ class PlayerOverlay extends StatelessWidget {
             ),
 
             const Spacer(),
+
+            // ── Stream info row (playing time + drift) ─────────────────────────
+            _StreamInfoRow(
+              streamOpenedAt: streamOpenedAt,
+              driftSec: driftSec,
+              onSync: onSync,
+            ),
+
+            const SizedBox(height: AppSpacing.sm),
 
             // ── Bottom bar ────────────────────────────────────────────────
             Row(
@@ -321,6 +356,108 @@ class _ChannelNumberPill extends StatelessWidget {
           fontWeight: FontWeight.w500,
           letterSpacing: 0.3,
         ),
+      ),
+    );
+  }
+}
+
+// ── Stream info row ──────────────────────────────────────────────────────────
+
+/// Shows "Playing HH:MM" on the left and, when drifted, a focusable
+/// "Xs behind live · Sync" button on the right.
+class _StreamInfoRow extends StatelessWidget {
+  const _StreamInfoRow({
+    required this.streamOpenedAt,
+    required this.driftSec,
+    required this.onSync,
+  });
+
+  final DateTime? streamOpenedAt;
+  final double driftSec;
+  final VoidCallback onSync;
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final opened = streamOpenedAt;
+    final playingFor = opened != null
+        ? _formatDuration(DateTime.now().difference(opened))
+        : null;
+    final showDrift = driftSec > 4;
+
+    if (playingFor == null && !showDrift) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          if (playingFor != null) ...[
+            const Icon(Icons.play_circle_outline_rounded,
+                size: 14, color: Colors.white38),
+            const SizedBox(width: 5),
+            Text(
+              playingFor,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                color: Colors.white38,
+                fontSize: 13,
+              ),
+            ),
+          ],
+          const Spacer(),
+          if (showDrift)
+            FocusableTap(
+              onTap: onSync,
+              builder: (_, focused) => AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: focused
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: focused
+                        ? Colors.white54
+                        : Colors.white24,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.av_timer_rounded,
+                        size: 14, color: Colors.white54),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${math.max(0, driftSec).round()}s behind live',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Sync',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: Color(0xFFE8B84B),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

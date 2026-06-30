@@ -96,6 +96,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<String>? _errorSubscription;
 
+  // ── provider / speed ───────────────────────────────────────────────────────
+  /// playlistId → playlist name, populated once on load.
+  Map<int, String> _playlistNames = {};
+  /// Current buffer download speed in bytes/s (EMA-smoothed).
+  double _bufferSpeed = 0;
+
+  // Drift = wall-clock elapsed − player-position elapsed since stream started.
+  // Captures time lost to buffering/stalling; resets on channel switch.
+  DateTime? _wallRef;     // wall time when playing first became true
+  Duration? _posRef;      // player position at that moment
+  double _driftSec = 0;
+
+  /// Wall time when the current stream opened (for "playing for X" display).
+  DateTime? _streamOpenedAt;
+
+  /// 1-second ticker driving drift + play-duration display updates.
+  Timer? _displayTicker;
+
   // ── sidebar scroll + focus tracking ────────────────────────────────────────
   final _sidebarScroll = ScrollController();
   int _sidebarFocusedIndex = -1;
@@ -154,6 +172,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _markedWatched = true;
         ref.read(repositoryProvider).markWatched(_currentChannel);
       }
+      // Anchor drift reference on first healthy play for this channel.
+      // Drift = wall elapsed − player-position elapsed since this point.
+      if (_wallRef == null) {
+        _wallRef = DateTime.now();
+        _posRef  = _player.state.position;
+        _displayTicker?.cancel();
+        _displayTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (!mounted) return;
+          final wRef = _wallRef;
+          final pRef = _posRef;
+          if (wRef == null || pRef == null) return;
+          final wallMs = DateTime.now().difference(wRef).inMilliseconds;
+          final posMs  = (_player.state.position - pRef).inMilliseconds;
+          final drift  = (wallMs - posMs) / 1000.0;
+          setState(() => _driftSec = drift.clamp(0, 999).toDouble());
+        });
+      }
     });
 
     // Restart the watchdog on every buffering=true so silent stalls are caught.
@@ -187,33 +222,94 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     try {
+      // ── HW decode ───────────────────────────────────────────────────────────────────
       // mediacodec (no -copy): HW decode via MediaCodec → SurfaceTexture → OpenGL.
-      // Avoids the Amlogic/Mali gralloc unlock bug that caused a GPU compositor
-      // stall on every frame with mediacodec-copy/auto-safe.
+      // Avoids the Amlogic/Mali gralloc unlock bug with mediacodec-copy/auto-safe.
       await platform.setProperty('hwdec', 'mediacodec');
-      await platform.setProperty('hwdec-codecs', 'all'); // H265, VP9, AV1, not just H264
-      await platform.setProperty('vd-lavc-fast', 'yes'); // fast SW fallback on low-end SoCs
-      await platform.setProperty('vd-lavc-threads', '0'); // all cores for SW decode
-      await platform.setProperty('video-sync', 'audio'); // audio clock master for live IPTV
-      // Drop frames at the VO stage only — decoder-level drops punch holes in the
-      // video PTS stream that audio doesn't have, causing A/V desync.
-      await platform.setProperty('framedrop', 'vo');
-      // bilinear: single GPU-native pass vs mitchell's multi-tap convolution.
-      // IPTV source quality doesn't justify the extra per-frame cost.
+      await platform.setProperty('hwdec-codecs', 'all');
+      // vd-lavc-dr: direct rendering — decoder writes directly into the GPU
+      // buffer, eliminating one CPU→GPU copy per frame. Critical for 4K where
+      // that copy alone can cause choppiness on the Amlogic SoC.
+      await platform.setProperty('vd-lavc-dr', 'yes');
+      await platform.setProperty('vd-lavc-fast', 'yes');
+      await platform.setProperty('vd-lavc-threads', '0');
+
+      // ── A/V sync + frame drop ───────────────────────────────────────────────────────
+      await platform.setProperty('video-sync', 'audio');
+      // decoder+vo: drop at both stages. VO-only can let the decoder pipeline
+      // back up under 4K load; decoder drops give it headroom earlier.
+      await platform.setProperty('framedrop', 'decoder+vo');
+
+      // ── Scaling (CPU cost not justified for IPTV quality) ───────────────────
       await platform.setProperty('scale', 'bilinear');
-      await platform.setProperty('cscale', 'bilinear'); // chroma
-      await platform.setProperty('dscale', 'bilinear'); // downscale
+      await platform.setProperty('cscale', 'bilinear');
+      await platform.setProperty('dscale', 'bilinear');
       await platform.setProperty('sigmoid-upscaling', 'no');
       await platform.setProperty('correct-downscaling', 'no');
       await platform.setProperty('linear-downscaling', 'no');
-      await platform.setProperty('dither-depth', 'no'); // unnecessary for 8-bit TV output
+      await platform.setProperty('dither-depth', 'no');
       await platform.setProperty('hdr-compute-peak', 'no');
+
+      // ── Live buffer (short = less drift, faster start) ──────────────────────
       await platform.setProperty('cache', 'yes');
-      await platform.setProperty('demuxer-readahead-secs', '4');
-      await platform.setProperty('cache-secs', '4');
+      // 2 s readahead: enough for one HLS segment, small enough that live
+      // drift stays under ~3 s between sync corrections.
+      await platform.setProperty('demuxer-readahead-secs', '2');
+      await platform.setProperty('cache-secs', '2');
+      // Don’t wait for the cache to fill before starting — begin playing
+      // immediately with what’s available. Crucial on slow networks.
+      await platform.setProperty('demuxer-cache-wait', 'no');
+      // Play through cache underruns instead of pausing. On live IPTV a
+      // brief stutter is better than a multi-second freeze.
+      await platform.setProperty('cache-pause', 'no');
+
+      // ── Observe download speed (EMA-smoothed so it doesn't jump) ─────────
+      await platform.observeProperty('cache-speed', (String val) async {
+        final raw = double.tryParse(val) ?? 0;
+        // EMA α=0.25: slow enough to read, fast enough to track real changes.
+        final smoothed = _bufferSpeed * 0.75 + raw * 0.25;
+        if (mounted) setState(() => _bufferSpeed = smoothed);
+      });
+
+
     } catch (_) {
       // Tuning is non-critical; playback still works with mpv defaults.
     }
+
+    // Live drift is handled by keeping the buffer short (2 s readahead).
+    // The player can never build more than ~2 s of latency on a healthy
+    // network, so no periodic seek is needed — and a mid-playback seek
+    // would cause a visible freeze while re-buffering.
+
+    // Load playlist names for provider display.
+    try {
+      final playlists = await ref.read(repositoryProvider).playlists();
+      if (mounted) {
+        setState(() {
+          _playlistNames = {for (final p in playlists) p.id: p.name};
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// User-initiated live-edge snap. Reads the demuxer cache end position and
+  /// seeks there. Causes a brief re-buffer but the user explicitly asked for it.
+  Future<void> _snapToLiveEdge() async {
+    final native = _player.platform;
+    if (native is! NativePlayer) return;
+    try {
+      final end = double.tryParse(
+        await native.getProperty('demuxer-cache-end'),
+      ) ?? 0;
+      if (end > 0) {
+        await native.setProperty('time-pos', (end - 0.3).toStringAsFixed(3));
+      }
+    } catch (_) {}
+  }
+
+  String? get _currentProviderName {
+    final id = _currentChannel.playlistId;
+    return id != null ? _playlistNames[id] : null;
   }
 
   @override
@@ -224,6 +320,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _loadWatchdog?.cancel();
     _expiryTimer?.cancel();
     _toastTimer?.cancel();
+    _displayTicker?.cancel();
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
     _errorSubscription?.cancel();
@@ -301,6 +398,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Stop before resolving so stale events don't leak to the new channel.
     // Watchdog starts AFTER _player.open() below — not here — so that
     // slow token resolution doesn't count against the 20 s timeout.
+    setState(() {
+      _driftSec = 0;
+      _streamOpenedAt = null;
+      _wallRef = null;
+      _posRef = null;
+    });
     _player.stop();
 
     final reference = _currentChannel.url;
@@ -351,6 +454,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     if (!mounted || gen != _loadGeneration) return;
+    if (mounted) setState(() => _streamOpenedAt = DateTime.now());
     await _player.open(Media(playable, httpHeaders: headers), play: true);
     if (!mounted || gen != _loadGeneration) {
       _player.stop();
@@ -676,7 +780,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 StreamBuilder<bool>(
                   stream: _player.stream.buffering,
                   builder: (context, snap) => snap.data == true
-                      ? const Center(child: CircularProgressIndicator())
+                      ? _BufferingIndicator(speedBytesPerSec: _bufferSpeed)
                       : const SizedBox.shrink(),
                 ),
 
@@ -700,10 +804,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     child: FocusTraversalGroup(
                       child: PlayerOverlay(
                         channel: _currentChannel,
+                        providerName: _currentProviderName,
                         channelIndex: _zapIndex,
                         channelTotal: _effectiveZapList.length,
                         player: _player,
                         showingList: _showChannelList,
+                        driftSec: _driftSec,
+                        streamOpenedAt: _streamOpenedAt,
+                        onSync: _snapToLiveEdge,
                         onPrevious: _playPrevious,
                         onNext: _playNext,
                         onInteraction: _scheduleOverlayHide,
@@ -769,6 +877,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Buffering indicator
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BufferingIndicator extends StatelessWidget {
+  const _BufferingIndicator({required this.speedBytesPerSec});
+  final double speedBytesPerSec;
+
+  String get _label {
+    if (speedBytesPerSec <= 0) return 'Buffering…';
+    if (speedBytesPerSec < 1024 * 1024) {
+      return '${(speedBytesPerSec / 1024).toStringAsFixed(0)} KB/s';
+    }
+    return '${(speedBytesPerSec / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(
+            color: Colors.white70,
+            strokeWidth: 2.5,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _label,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+            ),
+          ),
+        ],
       ),
     );
   }
