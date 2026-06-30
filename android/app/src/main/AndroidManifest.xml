@@ -34,9 +34,10 @@
               android:resource="@style/NormalTheme"
               />
             <!-- Only the TV leanback launcher — this app is Android TV only.
-                 Removing LAUNCHER prevents it from appearing in the phone app drawer. -->
+                 Both LAUNCHER (required by flutter tooling) and LEANBACK_LAUNCHER (TV home screen). -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
