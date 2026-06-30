@@ -75,8 +75,8 @@ class PlaylistRepository {
 
   // kivo://footmad/<name> — one playlist per FootMad category.
   static const _footmadPrefix = 'kivo://footmad/';
-  // All footmad categories default off; user enables what they want.
-  static const _footmadDefaultOn = <String>{};
+  // Only SportsOnly on by default; everything else user-enables.
+  static const _footmadDefaultOn = {'SportsOnly'};
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
@@ -330,6 +330,7 @@ class PlaylistRepository {
       final playlistId = await DatabaseService.instance.upsertPlaylist(
         name: 'TFLIX Live',
         url: 'kivo://tflix',
+        defaultEnabled: false,
       );
       await DatabaseService.instance.replaceChannels(
         playlistId: playlistId,
