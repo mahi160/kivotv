@@ -64,7 +64,6 @@ class PlaylistRepository {
   }
 
   static const _refreshThreshold = Duration(hours: 24);
-  static const _streamcrichdChannelCount = 51; // 0–50 inclusive.
 
   static const _seededKey        = 'kivo_playlists_seeded_v4';
   /// Bumping this key forces built-in channels to re-seed on next launch
@@ -77,6 +76,73 @@ class PlaylistRepository {
   static const _footmadPrefix = 'kivo://footmad/';
   // Only SportsOnly on by default; everything else user-enables.
   static const _footmadDefaultOn = {'SportsOnly'};
+
+  // ── Built-in sources ────────────────────────────────────────────
+  // One registry entry per simple kivo:// source: seeded once on install,
+  // optionally re-fetched on refresh (refreshable: true). TFLIX and FootMad
+  // have dedicated flows below — they genuinely differ (scrape throttling /
+  // multi-playlist catalog).
+
+  static const _streamcrichdChannelCount = 51; // 0–50 inclusive.
+
+  static final _builtinSources = <({
+    String name,
+    String url,
+    bool defaultEnabled,
+    bool refreshable,
+    Future<List<Channel>> Function() fetch,
+  })>[
+    (
+      name: 'IPTV IDN',
+      url: 'kivo://iptvidn',
+      defaultEnabled: false,
+      refreshable: false,
+      fetch: _fetchIptvidnChannels,
+    ),
+    (
+      name: 'StreamCricHD',
+      url: 'kivo://streamcrichd',
+      defaultEnabled: false,
+      refreshable: false,
+      fetch: _fetchStreamcrichdChannels,
+    ),
+    (
+      name: 'Local IPTV',
+      url: 'kivo://localiptv',
+      defaultEnabled: true,
+      // Re-fetched on refresh: the local server's lineup changes and the
+      // seed may have run while the TV was off the home LAN.
+      refreshable: true,
+      fetch: LocalIptvService.instance.fetchChannels,
+    ),
+  ];
+
+  static Future<List<Channel>> _fetchIptvidnChannels() async {
+    final json = await rootBundle.loadString('assets/iptvidn_channels.json');
+    final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+    return [
+      for (final m in list)
+        Channel(
+          id: m['id'] as String,
+          name: m['name'] as String,
+          url: m['url'] as String,
+          logo: m['logo'] as String?,
+          group: m['group'] as String?,
+        ),
+    ];
+  }
+
+  static Future<List<Channel>> _fetchStreamcrichdChannels() async {
+    return List.generate(_streamcrichdChannelCount, (i) {
+      return Channel(
+        id: 'streamcrichd-$i',
+        name: 'StreamCricHD $i',
+        url: 'https://streamcrichd.com/update/fetch.php?hd=$i',
+        group: 'Live Sports',
+      );
+    });
+  }
+
   static const _seededPlaylists = [
     (
       name: 'Ultimate IPTV',
@@ -98,9 +164,7 @@ class PlaylistRepository {
       // Only seed / clean built-ins once per install (or after a key bump).
       // Skipping on subsequent launches saves ~100 SQLite ops per start.
       if (!builtinDone) {
-        await _storeIptvidnChannels();
-        await _storeStreamcrichdChannels();
-        await _storeLocalIptvChannels();
+        await _seedBuiltinSources();
         // Remove old single-playlist footmad entry if present.
         await DatabaseService.instance.deletePlaylistByUrl('kivo://footmad');
         await prefs.setBool(_builtinSeededKey, true);
@@ -190,107 +254,95 @@ class PlaylistRepository {
     _bumpAll();
   }
 
-  Future<void> _storeIptvidnChannels() async {
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'IPTV IDN',
-      url: 'kivo://iptvidn',
-      defaultEnabled: false,
-    );
-    final json = await rootBundle.loadString('assets/iptvidn_channels.json');
-    final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
-    final channels = list
-        .map(
-          (m) => Channel(
-            id: m['id'] as String,
-            name: m['name'] as String,
-            url: m['url'] as String,
-            logo: m['logo'] as String?,
-            group: m['group'] as String?,
-          ),
-        )
-        .toList();
-    await DatabaseService.instance.replaceChannels(
-      playlistId: playlistId,
-      channels: channels,
-    );
-  }
-
-  Future<void> _storeLocalIptvChannels() async {
-    // Seed whatever the local server has right now. If unreachable (TV is off
-    // the home LAN), LocalIptvService returns [] and we store an empty playlist
-    // — the live channels just won't appear until the next manual refresh.
-    final channels = await LocalIptvService.instance.fetchChannels();
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'Local IPTV',
-      url: 'kivo://localiptv',
-    );
-    if (channels.isNotEmpty) {
-      await DatabaseService.instance.replaceChannels(
-        playlistId: playlistId,
-        channels: channels,
+  /// Seeds every registered built-in source: upsert the playlist row, fetch
+  /// its channels, store them. An empty fetch (e.g. Local IPTV while off the
+  /// home LAN) keeps the row but stores nothing — channels appear on the next
+  /// refresh.
+  Future<void> _seedBuiltinSources() async {
+    for (final source in _builtinSources) {
+      final playlistId = await DatabaseService.instance.upsertPlaylist(
+        name: source.name,
+        url: source.url,
+        defaultEnabled: source.defaultEnabled,
       );
+      final channels = await source.fetch();
+      if (channels.isNotEmpty) {
+        await DatabaseService.instance.replaceChannels(
+          playlistId: playlistId,
+          channels: channels,
+        );
+      }
     }
   }
 
-  Future<void> _storeStreamcrichdChannels() async {
-    final playlistId = await DatabaseService.instance.upsertPlaylist(
-      name: 'StreamCricHD',
-      url: 'kivo://streamcrichd',
-      defaultEnabled: false,
-    );
-    await DatabaseService.instance.replaceChannels(
-      playlistId: playlistId,
-      channels: List.generate(_streamcrichdChannelCount, (i) {
-        return Channel(
-          id: 'streamcrichd-$i',
-          name: 'StreamCricHD $i',
-          url: 'https://streamcrichd.com/update/fetch.php?hd=$i',
-          group: 'Live Sports',
-        );
-      }),
-    );
+  /// Re-fetches every refreshable built-in source that is currently enabled.
+  Future<void> _refreshBuiltinsIfEnabled() async {
+    final playlists = await DatabaseService.instance.playlists();
+    var changed = false;
+    for (final source in _builtinSources.where((s) => s.refreshable)) {
+      final p = playlists.where((x) => x.url == source.url).firstOrNull;
+      if (p == null || !p.enabled) continue;
+      final channels = await source.fetch();
+      if (channels.isEmpty) continue; // unreachable — keep existing data
+      await DatabaseService.instance.replaceChannels(
+        playlistId: p.id,
+        channels: channels,
+      );
+      changed = true;
+    }
+    if (changed) {
+      channelCount.value = await DatabaseService.instance.channelCount();
+      _bumpAll();
+    }
   }
 
   Future<void> _seedAndRefresh(SharedPreferences prefs) async {
     isFetching.value = true;
     fetchError.value = null;
     try {
-      await refreshTflixMatches();
-      await _syncFootmadCategories();
-      await _refreshFootmadIfStale();
-      await _refreshLocalIptvIfEnabled();
-
-      final alreadyDone = prefs.getBool(_seededKey) ?? false;
-
-      if (!alreadyDone) {
-        for (final p in _seededPlaylists) {
-          await addAndRefreshPlaylist(
-            p.url,
-            name: p.name,
-            defaultEnabled: p.defaultEnabled,
-          );
-        }
-        await prefs.setBool(_seededKey, true);
-        return;
-      }
-
-      final playlists = await DatabaseService.instance.playlists();
-      final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
-      if (userPlaylists.isEmpty) return;
-
-      final now = DateTime.now();
-      final stale = userPlaylists.where((p) => p.enabled).where((p) {
-        final last = p.lastRefreshedDateTime;
-        if (last == null) return true;
-        return now.difference(last) > _refreshThreshold;
-      }).toList();
-
-      if (stale.isNotEmpty) await refreshAllPlaylists();
+      // All four flows are independent network work — run them in parallel.
+      // SQLite writes are serialized by sqflite's transaction queue.
+      await Future.wait([
+        refreshTflixMatches(),
+        _syncFootmadCategories().then((_) => _refreshFootmadIfStale()),
+        _refreshBuiltinsIfEnabled(),
+        _seedOrRefreshUserPlaylists(prefs),
+      ]);
     } catch (e) {
       fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     } finally {
       isFetching.value = false;
     }
+  }
+
+  /// First launch: seed the bundled user playlists. Later launches: refresh
+  /// any enabled user playlist older than [_refreshThreshold].
+  Future<void> _seedOrRefreshUserPlaylists(SharedPreferences prefs) async {
+    final alreadyDone = prefs.getBool(_seededKey) ?? false;
+
+    if (!alreadyDone) {
+      for (final p in _seededPlaylists) {
+        await addAndRefreshPlaylist(
+          p.url,
+          name: p.name,
+          defaultEnabled: p.defaultEnabled,
+        );
+      }
+      await prefs.setBool(_seededKey, true);
+      return;
+    }
+
+    final playlists = await DatabaseService.instance.playlists();
+    final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
+    if (userPlaylists.isEmpty) return;
+
+    final now = DateTime.now();
+    final anyStale = userPlaylists.where((p) => p.enabled).any((p) {
+      final last = p.lastRefreshedDateTime;
+      return last == null || now.difference(last) > _refreshThreshold;
+    });
+
+    if (anyStale) await refreshAllPlaylists();
   }
 
   DateTime? _lastTflixScrape;
@@ -342,31 +394,20 @@ class PlaylistRepository {
     } catch (_) {}
   }
 
-  Future<void> _refreshLocalIptvIfEnabled() async {
-    final playlists = await DatabaseService.instance.playlists();
-    final p = playlists.where((p) => p.url == 'kivo://localiptv').firstOrNull;
-    if (p == null || !p.enabled) return;
-    final channels = await LocalIptvService.instance.fetchChannels();
-    if (channels.isEmpty) return; // server unreachable — keep existing data
-    await DatabaseService.instance.replaceChannels(
-      playlistId: p.id,
-      channels: channels,
-    );
-    channelCount.value = await DatabaseService.instance.channelCount();
-    _bumpAll();
-  }
-
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
     fetchError.value = null;
     try {
       await _clearImageCache();
-      await refreshTflixMatches(force: true);
-      await _syncFootmadCategories();
-      await _refreshFootmadEnabled();
-      await _refreshLocalIptvIfEnabled();
-      await refreshAllPlaylists();
+      // Independent sources refresh in parallel; DB writes are serialized
+      // by sqflite's transaction queue.
+      await Future.wait([
+        refreshTflixMatches(force: true),
+        _syncFootmadCategories().then((_) => _refreshFootmadEnabled()),
+        _refreshBuiltinsIfEnabled(),
+        refreshAllPlaylists(),
+      ]);
     } finally {
       isFetching.value = false;
     }
@@ -498,6 +539,19 @@ class PlaylistRepository {
     await DatabaseService.instance.updateChannelName(channel.url, name);
     // Name change is visible on cards in all sections — bump everything.
     _bumpAll();
+  }
+
+  /// Seeded StreamCricHD channels carry placeholder names ("StreamCricHD 12")
+  /// until a resolver discovers the real channel name mid-stream.
+  static final _placeholderName = RegExp(r'^StreamCricHD \d+$');
+
+  /// If [suggested] should replace [channel]'s seeded placeholder name,
+  /// persists the rename and returns the updated channel. Null = keep as-is.
+  Channel? adoptResolvedName(Channel channel, String? suggested) {
+    if (suggested == null || suggested.isEmpty) return null;
+    if (!_placeholderName.hasMatch(channel.name)) return null;
+    unawaited(updateChannelName(channel, suggested));
+    return channel.copyWith(name: suggested);
   }
 
   Future<void> setFavorite(Channel channel, bool favorite) async {
