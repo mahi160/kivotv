@@ -229,6 +229,11 @@ CREATE TRIGGER IF NOT EXISTS channels_au AFTER UPDATE ON channels BEGIN
   INSERT INTO channels_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
 END''';
 
+  /// SQL fragment restricting channel rows to enabled playlists. Prefix with
+  /// a table alias when the query joins (e.g. 'c.$_enabledFilter').
+  static const _enabledFilter =
+      'playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)';
+
   /// True if the FTS5 table exists in this database (SQLite 3.9+ / Android 7+).
   /// Result is cached after the first check.
   Future<bool> _hasFts() async {
@@ -427,9 +432,7 @@ END''';
     final args = <Object?>[];
 
     // Always restrict to channels from enabled playlists.
-    where.add(
-      'playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
-    );
+    where.add(_enabledFilter);
 
     if (normalizedQuery.isNotEmpty) {
       final ftsQ = _ftsQuery(normalizedQuery);
@@ -480,28 +483,32 @@ END''';
   }) async {
     final db = await database;
 
+    // Empty/null groups collapse into 'Other'.
+    const groupExpr = "COALESCE(NULLIF(group_name, ''), 'Other')";
+    const groupExprC = "COALESCE(NULLIF(c.group_name, ''), 'Other')";
+    // tflix:// live matches have their own dashboard row — exclude here.
+    const notLiveMatch = "url NOT LIKE 'tflix://%'";
+
     // Single query: inline the top-groups subquery so we avoid a second
     // round-trip to SQLite. The subquery is cheap (one index scan) and
     // SQLite caches it inside the same statement.
     final rows = await db.rawQuery(
       '''
 SELECT c.*,
-       COALESCE(NULLIF(c.group_name, ''), 'Other') AS _g
+       $groupExprC AS _g
 FROM   channels c
-WHERE  c.url NOT LIKE 'tflix://%'
-  AND  c.url NOT LIKE 'bdixtv://%'
-  AND  c.playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
-  AND  COALESCE(NULLIF(c.group_name, ''), 'Other') IN (
-         SELECT COALESCE(NULLIF(group_name, ''), 'Other') AS _g
+WHERE  c.$notLiveMatch
+  AND  c.$_enabledFilter
+  AND  $groupExprC IN (
+         SELECT $groupExpr AS _g
          FROM   channels
-         WHERE  url NOT LIKE 'tflix://%'
-           AND  url NOT LIKE 'bdixtv://%'
-           AND  playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
+         WHERE  $notLiveMatch
+           AND  $_enabledFilter
          GROUP  BY _g
          ORDER  BY COUNT(*) DESC
          LIMIT  ?
        )
-ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
+ORDER  BY $groupExprC COLLATE NOCASE ASC,
           c.name COLLATE NOCASE ASC
 ''',
       [groupLimit],
@@ -529,9 +536,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where:
-          'is_favorite = 1'
-          ' AND playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
+      where: 'is_favorite = 1 AND $_enabledFilter',
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
@@ -543,9 +548,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where:
-          "url LIKE 'tflix://%'"
-          ' AND playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)',
+      where: "url LIKE 'tflix://%' AND $_enabledFilter",
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
@@ -559,7 +562,7 @@ ORDER  BY COALESCE(NULLIF(c.group_name, ''), 'Other') COLLATE NOCASE ASC,
 SELECT channels.*
 FROM   recently_watched
 JOIN   channels ON channels.url = recently_watched.channel_url
-WHERE  channels.playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)
+WHERE  channels.$_enabledFilter
 ORDER  BY recently_watched.watched_at DESC
 LIMIT  ?
 ''',

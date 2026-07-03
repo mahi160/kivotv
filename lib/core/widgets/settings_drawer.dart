@@ -6,7 +6,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
-import '../../models/playlist.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
 import '../../providers/sort_provider.dart';
@@ -86,7 +85,7 @@ class SettingsPanel extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      _BrandMark(isDark: isDark),
+                      const KivoLogo(size: 34),
                       const SizedBox(width: 10),
                       Text(
                         'kivo',
@@ -111,33 +110,37 @@ class SettingsPanel extends ConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
                     children: [
                       _SectionLabel('Appearance', color: text2),
-                      _ToggleRow(
+                      _SettingsRow(
                         icon: Icons.dark_mode_rounded,
                         title: 'Dark mode',
                         subtitle: isDark
                             ? 'Dark mode active'
                             : 'Light mode active',
-                        value: isDark,
                         autofocus:
                             true, // D-pad lands here when the panel opens
-                        onToggle: () => ref
+                        onTap: () => ref
                             .read(themeModeProvider.notifier)
                             .toggle(systemIsDark: isDark),
-                        border: border,
                         isDark: isDark,
+                        trailing: _Switch(
+                          value: isDark,
+                          primary: AppColors.primary(isDark),
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      _ToggleRow(
+                      _SettingsRow(
                         icon: Icons.sort_by_alpha_rounded,
                         title: 'Sort A–Z',
                         subtitle: ref.watch(sortAlphaProvider)
                             ? 'Alphabetical order'
                             : 'Provider order',
-                        value: ref.watch(sortAlphaProvider),
-                        onToggle: () =>
+                        onTap: () =>
                             ref.read(sortAlphaProvider.notifier).toggle(),
-                        border: border,
                         isDark: isDark,
+                        trailing: _Switch(
+                          value: ref.watch(sortAlphaProvider),
+                          primary: AppColors.primary(isDark),
+                        ),
                       ),
 
                       const SizedBox(height: AppSpacing.md),
@@ -186,18 +189,6 @@ class SettingsPanel extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-// ── Brand mark ──────────────────────────────────────────────────────────────
-
-class _BrandMark extends StatelessWidget {
-  const _BrandMark({required this.isDark});
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return const KivoLogo(size: 34);
   }
 }
 
@@ -264,27 +255,29 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-// ── Toggle row ──────────────────────────────────────────────────────────────────
+// ── Settings row ────────────────────────────────────────────────────────────
 
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
+/// The shared layout for every actionable settings row: 38 px icon tile,
+/// title + subtitle, optional trailing widget (switch / spinner), gold focus
+/// ring on D-pad focus.
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.value,
-    required this.onToggle,
-    required this.border,
     required this.isDark,
+    this.trailing,
+    this.onTap,
     this.autofocus = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool value;
-  final VoidCallback onToggle;
-  final Color border;
   final bool isDark;
+  final Widget? trailing;
+  final VoidCallback? onTap;
   final bool autofocus;
 
   @override
@@ -298,7 +291,7 @@ class _ToggleRow extends StatelessWidget {
 
     return FocusableTap(
       autofocus: autofocus,
-      onTap: onToggle,
+      onTap: onTap ?? () {},
       builder: (_, focused) => AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -328,6 +321,8 @@ class _ToggleRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: text1,
                       fontWeight: FontWeight.w500,
@@ -336,6 +331,8 @@ class _ToggleRow extends StatelessWidget {
                   const SizedBox(height: 1),
                   Text(
                     subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: text2),
@@ -343,7 +340,7 @@ class _ToggleRow extends StatelessWidget {
                 ],
               ),
             ),
-            _Switch(value: value, primary: primary),
+            ?trailing,
           ],
         ),
       ),
@@ -393,93 +390,6 @@ class _Switch extends StatelessWidget {
   }
 }
 
-// ── Refresh row ───────────────────────────────────────────────────────
-
-/// Manual "refresh all sources now" row. Shows a spinner while a fetch runs.
-class _RefreshRow extends StatelessWidget {
-  const _RefreshRow({
-    required this.fetching,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  final bool fetching;
-  final VoidCallback onTap;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = AppColors.primary(isDark);
-    final accent = AppColors.focus(isDark);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
-
-    return FocusableTap(
-      onTap: fetching ? () {} : onTap,
-      builder: (_, focused) => AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        decoration: BoxDecoration(
-          color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(
-            color: focused ? accent : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.primarySub(isDark),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.refresh_rounded, size: 19, color: primary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Refresh now',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: text1,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    fetching
-                        ? 'Updating channels…'
-                        : 'Re-fetch live matches + playlists',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: text2),
-                  ),
-                ],
-              ),
-            ),
-            if (fetching)
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: primary,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ── Sources section (isolated ConsumerWidget to prevent rebuild of the
 //    autofocused dark-mode toggle above it) ────────────────────────────────
 
@@ -496,119 +406,51 @@ class _SourcesSection extends ConsumerWidget {
 
     return Column(
       children: [
-        _RefreshRow(
-          fetching: fetching,
-          onTap: () => ref.read(repositoryProvider).manualRefresh(),
+        _SettingsRow(
+          icon: Icons.refresh_rounded,
+          title: 'Refresh now',
+          subtitle: fetching
+              ? 'Updating channels…'
+              : 'Re-fetch live matches + playlists',
           isDark: isDark,
+          onTap: fetching
+              ? null
+              : () => ref.read(repositoryProvider).manualRefresh(),
+          trailing: fetching
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: AppColors.primary(isDark),
+                  ),
+                )
+              : null,
         ),
         const SizedBox(height: AppSpacing.sm),
         ...playlists.map(
-          (p) => _SourceRow(
+          (p) => _SettingsRow(
             key: ValueKey(p.id),
-            playlist: p,
+            icon: p.url.startsWith('kivo://footmad/')
+                ? Icons.sports_soccer_rounded
+                : p.isBuiltIn
+                    ? Icons.live_tv_rounded
+                    : Icons.playlist_play_rounded,
+            title: p.name,
+            subtitle: p.isBuiltIn
+                ? 'Built-in source'
+                : (Uri.tryParse(p.url)?.host ?? p.url),
             isDark: isDark,
-            onToggle: () => ref
+            onTap: () => ref
                 .read(repositoryProvider)
                 .setPlaylistEnabled(p.id, enabled: !p.enabled),
+            trailing: _Switch(
+              value: p.enabled,
+              primary: AppColors.primary(isDark),
+            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-// ── Source row ─────────────────────────────────────────────────────────────────
-
-/// One row per playlist in the Sources section — shows name + enabled toggle.
-class _SourceRow extends StatelessWidget {
-  const _SourceRow({
-    super.key,
-    required this.playlist,
-    required this.isDark,
-    required this.onToggle,
-  });
-
-  final Playlist playlist;
-  final bool isDark;
-  final VoidCallback onToggle;
-
-  String get _subtitle {
-    if (playlist.isBuiltIn) return 'Built-in source';
-    final uri = Uri.tryParse(playlist.url);
-    return uri?.host ?? playlist.url;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = AppColors.primary(isDark);
-    final accent = AppColors.focus(isDark);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
-
-    return FocusableTap(
-      onTap: onToggle,
-      builder: (_, focused) => AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(
-            color: focused ? accent : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.primarySub(isDark),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                playlist.url.startsWith('kivo://footmad/')
-                    ? Icons.sports_soccer_rounded
-                    : playlist.isBuiltIn
-                        ? Icons.live_tv_rounded
-                        : Icons.playlist_play_rounded,
-                size: 19,
-                color: primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    playlist.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: text1,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    _subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: text2),
-                  ),
-                ],
-              ),
-            ),
-            _Switch(value: playlist.enabled, primary: primary),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/back_guard.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
@@ -21,26 +22,22 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // Timestamp of the last time this screen mounted. Used to swallow any
-  // residual back event that arrives shortly after returning from the player:
-  // on some TV firmware (TCL / Realtek) the back button fires through both
-  // the key-event pipeline AND the Activity’s onBackPressed(), so the second
-  // event can arrive on the home screen a few ms after the first navigated
-  // away from the player. We ignore back-to-exit for 600 ms after mount.
-  DateTime _mountedAt = DateTime.now();
+  // Armed on mount so any back echo that trails the navigation from the
+  // player (see BackGuard) doesn't immediately exit the app.
+  final _backGuard = BackGuard();
 
   @override
   void initState() {
     super.initState();
-    _mountedAt = DateTime.now();
+    _backGuard.arm();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reset the guard whenever the route becomes active again (e.g. after
-    // returning from the player via go('/')).
-    _mountedAt = DateTime.now();
+    // Re-arm whenever the route becomes active again (e.g. after returning
+    // from the player).
+    _backGuard.arm();
   }
 
   void _open(Channel channel, [List<Channel> zapChannels = const []]) {
@@ -55,11 +52,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Swallow back events that arrive within 600 ms of mounting.
-        // Some TV firmware (e.g. TCL/Realtek) delivers KEYCODE_BACK through
-        // both the key-event pipeline and onBackPressed() independently, so
-        // the second copy can land here just after returning from the player.
-        if (DateTime.now().difference(_mountedAt).inMilliseconds < 600) return;
+        if (_backGuard.swallow) return; // firmware back echo — ignore
         SystemNavigator.pop();
       },
       child: Scaffold(

@@ -23,7 +23,10 @@ class Playlist {
       ? null
       : DateTime.fromMillisecondsSinceEpoch(lastRefreshedAt!);
 
-  /// Whether this playlist is the internal kivo:// example source.
+  /// Whether this playlist is an internal kivo:// source — seeded and
+  /// refreshed by the app itself rather than fetched as a user M3U URL.
+  /// Built-ins are excluded from user-playlist refresh and shown with a
+  /// "Built-in source" subtitle in Settings.
   bool get isBuiltIn => url.startsWith('kivo://');
 
   factory Playlist.fromDb(Map<String, Object?> map) {

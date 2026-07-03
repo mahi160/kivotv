@@ -7,8 +7,8 @@ import 'dart:io';
 /// A separate short-lived [HttpClient] is used per call so dead CDN hosts
 /// never pollute a shared connection pool.
 ///
-/// Used by [BdixtvResolver] and [TflixResolver] so HLS validation logic
-/// stays in one place with consistent UTF-8 decoding.
+/// Used by [TflixResolver] so HLS validation logic stays in one place with
+/// consistent UTF-8 decoding.
 Future<bool> isHlsManifest(
   String url, {
   Duration timeout = const Duration(seconds: 8),
