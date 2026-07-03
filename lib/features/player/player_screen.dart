@@ -12,6 +12,7 @@ import '../../core/back_guard.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
+import '../../providers/audio_delay_provider.dart';
 import '../../providers/sort_provider.dart';
 import '../../services/player_tuning.dart';
 import '../../services/stream_resolver.dart';
@@ -95,6 +96,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   StreamSubscription<bool>? _playingSubscription;
   StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<String>? _errorSubscription;
+  ProviderSubscription<double>? _audioDelaySubscription;
 
   // ── provider / stream stats ────────────────────────────────────────────────
   /// playlistId → playlist name, populated once on load.
@@ -200,8 +202,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await configurePlayerForLiveTv(_player);
+      await applyAudioDelay(_player, ref.read(audioDelayProvider));
       unawaited(observeCacheSpeed(_player, _bufferSpeed));
       if (mounted) _open(_currentChannel);
+
+      _audioDelaySubscription = ref.listenManual(audioDelayProvider, (_, secs) {
+        applyAudioDelay(_player, secs);
+      });
     });
 
     _scheduleOverlayHide();
@@ -234,6 +241,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
     _errorSubscription?.cancel();
+    _audioDelaySubscription?.close();
     _sidebarScroll.dispose();
     _currentSidebarFocus.dispose();
     _rootFocus.dispose();

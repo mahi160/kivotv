@@ -73,6 +73,17 @@ Future<void> configurePlayerForLiveTv(Player player) async {
   }
 }
 
+/// Sets mpv's `audio-delay` (seconds). Negative values delay video to match
+/// audio that arrives late — the common case when a TV/soundbar's HDMI audio
+/// processing (ARC/eARC, Dolby decode) adds latency the player can't see.
+Future<void> applyAudioDelay(Player player, double seconds) async {
+  final platform = player.platform;
+  if (platform is! NativePlayer) return;
+  try {
+    await platform.setProperty('audio-delay', seconds.toStringAsFixed(3));
+  } catch (_) {}
+}
+
 /// Streams the demuxer download speed (bytes/s) into [speed], EMA-smoothed
 /// (α = 0.25: slow enough to read, fast enough to track real changes).
 /// Writes to the notifier directly so only its listeners rebuild — never the

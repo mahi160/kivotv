@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../../providers/audio_delay_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/fetch_status_provider.dart';
 import '../../providers/sort_provider.dart';
@@ -142,6 +143,10 @@ class SettingsPanel extends ConsumerWidget {
                           primary: AppColors.primary(isDark),
                         ),
                       ),
+
+                      const SizedBox(height: AppSpacing.md),
+                      _SectionLabel('Playback', color: text2),
+                      _AudioDelayRow(isDark: isDark),
 
                       const SizedBox(height: AppSpacing.md),
                       _SectionLabel('Sources', color: text2),
@@ -385,6 +390,122 @@ class _Switch extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Audio delay (A/V sync) row ────────────────────────────────────────────
+
+/// Fixes sound arriving after/before video on TVs whose HDMI audio pipeline
+/// (ARC/eARC, soundbar decode) adds latency the player can't detect. Steps of
+/// 0.1 s; negative delays video to catch up with late audio.
+class _AudioDelayRow extends ConsumerWidget {
+  const _AudioDelayRow({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final delay = ref.watch(audioDelayProvider);
+    final primary = AppColors.primary(isDark);
+    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
+    final text2 = isDark
+        ? AppColors.darkOnSurfaceVariant
+        : AppColors.lightOnSurfaceVariant;
+
+    // Not a _SettingsRow: that widget wraps its whole row (trailing included)
+    // in one FocusableTap, which would bury these two independently-focusable
+    // step buttons inside another focusable and break D-pad traversal into
+    // them. Plain layout here instead.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.primarySub(isDark),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.graphic_eq_rounded, size: 19, color: primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Audio sync',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: text1,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  delay == 0
+                      ? 'In sync'
+                      : '${delay > 0 ? '+' : ''}${delay.toStringAsFixed(1)}s '
+                          '(${delay > 0 ? 'audio delayed' : 'video delayed to match audio'})',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: text2),
+                ),
+              ],
+            ),
+          ),
+          _StepButton(
+            icon: Icons.remove_rounded,
+            isDark: isDark,
+            onTap: () => ref
+                .read(audioDelayProvider.notifier)
+                .set(double.parse((delay - 0.1).toStringAsFixed(1))),
+          ),
+          const SizedBox(width: 6),
+          _StepButton(
+            icon: Icons.add_rounded,
+            isDark: isDark,
+            onTap: () => ref
+                .read(audioDelayProvider.notifier)
+                .set(double.parse((delay + 0.1).toStringAsFixed(1))),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepButton extends StatelessWidget {
+  const _StepButton({required this.icon, required this.isDark, required this.onTap});
+  final IconData icon;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.focus(isDark);
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final text2 = isDark
+        ? AppColors.darkOnSurfaceVariant
+        : AppColors.lightOnSurfaceVariant;
+    return FocusableTap(
+      onTap: onTap,
+      builder: (_, focused) => AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: focused ? AppColors.focusFill(isDark) : Colors.transparent,
+          border: Border.all(
+            color: focused ? accent : border,
+            width: focused ? 2 : 1,
+          ),
+        ),
+        child: Icon(icon, size: 16, color: focused ? accent : text2),
       ),
     );
   }
