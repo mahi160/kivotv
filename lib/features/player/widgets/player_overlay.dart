@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/circle_back_button.dart';
 import '../../../core/widgets/focusable_tap.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../models/channel.dart';
+import '../drift_tracker.dart';
 import 'ctrl_btn.dart';
 import 'icon_action.dart';
 import 'live_clock.dart';
@@ -19,8 +21,7 @@ class PlayerOverlay extends StatelessWidget {
     super.key,
     required this.channel,
     this.providerName,
-    this.driftSec = 0,
-    this.streamOpenedAt,
+    required this.drift,
     required this.onSync,
     required this.channelIndex,
     required this.channelTotal,
@@ -37,8 +38,7 @@ class PlayerOverlay extends StatelessWidget {
 
   final Channel channel;
   final String? providerName;
-  final double driftSec;
-  final DateTime? streamOpenedAt;
+  final DriftTracker drift;
   final VoidCallback onSync;
   final int channelIndex;
   final int channelTotal;
@@ -81,38 +81,11 @@ class PlayerOverlay extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // FocusableTap instead of IconButton so the back button
-                // gets the same gold glow ring as every other focusable
-                // in the app rather than Material's grey-highlight box.
-                FocusableTap(
+                CircleBackButton(
                   onTap: () {
                     onInteraction();
                     onBack();
                   },
-                  builder: (_, focused) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 110),
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: focused
-                          ? Colors.white
-                          : Colors.black.withValues(alpha: 0.55),
-                      border: Border.all(
-                        color: focused
-                            ? AppColors.accentBright
-                            : Colors.white30,
-                        width: focused ? 2 : 1,
-                      ),
-                      boxShadow: null,
-                    ),
-                    child: Icon(
-                      Icons.arrow_back_rounded,
-                      size: 22,
-                      color: focused ? Colors.black87 : Colors.white,
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -165,11 +138,7 @@ class PlayerOverlay extends StatelessWidget {
             const Spacer(),
 
             // ── Stream info row (playing time + drift) ─────────────────────────
-            _StreamInfoRow(
-              streamOpenedAt: streamOpenedAt,
-              driftSec: driftSec,
-              onSync: onSync,
-            ),
+            _StreamInfoRow(drift: drift, onSync: onSync),
 
             const SizedBox(height: AppSpacing.sm),
 
@@ -366,14 +335,9 @@ class _ChannelNumberPill extends StatelessWidget {
 /// Shows "Playing HH:MM" on the left and, when drifted, a focusable
 /// "Xs behind live · Sync" button on the right.
 class _StreamInfoRow extends StatelessWidget {
-  const _StreamInfoRow({
-    required this.streamOpenedAt,
-    required this.driftSec,
-    required this.onSync,
-  });
+  const _StreamInfoRow({required this.drift, required this.onSync});
 
-  final DateTime? streamOpenedAt;
-  final double driftSec;
+  final DriftTracker drift;
   final VoidCallback onSync;
 
   String _formatDuration(Duration d) {
@@ -385,7 +349,17 @@ class _StreamInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final opened = streamOpenedAt;
+    // Rebuilds once per second from the tracker's own tick — the rest of the
+    // player screen never repaints for drift/duration updates.
+    return ListenableBuilder(
+      listenable: drift,
+      builder: (context, _) => _buildRow(context),
+    );
+  }
+
+  Widget _buildRow(BuildContext context) {
+    final opened = drift.streamOpenedAt;
+    final driftSec = drift.driftSec;
     final playingFor = opened != null
         ? _formatDuration(DateTime.now().difference(opened))
         : null;

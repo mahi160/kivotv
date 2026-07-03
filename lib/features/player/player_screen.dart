@@ -8,17 +8,17 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/back_guard.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
 import '../../providers/sort_provider.dart';
+import '../../services/player_tuning.dart';
 import '../../services/stream_resolver.dart';
+import 'drift_tracker.dart';
 import 'widgets/channel_list_panel.dart';
 import 'widgets/player_overlay.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Screen
-// ─────────────────────────────────────────────────────────────────────────────
+import 'widgets/player_status_views.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   const PlayerScreen({
@@ -96,23 +96,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<String>? _errorSubscription;
 
-  // ── provider / speed ───────────────────────────────────────────────────────
+  // ── provider / stream stats ────────────────────────────────────────────────
   /// playlistId → playlist name, populated once on load.
   Map<int, String> _playlistNames = {};
-  /// Current buffer download speed in bytes/s (EMA-smoothed).
-  double _bufferSpeed = 0;
 
-  // Drift = wall-clock elapsed − player-position elapsed since stream started.
-  // Captures time lost to buffering/stalling; resets on channel switch.
-  DateTime? _wallRef;     // wall time when playing first became true
-  Duration? _posRef;      // player position at that moment
-  double _driftSec = 0;
-
-  /// Wall time when the current stream opened (for "playing for X" display).
-  DateTime? _streamOpenedAt;
-
-  /// 1-second ticker driving drift + play-duration display updates.
-  Timer? _displayTicker;
+  /// Buffer download speed + live drift. Both are ValueListenables consumed
+  /// directly by their display widgets, so per-second/per-event updates never
+  /// rebuild this screen (keeps the 4K video path free of redundant frames).
+  final _bufferSpeed = ValueNotifier<double>(0);
+  final _drift = DriftTracker();
 
   // ── sidebar scroll + focus tracking ────────────────────────────────────────
   final _sidebarScroll = ScrollController();
@@ -123,6 +115,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   final _rootFocus = FocusNode();
   final _playFocusNode = FocusNode();
   final _sidebarScopeNode = FocusScopeNode();
+
+  // ── back navigation ────────────────────────────────────────────────────────
+  // Guards against TV firmware delivering KEYCODE_BACK twice (see BackGuard).
+  final _backGuard = BackGuard();
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -137,6 +133,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Position of the current channel in [_channels] (for sidebar scroll).
   int get _sidebarIndex =>
       _channels.indexWhere((c) => c.url == _currentChannel.url);
+
+  /// Patches [updated] into [_channels] (matched by url) and, when it is the
+  /// channel on air, into [_currentChannel]. Call inside setState.
+  void _replaceChannel(Channel updated) {
+    final i = _channels.indexWhere((c) => c.url == updated.url);
+    if (i != -1) _channels[i] = updated;
+    if (updated.url == _currentChannel.url) _currentChannel = updated;
+  }
 
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -161,33 +165,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       ),
     );
 
-    // Healthy play → cancel watchdog, reset skip budget, mark played, clear error.
+    // Healthy play → cancel watchdog, reset skip budget, mark played, clear
+    // error, anchor the drift reference.
     _playingSubscription = _player.stream.playing.listen((playing) {
       if (!playing) return;
       _loadWatchdog?.cancel();
       _autoSkipCount = 0;
       _channelDidPlay = true;
+      _drift.anchor(_player.state.position);
       if (_error != null && mounted) setState(() => _error = null);
       if (!_markedWatched) {
         _markedWatched = true;
         ref.read(repositoryProvider).markWatched(_currentChannel);
-      }
-      // Anchor drift reference on first healthy play for this channel.
-      // Drift = wall elapsed − player-position elapsed since this point.
-      if (_wallRef == null) {
-        _wallRef = DateTime.now();
-        _posRef  = _player.state.position;
-        _displayTicker?.cancel();
-        _displayTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (!mounted) return;
-          final wRef = _wallRef;
-          final pRef = _posRef;
-          if (wRef == null || pRef == null) return;
-          final wallMs = DateTime.now().difference(wRef).inMilliseconds;
-          final posMs  = (_player.state.position - pRef).inMilliseconds;
-          final drift  = (wallMs - posMs) / 1000.0;
-          setState(() => _driftSec = drift.clamp(0, 999).toDouble());
-        });
       }
     });
 
@@ -206,103 +195,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
 
     _loadChannels();
+    _loadPlaylistNames();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await _configurePlayer();
+      await configurePlayerForLiveTv(_player);
+      unawaited(observeCacheSpeed(_player, _bufferSpeed));
       if (mounted) _open(_currentChannel);
     });
 
     _scheduleOverlayHide();
   }
 
-  /// libmpv tuning for live IPTV on Android TV. Best-effort — silently
-  /// no-ops on platforms without a [NativePlayer] backend.
-  Future<void> _configurePlayer() async {
-    final platform = _player.platform;
-    if (platform is! NativePlayer) return;
-    try {
-      // ── HW decode ───────────────────────────────────────────────────────────────────
-      // mediacodec (no -copy): HW decode via MediaCodec → SurfaceTexture → OpenGL.
-      // Avoids the Amlogic/Mali gralloc unlock bug with mediacodec-copy/auto-safe.
-      await platform.setProperty('hwdec', 'mediacodec');
-      await platform.setProperty('hwdec-codecs', 'all');
-      // vd-lavc-dr: direct rendering — decoder writes directly into the GPU
-      // buffer, eliminating one CPU→GPU copy per frame. Critical for 4K where
-      // that copy alone can cause choppiness on the Amlogic SoC.
-      await platform.setProperty('vd-lavc-dr', 'yes');
-      await platform.setProperty('vd-lavc-fast', 'yes');
-      await platform.setProperty('vd-lavc-threads', '0');
-
-      // ── A/V sync + frame drop ───────────────────────────────────────────────────────
-      await platform.setProperty('video-sync', 'audio');
-      // decoder+vo: drop at both stages. VO-only can let the decoder pipeline
-      // back up under 4K load; decoder drops give it headroom earlier.
-      await platform.setProperty('framedrop', 'decoder+vo');
-
-      // ── Scaling (CPU cost not justified for IPTV quality) ───────────────────
-      await platform.setProperty('scale', 'bilinear');
-      await platform.setProperty('cscale', 'bilinear');
-      await platform.setProperty('dscale', 'bilinear');
-      await platform.setProperty('sigmoid-upscaling', 'no');
-      await platform.setProperty('correct-downscaling', 'no');
-      await platform.setProperty('linear-downscaling', 'no');
-      await platform.setProperty('dither-depth', 'no');
-      await platform.setProperty('hdr-compute-peak', 'no');
-
-      // ── Live buffer (short = less drift, faster start) ──────────────────────
-      await platform.setProperty('cache', 'yes');
-      // 2 s readahead: enough for one HLS segment, small enough that live
-      // drift stays under ~3 s between sync corrections.
-      await platform.setProperty('demuxer-readahead-secs', '2');
-      await platform.setProperty('cache-secs', '2');
-      // Don’t wait for the cache to fill before starting — begin playing
-      // immediately with what’s available. Crucial on slow networks.
-      await platform.setProperty('demuxer-cache-wait', 'no');
-      // Play through cache underruns instead of pausing. On live IPTV a
-      // brief stutter is better than a multi-second freeze.
-      await platform.setProperty('cache-pause', 'no');
-
-      // ── Observe download speed (EMA-smoothed so it doesn't jump) ─────────
-      await platform.observeProperty('cache-speed', (String val) async {
-        final raw = double.tryParse(val) ?? 0;
-        // EMA α=0.25: slow enough to read, fast enough to track real changes.
-        final smoothed = _bufferSpeed * 0.75 + raw * 0.25;
-        if (mounted) setState(() => _bufferSpeed = smoothed);
-      });
-
-
-    } catch (_) {
-      // Tuning is non-critical; playback still works with mpv defaults.
-    }
-
-    // Live drift is handled by keeping the buffer short (2 s readahead).
-    // The player can never build more than ~2 s of latency on a healthy
-    // network, so no periodic seek is needed — and a mid-playback seek
-    // would cause a visible freeze while re-buffering.
-
-    // Load playlist names for provider display.
+  Future<void> _loadPlaylistNames() async {
     try {
       final playlists = await ref.read(repositoryProvider).playlists();
       if (mounted) {
         setState(() {
           _playlistNames = {for (final p in playlists) p.id: p.name};
         });
-      }
-    } catch (_) {}
-  }
-
-  /// User-initiated live-edge snap. Reads the demuxer cache end position and
-  /// seeks there. Causes a brief re-buffer but the user explicitly asked for it.
-  Future<void> _snapToLiveEdge() async {
-    final native = _player.platform;
-    if (native is! NativePlayer) return;
-    try {
-      final end = double.tryParse(
-        await native.getProperty('demuxer-cache-end'),
-      ) ?? 0;
-      if (end > 0) {
-        await native.setProperty('time-pos', (end - 0.3).toStringAsFixed(3));
       }
     } catch (_) {}
   }
@@ -320,7 +231,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _loadWatchdog?.cancel();
     _expiryTimer?.cancel();
     _toastTimer?.cancel();
-    _displayTicker?.cancel();
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
     _errorSubscription?.cancel();
@@ -329,7 +239,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _rootFocus.dispose();
     _playFocusNode.dispose();
     _sidebarScopeNode.dispose();
+    // Player first: its cache-speed observer writes into _bufferSpeed, so the
+    // notifiers must outlive the native callbacks.
     _player.dispose();
+    _drift.dispose();
+    _bufferSpeed.dispose();
     super.dispose();
   }
 
@@ -398,12 +312,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Stop before resolving so stale events don't leak to the new channel.
     // Watchdog starts AFTER _player.open() below — not here — so that
     // slow token resolution doesn't count against the 20 s timeout.
-    setState(() {
-      _driftSec = 0;
-      _streamOpenedAt = null;
-      _wallRef = null;
-      _posRef = null;
-    });
+    _drift.reset();
     _player.stop();
 
     final reference = _currentChannel.url;
@@ -416,35 +325,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         playable = resolved.url;
         headers = resolved.httpHeaders;
         _scheduleExpiryRefresh(resolved.expiresAt);
-        // ClearKey DRM: pass kid→key pairs as mpv decryption-keys option so
-        // libmpv can decrypt CENC DASH segments. Format: kid/key:kid/key...
         final clearKeys = resolved.drmClearKeys;
-        if (clearKeys != null && clearKeys.isNotEmpty) {
-          final keyStr = clearKeys.entries
-              .map((e) => '${e.key}/${e.value}')
-              .join(':');
-          try {
-            final native = _player.platform as NativePlayer;
-            await native.setProperty('decryption-keys', keyStr);
-          } catch (_) {
-            // mpv build doesn't support this option — ignore and try anyway.
-          }
-        }
-        final newName = resolved.channelName;
-        if (newName != null &&
-            RegExp(r'^StreamCricHD \d+$').hasMatch(_currentChannel.name)) {
-          ref
-              .read(repositoryProvider)
-              .updateChannelName(_currentChannel, newName);
-          if (mounted) {
-            setState(() {
-              _currentChannel = _currentChannel.copyWith(name: newName);
-              final i = _channels.indexWhere(
-                (c) => c.url == _currentChannel.url,
-              );
-              if (i != -1) _channels[i] = _currentChannel;
-            });
-          }
+        if (clearKeys != null) await applyClearKeys(_player, clearKeys);
+        // Adopt a better display name if the resolver discovered one
+        // (repository owns the placeholder-name policy).
+        final renamed = ref
+            .read(repositoryProvider)
+            .adoptResolvedName(_currentChannel, resolved.channelName);
+        if (renamed != null && mounted) {
+          setState(() => _replaceChannel(renamed));
         }
       } else {
         playable = reference;
@@ -454,7 +343,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     if (!mounted || gen != _loadGeneration) return;
-    if (mounted) setState(() => _streamOpenedAt = DateTime.now());
+    _drift.start(() => _player.state.position);
     await _player.open(Media(playable, httpHeaders: headers), play: true);
     if (!mounted || gen != _loadGeneration) {
       _player.stop();
@@ -536,31 +425,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _rootFocus.requestFocus();
   }
 
-  // ── favourite helpers ──────────────────────────────────────────────────────
+  // ── favourite ──────────────────────────────────────────────────────────────
 
-  Future<void> _toggleCurrentFavorite() async {
-    final newValue = !_currentChannel.isFavorite;
-    await ref.read(repositoryProvider).setFavorite(_currentChannel, newValue);
-    if (!mounted) return;
-    final updated = _currentChannel.copyWith(isFavorite: newValue);
-    setState(() {
-      _currentChannel = updated;
-      final i = _channels.indexWhere((c) => c.url == updated.url);
-      if (i != -1) _channels[i] = updated;
-    });
-  }
-
-  Future<void> _toggleSidebarFavorite(Channel ch) async {
-    final newValue = !ch.isFavorite;
-    await ref.read(repositoryProvider).setFavorite(ch, newValue);
-    if (!mounted) return;
-    setState(() {
-      final i = _channels.indexWhere((c) => c.url == ch.url);
-      if (i != -1) _channels[i] = _channels[i].copyWith(isFavorite: newValue);
-      if (ch.url == _currentChannel.url) {
-        _currentChannel = _currentChannel.copyWith(isFavorite: newValue);
-      }
-    });
+  Future<void> _toggleFavorite(Channel ch) async {
+    final updated = ch.copyWith(isFavorite: !ch.isFavorite);
+    await ref.read(repositoryProvider).setFavorite(ch, updated.isFavorite);
+    if (mounted) setState(() => _replaceChannel(updated));
   }
 
   // ── overlay ────────────────────────────────────────────────────────────────
@@ -621,13 +491,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── back navigation ────────────────────────────────────────────────────────
 
-  // Guard against double-back from TV firmware delivering KEYCODE_BACK through
-  // both the key pipeline and onBackPressed simultaneously.
-  bool _goingHome = false;
-
   void _goHome() {
-    if (!mounted || _goingHome) return;
-    _goingHome = true;
+    if (!mounted || _backGuard.swallow) return;
+    _backGuard.arm();
     // pop() returns to the previous route (home or search), so search results
     // survive opening and closing a channel.
     context.pop();
@@ -780,14 +646,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 StreamBuilder<bool>(
                   stream: _player.stream.buffering,
                   builder: (context, snap) => snap.data == true
-                      ? _BufferingIndicator(speedBytesPerSec: _bufferSpeed)
+                      ? BufferingIndicator(speedBytesPerSec: _bufferSpeed)
                       : const SizedBox.shrink(),
                 ),
 
               // ── Stream error ──────────────────────────────────────────────
               if (_error != null)
                 Positioned.fill(
-                  child: _StreamErrorView(
+                  child: StreamErrorView(
                     channelName: _currentChannel.name,
                     message: _error!,
                   ),
@@ -809,16 +675,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                         channelTotal: _effectiveZapList.length,
                         player: _player,
                         showingList: _showChannelList,
-                        driftSec: _driftSec,
-                        streamOpenedAt: _streamOpenedAt,
-                        onSync: _snapToLiveEdge,
+                        drift: _drift,
+                        onSync: () => snapToLiveEdge(_player),
                         onPrevious: _playPrevious,
                         onNext: _playNext,
                         onInteraction: _scheduleOverlayHide,
-                        onBack: () => _goHome(),
+                        onBack: _goHome,
                         onToggleList: _toggleChannelList,
                         playFocusNode: _playFocusNode,
-                        onToggleFavorite: _toggleCurrentFavorite,
+                        onToggleFavorite: () =>
+                            _toggleFavorite(_currentChannel),
                       ),
                     ),
                   ),
@@ -849,7 +715,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                         });
                         _open(ch);
                       },
-                      onToggleFavorite: _toggleSidebarFavorite,
+                      onToggleFavorite: _toggleFavorite,
                       onItemFocused: (i) => _sidebarFocusedIndex = i,
                       currentChannelFocusNode: _currentSidebarFocus,
                     ),
@@ -868,7 +734,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     duration: const Duration(milliseconds: 200),
                     // _lastToastMessage keeps the text alive during fade-out
                     // so it doesn't vanish before the opacity reaches 0.
-                    child: _AutoSkipToast(
+                    child: AutoSkipToast(
                       message: _autoSkipToast ?? _lastToastMessage ?? '',
                     ),
                   ),
@@ -877,140 +743,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Buffering indicator
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _BufferingIndicator extends StatelessWidget {
-  const _BufferingIndicator({required this.speedBytesPerSec});
-  final double speedBytesPerSec;
-
-  String get _label {
-    if (speedBytesPerSec <= 0) return 'Buffering…';
-    if (speedBytesPerSec < 1024 * 1024) {
-      return '${(speedBytesPerSec / 1024).toStringAsFixed(0)} KB/s';
-    }
-    return '${(speedBytesPerSec / (1024 * 1024)).toStringAsFixed(1)} MB/s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(
-            color: Colors.white70,
-            strokeWidth: 2.5,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            _label,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Stream error view
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _StreamErrorView extends StatelessWidget {
-  const _StreamErrorView({required this.channelName, required this.message});
-
-  final String channelName;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xCC000000),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.signal_wifi_off_rounded,
-              size: 56,
-              color: Colors.white54,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              channelName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.white60),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Press OK to retry  ·  ▲ ▼ to change channel',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.white38),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Auto-skip toast
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _AutoSkipToast extends StatelessWidget {
-  const _AutoSkipToast({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xE0111827),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.skip_next_rounded, size: 16, color: Colors.white54),
-          const SizedBox(width: 8),
-          Text(
-            message,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
       ),
     );
   }
