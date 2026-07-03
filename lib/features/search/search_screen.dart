@@ -5,11 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/channel_card.dart';
-import '../../core/widgets/focusable_tap.dart';
+import '../../core/widgets/circle_back_button.dart';
 import '../../models/channel.dart';
 import '../../providers/repository_provider.dart';
 import '../../providers/sort_provider.dart';
@@ -144,7 +143,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               children: [
                 Row(
                   children: [
-                    _BackButton(onTap: _goBack),
+                    CircleBackButton(onTap: _goBack),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Focus(
@@ -240,39 +239,3 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Back button with the app-standard gold focus ring
-// ───────────────────────────────────────────────────────────────────────────────
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = AppColors.focus(isDark);
-    return FocusableTap(
-      onTap: onTap,
-      builder: (_, focused) => AnimatedContainer(
-        duration: const Duration(milliseconds: 110),
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: focused ? Colors.white : Colors.black.withValues(alpha: 0.55),
-          border: Border.all(
-            color: focused ? accent : Colors.white30,
-            width: focused ? 2 : 1,
-          ),
-        ),
-        child: Icon(
-          Icons.arrow_back_rounded,
-          size: 22,
-          color: focused ? Colors.black87 : Colors.white,
-        ),
-      ),
-    );
-  }
-}
