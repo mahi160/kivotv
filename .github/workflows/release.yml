@@ -10,6 +10,12 @@ jobs:
   build-and-release:
     name: Build & release
     runs-on: ubuntu-latest
+    # Repo default GITHUB_TOKEN permissions are read-only, which makes
+    # softprops/action-gh-release fail with "Resource not accessible by
+    # integration" when creating the release. Scope write access to just
+    # this workflow instead of loosening the repo-wide default.
+    permissions:
+      contents: write
 
     steps:
       # ── Checkout ────────────────────────────────────────────────────────
