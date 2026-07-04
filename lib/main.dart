@@ -62,12 +62,7 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
     // network fetch + DB write that contends with live video decode on 1 GB
     // Android TV SoCs. The 2-min staleness guard prevents storms on
     // quick player⇄home bounces; the home screen re-scrapes on next open.
-    try {
-      final path = appRouter.routerDelegate.currentConfiguration.uri.path;
-      if (path == '/player') return;
-    } catch (_) {
-      // Router not yet initialised — safe to proceed.
-    }
+    if (currentRoutePath == AppRoutes.player) return;
     ref.read(repositoryProvider).refreshTflixMatches();
   }
 
@@ -135,15 +130,9 @@ class _KivoAppState extends ConsumerState<KivoApp> with WidgetsBindingObserver {
 
     final recent = await ref.read(repositoryProvider).recentlyWatched();
     if (!mounted || recent.isEmpty) return;
-    try {
-      final currentPath =
-          appRouter.routerDelegate.currentConfiguration.uri.path;
-      if (currentPath != '/') return;
-      // push (not go) so back from the player returns to Home.
-      appRouter.push('/player', extra: {'channel': recent.first});
-    } catch (_) {
-      // Router not yet ready — shouldn't happen post-bootstrap, but safe.
-    }
+    if (currentRoutePath != AppRoutes.home) return;
+    // push (not go) so back from the player returns to Home.
+    appRouter.push(AppRoutes.player, extra: {'channel': recent.first});
   }
 }
 

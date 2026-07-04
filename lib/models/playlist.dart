@@ -29,6 +29,13 @@ class Playlist {
   /// "Built-in source" subtitle in Settings.
   bool get isBuiltIn => url.startsWith('kivo://');
 
+  /// Whether this playlist hasn't been refreshed within [threshold] (or has
+  /// never been refreshed at all).
+  bool isStale(Duration threshold) {
+    final last = lastRefreshedDateTime;
+    return last == null || DateTime.now().difference(last) > threshold;
+  }
+
   factory Playlist.fromDb(Map<String, Object?> map) {
     return Playlist(
       id: map['id'] as int,

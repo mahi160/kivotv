@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../image_cache_util.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../../providers/audio_delay_provider.dart';
@@ -56,12 +57,11 @@ class SettingsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    final palette = AppColors.of(isDark);
+    final border = palette.border;
+    final text1 = palette.text1;
+    final text2 = palette.text2;
+    final surface = palette.surface;
     // TV-first 360px, but never wider than the screen (small phones / landscape).
     final width = math.min(360.0, MediaQuery.of(context).size.width * 0.88);
 
@@ -157,16 +157,12 @@ class SettingsPanel extends ConsumerWidget {
                       _InfoRow(
                         label: 'Version',
                         value: ref.watch(_packageInfoProvider).asData?.value.version ?? '—',
-                        border: border,
-                        text1: text1,
-                        text2: text2,
+                        palette: palette,
                       ),
                       _InfoRow(
                         label: 'Build',
                         value: ref.watch(_packageInfoProvider).asData?.value.buildNumber ?? '—',
-                        border: border,
-                        text1: text1,
-                        text2: text2,
+                        palette: palette,
                         showDivider: false,
                       ),
                     ],
@@ -207,10 +203,9 @@ class _CloseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.focus(isDark);
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
+    final palette = AppColors.of(isDark);
+    final border = palette.border;
+    final text2 = palette.text2;
     return FocusableTap(
       onTap: onTap,
       builder: (_, focused) => AnimatedContainer(
@@ -289,10 +284,9 @@ class _SettingsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = AppColors.primary(isDark);
     final accent = AppColors.focus(isDark);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
+    final palette = AppColors.of(isDark);
+    final text1 = palette.text1;
+    final text2 = palette.text2;
 
     return FocusableTap(
       autofocus: autofocus,
@@ -408,10 +402,9 @@ class _AudioDelayRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final delay = ref.watch(audioDelayProvider);
     final primary = AppColors.primary(isDark);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
+    final palette = AppColors.of(isDark);
+    final text1 = palette.text1;
+    final text2 = palette.text2;
 
     // Not a _SettingsRow: that widget wraps its whole row (trailing included)
     // in one FocusableTap, which would bury these two independently-focusable
@@ -487,10 +480,9 @@ class _StepButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.focus(isDark);
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
+    final palette = AppColors.of(isDark);
+    final border = palette.border;
+    final text2 = palette.text2;
     return FocusableTap(
       onTap: onTap,
       builder: (_, focused) => AnimatedContainer(
@@ -514,6 +506,14 @@ class _StepButton extends StatelessWidget {
 // ── Sources section (isolated ConsumerWidget to prevent rebuild of the
 //    autofocused dark-mode toggle above it) ────────────────────────────────
 
+/// Clears cached logo images before re-fetching so stale art doesn't survive
+/// a playlist refresh. Image-cache purging is UI-layer plumbing, kept out of
+/// [PlaylistRepository] on purpose — see core/image_cache_util.dart.
+Future<void> _refreshNow(WidgetRef ref) async {
+  await clearImageCache();
+  await ref.read(repositoryProvider).manualRefresh();
+}
+
 class _SourcesSection extends ConsumerWidget {
   const _SourcesSection({required this.isDark});
   final bool isDark;
@@ -534,9 +534,7 @@ class _SourcesSection extends ConsumerWidget {
               ? 'Updating channels…'
               : 'Re-fetch live matches + playlists',
           isDark: isDark,
-          onTap: fetching
-              ? null
-              : () => ref.read(repositoryProvider).manualRefresh(),
+          onTap: fetching ? null : () => _refreshNow(ref),
           trailing: fetching
               ? SizedBox(
                   width: 20,
@@ -582,17 +580,13 @@ class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.label,
     required this.value,
-    required this.border,
-    required this.text1,
-    required this.text2,
+    required this.palette,
     this.showDivider = true,
   });
 
   final String label;
   final String value;
-  final Color border;
-  final Color text1;
-  final Color text2;
+  final Palette palette;
   final bool showDivider;
 
   @override
@@ -600,7 +594,9 @@ class _InfoRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 10),
       decoration: BoxDecoration(
-        border: showDivider ? Border(bottom: BorderSide(color: border)) : null,
+        border: showDivider
+            ? Border(bottom: BorderSide(color: palette.border))
+            : null,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -609,12 +605,12 @@ class _InfoRow extends StatelessWidget {
             label,
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(color: text2),
+            ).textTheme.bodyMedium?.copyWith(color: palette.text2),
           ),
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: text1,
+              color: palette.text1,
               fontWeight: FontWeight.w500,
             ),
           ),

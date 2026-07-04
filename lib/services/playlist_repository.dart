@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
@@ -13,6 +11,7 @@ import '../core/db/database_service.dart';
 import 'footmad_service.dart';
 import 'local_iptv_service.dart';
 import 'playlist_service.dart';
+import 'tflix_resolver.dart';
 import 'tflix_service.dart';
 
 /// A [ValueNotifier<int>] with a built-in 150 ms debounce. Rapid [bump]
@@ -36,6 +35,13 @@ class DebouncedVersion extends ValueNotifier<int> {
 }
 
 class PlaylistRepository {
+  PlaylistRepository({DatabaseService? database})
+    : _db = database ?? DatabaseService.instance;
+
+  /// Injectable so tests can override with an in-memory stub instead of the
+  /// hand-rolled [DatabaseService.instance] singleton.
+  final DatabaseService _db;
+
   final ValueNotifier<int> channelCount = ValueNotifier<int>(0);
   final ValueNotifier<bool> isFetching = ValueNotifier<bool>(false);
 
@@ -166,10 +172,10 @@ class PlaylistRepository {
       if (!builtinDone) {
         await _seedBuiltinSources();
         // Remove old single-playlist footmad entry if present.
-        await DatabaseService.instance.deletePlaylistByUrl('kivo://footmad');
+        await _db.deletePlaylistByUrl('kivo://footmad');
         await prefs.setBool(_builtinSeededKey, true);
       }
-      final storedCount = await DatabaseService.instance.channelCount();
+      final storedCount = await _db.channelCount();
       channelCount.value = storedCount;
       _bumpAll();
       playlistsVersion.bump();
@@ -193,7 +199,7 @@ class PlaylistRepository {
       final cats = await FootmadService.instance.fetchCategories();
       for (final cat in cats) {
         final url = '$_footmadPrefix${Uri.encodeComponent(cat.name)}';
-        await DatabaseService.instance.upsertPlaylist(
+        await _db.upsertPlaylist(
           name: cat.name,
           url: url,
           defaultEnabled: _footmadDefaultOn.contains(cat.name),
@@ -207,16 +213,12 @@ class PlaylistRepository {
 
   /// Refresh only when at least one enabled FootMad category is stale.
   Future<void> _refreshFootmadIfStale() async {
-    final playlists = await DatabaseService.instance.playlists();
+    final playlists = await _db.playlists();
     final enabled = playlists
         .where((p) => p.url.startsWith(_footmadPrefix) && p.enabled)
         .toList();
     if (enabled.isEmpty) return;
-    final now = DateTime.now();
-    final anyStale = enabled.any((p) {
-      final last = p.lastRefreshedDateTime;
-      return last == null || now.difference(last) > _refreshThreshold;
-    });
+    final anyStale = enabled.any((p) => p.isStale(_refreshThreshold));
     if (anyStale) await _refreshFootmadEnabled();
   }
 
@@ -230,7 +232,7 @@ class PlaylistRepository {
     }
     final apiByName = {for (final c in cats) c.name: c.apiUrl};
 
-    final playlists = await DatabaseService.instance.playlists();
+    final playlists = await _db.playlists();
     final enabled = playlists
         .where((p) => p.url.startsWith(_footmadPrefix) && p.enabled)
         .toList();
@@ -241,7 +243,7 @@ class PlaylistRepository {
       try {
         final channels =
             await FootmadService.instance.fetchCategoryChannels(apiUrl);
-        await DatabaseService.instance.replaceChannels(
+        await _db.replaceChannels(
           playlistId: p.id,
           channels: channels,
         );
@@ -250,7 +252,7 @@ class PlaylistRepository {
       }
     }));
 
-    channelCount.value = await DatabaseService.instance.channelCount();
+    channelCount.value = await _db.channelCount();
     _bumpAll();
   }
 
@@ -260,14 +262,14 @@ class PlaylistRepository {
   /// refresh.
   Future<void> _seedBuiltinSources() async {
     for (final source in _builtinSources) {
-      final playlistId = await DatabaseService.instance.upsertPlaylist(
+      final playlistId = await _db.upsertPlaylist(
         name: source.name,
         url: source.url,
         defaultEnabled: source.defaultEnabled,
       );
       final channels = await source.fetch();
       if (channels.isNotEmpty) {
-        await DatabaseService.instance.replaceChannels(
+        await _db.replaceChannels(
           playlistId: playlistId,
           channels: channels,
         );
@@ -277,21 +279,21 @@ class PlaylistRepository {
 
   /// Re-fetches every refreshable built-in source that is currently enabled.
   Future<void> _refreshBuiltinsIfEnabled() async {
-    final playlists = await DatabaseService.instance.playlists();
+    final playlists = await _db.playlists();
     var changed = false;
     for (final source in _builtinSources.where((s) => s.refreshable)) {
       final p = playlists.where((x) => x.url == source.url).firstOrNull;
       if (p == null || !p.enabled) continue;
       final channels = await source.fetch();
       if (channels.isEmpty) continue; // unreachable — keep existing data
-      await DatabaseService.instance.replaceChannels(
+      await _db.replaceChannels(
         playlistId: p.id,
         channels: channels,
       );
       changed = true;
     }
     if (changed) {
-      channelCount.value = await DatabaseService.instance.channelCount();
+      channelCount.value = await _db.channelCount();
       _bumpAll();
     }
   }
@@ -332,15 +334,13 @@ class PlaylistRepository {
       return;
     }
 
-    final playlists = await DatabaseService.instance.playlists();
+    final playlists = await _db.playlists();
     final userPlaylists = playlists.where((p) => !p.isBuiltIn).toList();
     if (userPlaylists.isEmpty) return;
 
-    final now = DateTime.now();
-    final anyStale = userPlaylists.where((p) => p.enabled).any((p) {
-      final last = p.lastRefreshedDateTime;
-      return last == null || now.difference(last) > _refreshThreshold;
-    });
+    final anyStale = userPlaylists
+        .where((p) => p.enabled)
+        .any((p) => p.isStale(_refreshThreshold));
 
     if (anyStale) await refreshAllPlaylists();
   }
@@ -373,33 +373,35 @@ class PlaylistRepository {
   Future<void> _doRefreshTflix() async {
     try {
       // Skip network fetch if the TFLIX source is disabled.
-      final playlists = await DatabaseService.instance.playlists();
+      final playlists = await _db.playlists();
       final tflix = playlists.where((p) => p.url == 'kivo://tflix').firstOrNull;
       if (tflix != null && !tflix.enabled) return;
 
       final matches = await TflixService.instance.fetchLiveMatches();
       _lastTflixScrape = DateTime.now();
-      final playlistId = await DatabaseService.instance.upsertPlaylist(
+      final playlistId = await _db.upsertPlaylist(
         name: 'TFLIX Live',
         url: 'kivo://tflix',
         defaultEnabled: false,
       );
-      await DatabaseService.instance.replaceChannels(
+      await _db.replaceChannels(
         playlistId: playlistId,
         channels: matches,
       );
-      channelCount.value = await DatabaseService.instance.channelCount();
+      channelCount.value = await _db.channelCount();
       // Only live matches changed — don't rebuild other sections.
       liveVersion.bump();
     } catch (_) {}
   }
 
+  /// Refreshes every source. Image-cache purging is a UI-layer concern and is
+  /// the caller's responsibility (see `core/image_cache_util.dart`) — this
+  /// repository only touches the database.
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
     fetchError.value = null;
     try {
-      await _clearImageCache();
       // Independent sources refresh in parallel; DB writes are serialized
       // by sqflite's transaction queue.
       await Future.wait([
@@ -413,19 +415,8 @@ class PlaylistRepository {
     }
   }
 
-  /// Purges both the in-memory Flutter image cache and the flutter_cache_manager
-  /// disk cache so stale channel logos load fresh after a playlist refresh.
-  Future<void> _clearImageCache() async {
-    // In-memory: Flutter's own painting cache (holds decoded bitmaps).
-    PaintingBinding.instance.imageCache
-      ..clear()
-      ..clearLiveImages();
-    // Disk: flutter_cache_manager's HTTP cache (stores raw network bytes).
-    await DefaultCacheManager().emptyCache();
-  }
-
   Future<int> refreshAllPlaylists() async {
-    final playlists = await DatabaseService.instance.playlists();
+    final playlists = await _db.playlists();
     final userPlaylists =
         playlists.where((p) => !p.isBuiltIn && p.enabled).toList();
 
@@ -448,7 +439,7 @@ class PlaylistRepository {
         continue;
       }
       try {
-        await DatabaseService.instance.replaceChannels(
+        await _db.replaceChannels(
           playlistId: playlist.id,
           channels: channels,
         );
@@ -463,7 +454,7 @@ class PlaylistRepository {
       fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     }
 
-    final count = await DatabaseService.instance.channelCount();
+    final count = await _db.channelCount();
     channelCount.value = count;
     _bumpAll();
     return count;
@@ -478,7 +469,7 @@ class PlaylistRepository {
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       throw ArgumentError('Enter a valid playlist URL');
     }
-    return DatabaseService.instance.upsertPlaylist(
+    return _db.upsertPlaylist(
       name: name ?? uri.host,
       url: uri.toString(),
       defaultEnabled: defaultEnabled,
@@ -498,11 +489,11 @@ class PlaylistRepository {
     final channels = await PlaylistService.instance.fetchChannels(
       url: url.trim(),
     );
-    await DatabaseService.instance.replaceChannels(
+    await _db.replaceChannels(
       playlistId: playlistId,
       channels: channels,
     );
-    final count = await DatabaseService.instance.channelCount();
+    final count = await _db.channelCount();
     channelCount.value = count;
     _bumpAll();
     return count;
@@ -515,7 +506,7 @@ class PlaylistRepository {
     int offset = 0,
     bool sortAlpha = true,
   }) {
-    return DatabaseService.instance.channels(
+    return _db.channels(
       query: query,
       group: group,
       limit: limit,
@@ -525,18 +516,19 @@ class PlaylistRepository {
   }
 
   Future<List<MapEntry<String, List<Channel>>>> groupedChannels() =>
-      DatabaseService.instance.channelsByGroup();
+      _db.channelsByGroup(excludeUrlPrefix: TflixResolver.scheme);
 
-  Future<List<Channel>> liveMatches() => DatabaseService.instance.liveMatches();
+  Future<List<Channel>> liveMatches() =>
+      _db.liveMatches(urlPrefix: TflixResolver.scheme);
 
   Future<List<Channel>> favoriteChannels() =>
-      DatabaseService.instance.favoriteChannels();
+      _db.favoriteChannels();
 
   Future<List<Channel>> recentlyWatched() =>
-      DatabaseService.instance.recentlyWatched();
+      _db.recentlyWatched();
 
   Future<void> updateChannelName(Channel channel, String name) async {
-    await DatabaseService.instance.updateChannelName(channel.url, name);
+    await _db.updateChannelName(channel.url, name);
     // Name change is visible on cards in all sections — bump everything.
     _bumpAll();
   }
@@ -555,14 +547,14 @@ class PlaylistRepository {
   }
 
   Future<void> setFavorite(Channel channel, bool favorite) async {
-    await DatabaseService.instance.setFavorite(channel.url, favorite);
+    await _db.setFavorite(channel.url, favorite);
     // Favorite state is shown across all sections (star badge on cards), so
     // we reload everything. setFavorite is a user action — frequency is low.
     _bumpAll();
   }
 
   Future<void> markWatched(Channel channel) async {
-    await DatabaseService.instance.markWatched(channel.url);
+    await _db.markWatched(channel.url);
     // Only the "Recently watched" section changes — don't reload Live / Fav /
     // Groups. This is the single biggest source of unnecessary dashboard
     // rebuilds (fires every time a channel starts playing).
@@ -572,7 +564,7 @@ class PlaylistRepository {
   // ── Bump helpers ──────────────────────────────────────────────────────────
 
   Future<void> setPlaylistEnabled(int playlistId, {required bool enabled}) async {
-    await DatabaseService.instance.setPlaylistEnabled(
+    await _db.setPlaylistEnabled(
       playlistId,
       enabled: enabled,
     );
@@ -581,16 +573,16 @@ class PlaylistRepository {
   }
 
   Future<void> deletePlaylist(int id) async {
-    await DatabaseService.instance.deletePlaylistById(id);
+    await _db.deletePlaylistById(id);
     _bumpAll();
     playlistsVersion.bump();
   }
 
   Future<DateTime?> lastWatchedAt() =>
-      DatabaseService.instance.lastWatchedAt();
+      _db.lastWatchedAt();
 
   Future<List<Playlist>> playlists() =>
-      DatabaseService.instance.playlists();
+      _db.playlists();
 
   void _bumpAll() {
     liveVersion.bump();

@@ -65,7 +65,8 @@ List<Channel> parseLiveMatches(String html) {
         .toList();
     final tag = _cleanTag(_tagRe.firstMatch(window)?.group(1));
 
-    final ref = 'tflix://${path.substring('play.php/'.length)}';
+    final ref =
+        '${TflixResolver.scheme}${path.substring('play.php/'.length)}';
     final name = teams.length == 2
         ? '${teams[0]} vs ${teams[1]}'
         : _humanize(path);

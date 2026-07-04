@@ -5,13 +5,19 @@ import '../../features/home/home_screen.dart';
 import '../../features/player/player_screen.dart';
 import '../../features/search/search_screen.dart';
 
+abstract final class AppRoutes {
+  static const home = '/';
+  static const search = '/search';
+  static const player = '/player';
+}
+
 final appRouter = GoRouter(
-  initialLocation: '/',
+  initialLocation: AppRoutes.home,
   routes: [
-    GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
-    GoRoute(path: '/search', builder: (_, _) => const SearchScreen()),
+    GoRoute(path: AppRoutes.home, builder: (_, _) => const HomeScreen()),
+    GoRoute(path: AppRoutes.search, builder: (_, _) => const SearchScreen()),
     GoRoute(
-      path: '/player',
+      path: AppRoutes.player,
       builder: (_, state) {
         final extra = state.extra as Map<String, Object?>?;
         final channel = extra?['channel'] as Channel?;
@@ -23,3 +29,13 @@ final appRouter = GoRouter(
     ),
   ],
 );
+
+/// The current top-level route path, or null if the router isn't ready yet
+/// (shouldn't happen post-bootstrap, but callers guard anyway).
+String? get currentRoutePath {
+  try {
+    return appRouter.routerDelegate.currentConfiguration.uri.path;
+  } catch (_) {
+    return null;
+  }
+}

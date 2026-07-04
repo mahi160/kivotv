@@ -34,14 +34,13 @@ class ChannelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? AppColors.oceanDeep : AppColors.lightSurface;
+    final palette = AppColors.of(isDark);
+    final surfaceColor = palette.surface;
     final accent = AppColors.focus(isDark);
     final swatch = _swatch(channel.name);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final text2 = isDark
-        ? AppColors.darkOnSurfaceVariant
-        : AppColors.lightOnSurfaceVariant;
-    final hairline = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final text1 = palette.text1;
+    final text2 = palette.text2;
+    final hairline = palette.border;
     final group = channel.group;
 
     return FocusableTap(

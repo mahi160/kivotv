@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 /// constant when a widget can render in either mode. The bare [accent]
 /// constant is the dark-mode amber, kept for the always-dark player chrome and
 /// for legacy references.
+/// The isDark-dependent tokens most widgets need. See [AppColors.of].
+typedef Palette = ({Color text1, Color text2, Color border, Color surface});
+
 abstract final class AppColors {
   // ── The accent (dark = amber, light = teal) ────────────────────────────────
   /// Dark-mode amber accent — the single accent for focus, active state,
@@ -114,6 +117,17 @@ abstract final class AppColors {
   /// Soft accent halo used behind a focused card.
   static Color focusGlow(bool isDark) =>
       focus(isDark).withValues(alpha: isDark ? 0.20 : 0.18);
+
+  // ── Palette bundle ────────────────────────────────────────────────────────
+  // Widgets across the app were each hand-rolling the same five
+  // `isDark ? darkX : lightX` ternaries for text/border/surface. [of] bundles
+  // them so a widget reads `AppColors.of(isDark).text1` instead.
+  static Palette of(bool isDark) => (
+    text1: isDark ? darkOnSurface : lightOnSurface,
+    text2: isDark ? darkOnSurfaceVariant : lightOnSurfaceVariant,
+    border: isDark ? darkBorder : lightBorder,
+    surface: isDark ? darkSurface : lightSurface,
+  );
 
   // ── Gradients — near-flat backgrounds matching the design's solid canvas ────
   static const homeGradientDark = RadialGradient(

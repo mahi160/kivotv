@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
 import '../../core/widgets/channel_card.dart';
@@ -106,7 +107,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _open(Channel c) =>
-      context.push('/player', extra: {'channel': c});
+      context.push(AppRoutes.player, extra: {'channel': c});
 
   void _goBack() {
     if (_focus.hasFocus) {

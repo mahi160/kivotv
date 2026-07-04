@@ -8,18 +8,36 @@ import 'tflix_resolver.dart';
 class StreamResolver {
   StreamResolver._();
 
-  static bool isResolvable(String reference) =>
-      IptvidnResolver.isResolvable(reference) ||
-      TflixResolver.isResolvable(reference) ||
-      StreamcrichdResolver.isResolvable(reference);
+  /// One entry per resolver. Adding a resolver means adding one line here —
+  /// [isResolvable] and [resolve] both dispatch off this single table so they
+  /// can never drift out of sync with each other.
+  static final _resolvers = <({
+    bool Function(String reference) isResolvable,
+    Future<ResolvedStream> Function(String reference) resolve,
+  })>[
+    (
+      isResolvable: TflixResolver.isResolvable,
+      resolve: TflixResolver.instance.resolve,
+    ),
+    (
+      isResolvable: StreamcrichdResolver.isResolvable,
+      resolve: StreamcrichdResolver.instance.resolve,
+    ),
+    (
+      isResolvable: IptvidnResolver.isResolvable,
+      resolve: IptvidnResolver.instance.resolve,
+    ),
+  ];
 
+  static bool isResolvable(String reference) =>
+      _resolvers.any((r) => r.isResolvable(reference));
+
+  /// Throws [StateError] if [reference] doesn't match any resolver — callers
+  /// must guard with [isResolvable] first (as [PlaybackSession] does).
   static Future<ResolvedStream> resolve(String reference) {
-    if (TflixResolver.isResolvable(reference)) {
-      return TflixResolver.instance.resolve(reference);
+    for (final r in _resolvers) {
+      if (r.isResolvable(reference)) return r.resolve(reference);
     }
-    if (StreamcrichdResolver.isResolvable(reference)) {
-      return StreamcrichdResolver.instance.resolve(reference);
-    }
-    return IptvidnResolver.instance.resolve(reference);
+    throw StateError('No resolver for reference: $reference');
   }
 }

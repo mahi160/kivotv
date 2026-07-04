@@ -30,14 +30,17 @@ class TflixResolver {
   TflixResolver._();
   static final TflixResolver instance = TflixResolver._();
 
-  static const _scheme = 'tflix://';
+  /// Public: the canonical owner of the `tflix://` channel-reference scheme.
+  /// Referenced by [PlaylistRepository]/[DatabaseService] callers that need
+  /// to filter live-match channels without hard-coding the scheme string.
+  static const scheme = 'tflix://';
   static const _base = 'https://tflix.pro';
   static const _ua = 'Mozilla/5.0';
 
   static final _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 15);
 
-  static bool isResolvable(String reference) => reference.startsWith(_scheme);
+  static bool isResolvable(String reference) => reference.startsWith(scheme);
 
   // ── Legacy: direct m3u8 inside a ?url= player wrapper ────────────────────
   static final _wrappedUrl = RegExp(r'''[?&]url=(https?://[^"'\s]+)''');
@@ -115,7 +118,7 @@ class TflixResolver {
   // ── Resolution entry point ────────────────────────────────────────────────
 
   Future<ResolvedStream> resolve(String reference) async {
-    final path = reference.substring(_scheme.length);
+    final path = reference.substring(scheme.length);
     final body = await httpGetString(
       _http,
       Uri.parse('$_base/play.php/$path'),
@@ -169,11 +172,10 @@ class TflixResolver {
     throw const FormatException('tflix: no reachable source for this match');
   }
 
-  Future<String> _fetchPlayerPage(String url) => httpGetString(
-    HttpClient()..connectionTimeout = const Duration(seconds: 12),
-    Uri.parse(url),
-    referer: '$_base/',
-  );
+  // Reuses the shared client (like every other resolver) instead of leaking
+  // a fresh HttpClient per iframe mirror tried.
+  Future<String> _fetchPlayerPage(String url) =>
+      httpGetString(_http, Uri.parse(url), referer: '$_base/');
 
   /// Race m3u8 candidates in parallel — first real HLS manifest wins.
   Future<ResolvedStream> _resolveM3u8(List<String> candidates) async {

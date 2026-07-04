@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/back_guard.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/gradient_background.dart';
@@ -41,7 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _open(Channel channel, [List<Channel> zapChannels = const []]) {
-    context.push('/player', extra: {'channel': channel, 'zapChannels': zapChannels});
+    context.push(AppRoutes.player, extra: {'channel': channel, 'zapChannels': zapChannels});
   }
 
   @override
@@ -116,7 +117,7 @@ class _DashboardList extends ConsumerWidget {
     // the top of the list — Flutter's ensureVisible scroll won't push the
     // section header above the viewport.
     var autofocusClaimed = false;
-    bool claim(List<dynamic> list) {
+    bool claim(List<Object?> list) {
       if (autofocusClaimed || list.isEmpty) return false;
       autofocusClaimed = true;
       return true;
@@ -380,10 +381,11 @@ class _LiveMatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.oceanDeep : AppColors.lightSurface;
+    final palette = AppColors.of(isDark);
+    final surface = palette.surface;
     final accent = AppColors.focus(isDark);
-    final text1 = isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final text1 = palette.text1;
+    final border = palette.border;
 
     return FocusableTap(
       autofocus: autofocus,

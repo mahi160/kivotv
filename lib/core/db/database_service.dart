@@ -316,16 +316,16 @@ END''';
     return rows.single['id'] as int;
   }
 
-  Future<void> deletePlaylistById(int id) async {
-    final db = await database;
-    await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
-    // Channels removed by ON DELETE CASCADE.
-  }
+  Future<void> deletePlaylistById(int id) => _deletePlaylist('id', id);
 
-  Future<void> deletePlaylistByUrl(String url) async {
+  Future<void> deletePlaylistByUrl(String url) =>
+      _deletePlaylist('url', url);
+
+  /// Deletes the playlist matched by [column] = [value]. Channels are removed
+  /// by the ON DELETE CASCADE foreign key.
+  Future<void> _deletePlaylist(String column, Object value) async {
     final db = await database;
-    await db.delete('playlists', where: 'url = ?', whereArgs: [url]);
-    // Channels are removed by the ON DELETE CASCADE foreign key.
+    await db.delete('playlists', where: '$column = ?', whereArgs: [value]);
   }
 
   Future<List<Playlist>> playlists() async {
@@ -474,10 +474,15 @@ END''';
   /// Top [groupLimit] groups by channel count, each capped at [perGroupLimit]
   /// channels, for the Netflix-style Home rows.
   ///
+  /// [excludeUrlPrefix] hides channels whose reference starts with it (e.g.
+  /// live matches, which have their own dashboard row) — the caller decides
+  /// which scheme that is; this layer has no feature-specific knowledge of it.
+  ///
   /// Deliberately avoids SQLite window functions (ROW_NUMBER OVER) so it
   /// works on every Android SQLite build including older OEM builds that
   /// ship SQLite < 3.25. Per-group capping is done in Dart after the query.
   Future<List<MapEntry<String, List<Channel>>>> channelsByGroup({
+    String? excludeUrlPrefix,
     int groupLimit = 15,
     int perGroupLimit = 30,
   }) async {
@@ -486,8 +491,9 @@ END''';
     // Empty/null groups collapse into 'Other'.
     const groupExpr = "COALESCE(NULLIF(group_name, ''), 'Other')";
     const groupExprC = "COALESCE(NULLIF(c.group_name, ''), 'Other')";
-    // tflix:// live matches have their own dashboard row — exclude here.
-    const notLiveMatch = "url NOT LIKE 'tflix://%'";
+    final notLiveMatch = excludeUrlPrefix == null ? '1=1' : 'url NOT LIKE ?';
+    final notLiveMatchC = excludeUrlPrefix == null ? '1=1' : 'c.url NOT LIKE ?';
+    final excludeArg = excludeUrlPrefix == null ? null : '$excludeUrlPrefix%';
 
     // Single query: inline the top-groups subquery so we avoid a second
     // round-trip to SQLite. The subquery is cheap (one index scan) and
@@ -497,7 +503,7 @@ END''';
 SELECT c.*,
        $groupExprC AS _g
 FROM   channels c
-WHERE  c.$notLiveMatch
+WHERE  $notLiveMatchC
   AND  c.$_enabledFilter
   AND  $groupExprC IN (
          SELECT $groupExpr AS _g
@@ -511,7 +517,7 @@ WHERE  c.$notLiveMatch
 ORDER  BY $groupExprC COLLATE NOCASE ASC,
           c.name COLLATE NOCASE ASC
 ''',
-      [groupLimit],
+      [?excludeArg, ?excludeArg, groupLimit],
     );
     if (rows.isEmpty) return [];
 
@@ -543,12 +549,17 @@ ORDER  BY $groupExprC COLLATE NOCASE ASC,
     return rows.map(Channel.fromDb).toList();
   }
 
-  /// Live channels shown in the "Live Now" dashboard row.
-  Future<List<Channel>> liveMatches({int limit = 40}) async {
+  /// Channels shown in the "Live Now" dashboard row — those whose reference
+  /// starts with [urlPrefix] (the caller owns which scheme that is).
+  Future<List<Channel>> liveMatches({
+    required String urlPrefix,
+    int limit = 40,
+  }) async {
     final db = await database;
     final rows = await db.query(
       'channels',
-      where: "url LIKE 'tflix://%' AND $_enabledFilter",
+      where: 'url LIKE ? AND $_enabledFilter',
+      whereArgs: ['$urlPrefix%'],
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
