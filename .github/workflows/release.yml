@@ -37,6 +37,15 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      # ── Version, from pubspec.yaml (single source of truth) ───────────────
+      # pubspec's `version: 1.0.0+1` → VERSION=1.0.0 (drop the +build number,
+      # which is Android's versionCode, not part of the release tag).
+      - name: Read version
+        id: version
+        run: |
+          VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       # ── Write keystore + properties from secrets ─────────────────────────
       # Required secrets (set in repo Settings → Secrets → Actions):
       #   KEYSTORE_BASE64    – base64-encoded .jks file
@@ -67,24 +76,22 @@ jobs:
       - name: Build release APKs
         run: flutter build apk --release --split-per-abi
 
-      # ── Rename with version tag ──────────────────────────────────────────
+      # ── Rename with version ─────────────────────────────────────────────────
       - name: Rename APKs
         run: |
-          SHA="$(echo ${{ github.sha }} | cut -c1-7)"
           cd build/app/outputs/flutter-apk
           for f in app-*-release.apk; do
-            mv "$f" "kivo-${SHA}-${f#app-}"
+            mv "$f" "kivo-${{ steps.version.outputs.version }}-${f#app-}"
           done
           ls -lh *.apk
 
-      # ── Create GitHub Release and upload APKs ────────────────────────────
+      # ── Create GitHub Release + git tag, and upload APKs ──────────────────
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "prod-${{ github.sha }}"
-          name: "Kivo TV — ${{ github.sha }}"
+          tag_name: "v${{ steps.version.outputs.version }}"
+          name: "Kivo TV v${{ steps.version.outputs.version }}"
           body: |
-            **Branch:** `prod`
             **Commit:** ${{ github.sha }}
             **Message:** ${{ github.event.head_commit.message }}
 
@@ -97,7 +104,7 @@ jobs:
 
             Sideload via ADB:
             ```
-            adb install kivo-$(echo ${{ github.sha }} | cut -c1-7)-arm64-v8a-release.apk
+            adb install kivo-${{ steps.version.outputs.version }}-arm64-v8a-release.apk
             ```
           files: build/app/outputs/flutter-apk/kivo-*.apk
           fail_on_unmatched_files: true
