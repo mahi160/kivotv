@@ -44,9 +44,12 @@ jobs:
             > android/kivo-release.jks
 
       - name: Write keystore.properties
+        # storeFile is resolved relative to the :app module (android/app/), so
+        # it must point up one level to where the keystore was just decoded —
+        # matches android/keystore.properties.template's local-dev convention.
         run: |
           cat > android/keystore.properties <<EOF
-          storeFile=kivo-release.jks
+          storeFile=../kivo-release.jks
           storePassword=${{ secrets.KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.KEY_ALIAS }}
           keyPassword=${{ secrets.KEY_PASSWORD }}
