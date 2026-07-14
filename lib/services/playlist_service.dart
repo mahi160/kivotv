@@ -12,24 +12,18 @@ class PlaylistService {
 
   static const playlistUrl = 'https://iptv-org.github.io/iptv/index.m3u';
 
-  /// Currently active HTTP client — cancelled when a new fetch starts.
-  HttpClient? _activeClient;
-
   /// Fetches and parses an M3U playlist from [url].
   ///
-  /// Cancelling an in-flight fetch before starting a new one avoids wasting
-  /// bandwidth on a stale download.
+  /// Uses a fresh [HttpClient] per call — playlist refreshes now run
+  /// concurrently (see [PlaylistRepository.refreshAllPlaylists]), and a
+  /// shared cancel-previous client would kill sibling in-flight fetches.
   ///
   /// The full response body is read into a single String, then passed to
   /// [parseM3u] running in a background isolate via [compute] so the UI
   /// thread is never blocked by the regex-heavy parse (10k+ entries ≈ 200 ms).
   Future<List<Channel>> fetchChannels({String url = playlistUrl}) async {
-    // Cancel any in-flight request before starting a new one.
-    _activeClient?.close(force: true);
-
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 60);
-    _activeClient = client;
 
     try {
       final request = await client
@@ -57,27 +51,15 @@ class PlaylistService {
       // would jank the UI for ~200 ms on a low-end TV SoC if run here.
       return compute(parseM3u, body);
     } finally {
-      // Only clear the reference if this client is still the active one.
-      if (identical(_activeClient, client)) _activeClient = null;
       client.close(force: true);
     }
   }
-
-  /// Cancels any in-progress playlist download immediately.
-  void cancel() {
-    _activeClient?.close(force: true);
-    _activeClient = null;
-  }
 }
 
-/// Parses a full M3U string (kept for unit tests and small playlists).
-List<Channel> parseM3u(String content) =>
-    parseM3uLines(const LineSplitter().convert(content));
-
-/// Parses an M3U playlist from an already-split list of lines.
-/// Prefer this overload when the lines come from a streaming source.
-List<Channel> parseM3uLines(List<String> rawLines) {
-  final lines = rawLines
+/// Parses a full M3U string into channels.
+List<Channel> parseM3u(String content) {
+  final lines = const LineSplitter()
+      .convert(content)
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty)
       .toList();
