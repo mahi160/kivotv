@@ -347,6 +347,11 @@ END''';
   /// Reconciles stored channels for [playlistId] with the new [channels] list.
   /// Deletes only URLs that disappeared upstream; upserts the rest in-place so
   /// is_favorite / recently_watched history are preserved.
+  ///
+  /// `channels.url` is globally UNIQUE, so a URL already stored under a
+  /// *different* playlist is left untouched here — the first playlist to
+  /// store a URL owns it; refresh never re-parents or overwrites it away
+  /// from that owner (see the step-2 UPDATE below).
   Future<void> replaceChannels({
     required int playlistId,
     required List<Channel> channels,
@@ -397,24 +402,34 @@ END''';
             data['is_favorite'],
           ],
         );
-        // Step 2: refresh metadata for rows that already existed.
-        // is_favorite is intentionally excluded so user choices survive
-        // a playlist refresh. The trailing WHERE clause makes this a no-op
-        // for unchanged rows — every UPDATE that actually runs fires the
-        // channels_au FTS trigger (delete+insert), so on a large playlist
-        // where most rows are identical to last refresh, matching them out
-        // here avoids rewriting the whole FTS index for nothing.
+        // Step 2: refresh metadata for rows that already existed *under this
+        // playlist*. The `AND playlist_id=?` guard is deliberate: `url` is
+        // globally UNIQUE, so the same stream URL can legitimately appear in
+        // two playlists' upstream data (public IPTV lists overlap heavily).
+        // Without this guard, whichever playlist refreshes last would
+        // silently re-parent the row (playlist_id=?, plus overwrite its
+        // metadata) away from the playlist that first stored it — disabling
+        // one playlist could then hide a channel that another enabled
+        // playlist also lists. First-to-store-a-URL owns it; refresh never
+        // steals it. is_favorite is intentionally excluded so user choices
+        // survive a playlist refresh.
+        //
+        // The trailing WHERE clause also makes this a no-op for unchanged
+        // rows — every UPDATE that actually runs fires the channels_au FTS
+        // trigger (delete+insert), so on a large playlist where most rows are
+        // identical to last refresh, matching them out here avoids rewriting
+        // the whole FTS index for nothing.
         batch.rawUpdate(
           'UPDATE channels'
-          ' SET id=?, playlist_id=?, name=?, logo=?, group_name=?, search_text=?'
-          ' WHERE url=?'
-          ' AND (id IS NOT ? OR playlist_id IS NOT ? OR name IS NOT ?'
-          ' OR logo IS NOT ? OR group_name IS NOT ? OR search_text IS NOT ?)',
+          ' SET id=?, name=?, logo=?, group_name=?, search_text=?'
+          ' WHERE url=? AND playlist_id=?'
+          ' AND (id IS NOT ? OR name IS NOT ? OR logo IS NOT ?'
+          ' OR group_name IS NOT ? OR search_text IS NOT ?)',
           [
-            data['id'], data['playlist_id'], data['name'],
+            data['id'], data['name'],
             data['logo'], data['group_name'], data['search_text'],
-            data['url'],
-            data['id'], data['playlist_id'], data['name'],
+            data['url'], data['playlist_id'],
+            data['id'], data['name'],
             data['logo'], data['group_name'], data['search_text'],
           ],
         );
