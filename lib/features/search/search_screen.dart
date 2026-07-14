@@ -68,6 +68,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
   }
 
+  // ponytail: LIMIT/OFFSET paging over a table a background refresh may be
+  // mutating concurrently can skip or duplicate a row between pages. Fine for
+  // a TV search box; if it ever matters, switch to keyset pagination (order
+  // by rowid > lastSeenRowid) which is stable under concurrent writes.
   Future<void> _loadNextPage() async {
     if (_loading || !_hasMore || _query.isEmpty) return;
     // Capture before the await — if the user changes the query while we're

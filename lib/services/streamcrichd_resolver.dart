@@ -27,7 +27,15 @@ class StreamcrichdResolver {
 
   Future<ResolvedStream> resolve(String reference) async {
     final pageUri = Uri.parse(reference);
-    final page = await _getLenient(pageUri, referer: '$_base/');
+    final page = await httpGetString(
+      _http,
+      pageUri,
+      referer: '$_base/',
+      userAgent: _ua,
+      // fetch.php returns HTTP 500 but still serves valid HTML with the
+      // stream player markup we need.
+      extraOkStatuses: const {HttpStatus.internalServerError},
+    );
     final fid = parseFetchPage(page);
     if (fid.length > 256) {
       throw const FormatException('streamcrichd: fid too long');
@@ -143,23 +151,5 @@ class StreamcrichdResolver {
       return null;
     }
     return expiry;
-  }
-
-  /// Lenient GET that accepts both 200 and 500 responses. The fetch.php
-  /// endpoint returns a 500 status but still serves valid HTML with the
-  /// stream player markup we need.
-  static Future<String> _getLenient(Uri url, {String? referer}) async {
-    final req = await _http.getUrl(url);
-    req.headers.set(HttpHeaders.userAgentHeader, _ua);
-    if (referer != null) req.headers.set(HttpHeaders.refererHeader, referer);
-    final resp = await req.close().timeout(const Duration(seconds: 15));
-    if (resp.statusCode != HttpStatus.ok &&
-        resp.statusCode != HttpStatus.internalServerError) {
-      throw HttpException('HTTP ${resp.statusCode}', uri: url);
-    }
-    return resp
-        .transform(utf8.decoder)
-        .join()
-        .timeout(const Duration(seconds: 15));
   }
 }
