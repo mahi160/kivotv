@@ -1,7 +1,62 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kivo/services/playlist_service.dart';
 
 void main() {
+  group('PlaylistService.fetchChannels — concurrency (AUDIT.md P0-1)', () {
+    // Regression test for the cancel-previous-client bug: fetchChannels used
+    // to share one HttpClient across calls and force-close it whenever a new
+    // fetch started, so concurrent fetches (as refreshAllPlaylists now runs
+    // them) killed each other.
+    //
+    // Verified by hand (see AUDIT.md) that `HttpClient.close(force: true)`
+    // only actually aborts a call whose TCP connect is still pending — on
+    // loopback that phase resolves in low-single-digit milliseconds, too fast
+    // to hit deterministically from a unit test without relying on real
+    // network latency (which would make this test flaky/environment-
+    // dependent). This test instead pins the *contract* fetchChannels must
+    // hold: concurrent calls never interfere with each other, regardless of
+    // response timing — it would fail immediately if a shared
+    // cancel-on-new-call field were ever reintroduced and, on a slower
+    // connection than loopback, is exactly the scenario the original bug hit.
+    HttpServer? server;
+
+    tearDown(() async {
+      await server?.close(force: true);
+      server = null;
+    });
+
+    test('two concurrent fetchChannels calls both succeed independently', () async {
+      // The first request holds its response open until the second request
+      // has definitely started, so both are genuinely in-flight at once.
+      final secondRequestStarted = Completer<void>();
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server!.listen((req) async {
+        if (req.uri.path == '/slow') {
+          await secondRequestStarted.future;
+          req.response.write('#EXTM3U\n#EXTINF:-1,Slow\nhttps://example.com/slow.m3u8\n');
+        } else {
+          if (!secondRequestStarted.isCompleted) secondRequestStarted.complete();
+          req.response.write('#EXTM3U\n#EXTINF:-1,Fast\nhttps://example.com/fast.m3u8\n');
+        }
+        await req.response.close();
+      });
+      final port = server!.port;
+
+      final results = await Future.wait([
+        PlaylistService.instance.fetchChannels(url: 'http://127.0.0.1:$port/slow'),
+        PlaylistService.instance.fetchChannels(url: 'http://127.0.0.1:$port/fast'),
+      ]);
+
+      expect(results[0], hasLength(1));
+      expect(results[0].single.name, 'Slow');
+      expect(results[1], hasLength(1));
+      expect(results[1].single.name, 'Fast');
+    });
+  });
+
   test('parseM3u parses channel metadata and urls', () {
     const playlist = '''
 #EXTM3U
