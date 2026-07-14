@@ -8,9 +8,3 @@ import 'repository_provider.dart';
 final isFetchingProvider = StreamProvider<bool>(
   (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).isFetching),
 );
-
-/// Bridges [PlaylistRepository.fetchError] → Riverpod stream.
-/// Non-null when the last background fetch failed; null while healthy.
-final fetchErrorProvider = StreamProvider<String?>(
-  (ref) => valueNotifierStream(ref, ref.watch(repositoryProvider).fetchError),
-);

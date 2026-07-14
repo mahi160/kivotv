@@ -42,12 +42,7 @@ class PlaylistRepository {
   /// hand-rolled [DatabaseService.instance] singleton.
   final DatabaseService _db;
 
-  final ValueNotifier<int> channelCount = ValueNotifier<int>(0);
   final ValueNotifier<bool> isFetching = ValueNotifier<bool>(false);
-
-  /// Non-null while the last background fetch ended with an error.
-  /// Cleared when a new fetch starts.
-  final ValueNotifier<String?> fetchError = ValueNotifier<String?>(null);
 
   // ── Granular version notifiers ────────────────────────────────────────────
   //  liveVersion   ← refreshTflixMatches
@@ -175,8 +170,6 @@ class PlaylistRepository {
         await _db.deletePlaylistByUrl('kivo://footmad');
         await prefs.setBool(_builtinSeededKey, true);
       }
-      final storedCount = await _db.channelCount();
-      channelCount.value = storedCount;
       _bumpAll();
       playlistsVersion.bump();
     } catch (e) {
@@ -252,7 +245,6 @@ class PlaylistRepository {
       }
     }));
 
-    channelCount.value = await _db.channelCount();
     _bumpAll();
   }
 
@@ -293,25 +285,23 @@ class PlaylistRepository {
       changed = true;
     }
     if (changed) {
-      channelCount.value = await _db.channelCount();
       _bumpAll();
     }
   }
 
   Future<void> _seedAndRefresh(SharedPreferences prefs) async {
     isFetching.value = true;
-    fetchError.value = null;
     try {
       // All four flows are independent network work — run them in parallel.
       // SQLite writes are serialized by sqflite's transaction queue.
+      // Each flow already logs/swallows its own errors, so nothing further
+      // to surface here.
       await Future.wait([
         refreshTflixMatches(),
         _syncFootmadCategories().then((_) => _refreshFootmadIfStale()),
         _refreshBuiltinsIfEnabled(),
         _seedOrRefreshUserPlaylists(prefs),
       ]);
-    } catch (e) {
-      fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     } finally {
       isFetching.value = false;
     }
@@ -388,7 +378,6 @@ class PlaylistRepository {
         playlistId: playlistId,
         channels: matches,
       );
-      channelCount.value = await _db.channelCount();
       // Only live matches changed — don't rebuild other sections.
       liveVersion.bump();
     } catch (_) {}
@@ -400,7 +389,6 @@ class PlaylistRepository {
   Future<void> manualRefresh() async {
     if (isFetching.value) return;
     isFetching.value = true;
-    fetchError.value = null;
     try {
       // Independent sources refresh in parallel; DB writes are serialized
       // by sqflite's transaction queue.
@@ -432,30 +420,19 @@ class PlaylistRepository {
       }),
     );
 
-    var failed = 0;
+    // Partial failures (one bad source among many) are normal for public
+    // IPTV lists — store whatever came back and move on; nothing surfaces
+    // fetch failures to the UI (see AUDIT.md P1-1).
     for (final (playlist, channels) in fetched) {
-      if (channels == null) {
-        failed++;
-        continue;
-      }
+      if (channels == null) continue;
       try {
-        await _db.replaceChannels(
-          playlistId: playlist.id,
-          channels: channels,
-        );
+        await _db.replaceChannels(playlistId: playlist.id, channels: channels);
       } catch (_) {
-        failed++;
+        // Storage failure for this one playlist — others still commit.
       }
-    }
-
-    // Surface an error only when every playlist failed — partial failures
-    // (one bad source among many) are normal for public IPTV lists.
-    if (userPlaylists.isNotEmpty && failed == userPlaylists.length) {
-      fetchError.value = 'Couldn\'t fetch channels — check your connection.';
     }
 
     final count = await _db.channelCount();
-    channelCount.value = count;
     _bumpAll();
     return count;
   }
@@ -494,7 +471,6 @@ class PlaylistRepository {
       channels: channels,
     );
     final count = await _db.channelCount();
-    channelCount.value = count;
     _bumpAll();
     return count;
   }
