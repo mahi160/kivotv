@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -7,9 +8,19 @@ import '../../models/channel.dart';
 import '../../models/playlist.dart';
 
 class DatabaseService {
-  DatabaseService._();
+  DatabaseService._({this._testDbPath});
 
   static final DatabaseService instance = DatabaseService._();
+
+  /// Isolated instance for tests — bypasses the app-wide singleton and its
+  /// cached connection so each test gets its own database instead of sharing
+  /// (and accumulating state in) [instance]'s. Defaults to an in-memory
+  /// SQLite database, so tests never touch disk or leak into each other.
+  @visibleForTesting
+  factory DatabaseService.forTesting({String dbPath = ':memory:'}) =>
+      DatabaseService._(testDbPath: dbPath);
+
+  final String? _testDbPath;
 
   Database? _db;
 
@@ -21,10 +32,10 @@ class DatabaseService {
     final existing = _db;
     if (existing != null) return existing;
 
-    final dbPath = p.join(await getDatabasesPath(), 'kivo.db');
+    final dbPath = _testDbPath ?? p.join(await getDatabasesPath(), 'kivo.db');
     final opened = await openDatabase(
       dbPath,
-      version: 8,
+      version: 9,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys=ON'),
       onCreate: (db, _) => _createSchema(db),
       onUpgrade: (db, oldVersion, _) async {
@@ -128,6 +139,29 @@ CREATE TABLE IF NOT EXISTS recently_watched (
             'INTEGER NOT NULL DEFAULT 1',
           );
         }
+        // v8 → v9: channel_playlists join table. `channels.url` is globally
+        // UNIQUE and stays that way (one metadata row per URL, owned by
+        // whichever playlist first stored it — see replaceChannels), but the
+        // *same URL* can legitimately be listed by more than one playlist
+        // (public IPTV lists overlap; FootMad categories can share a feed).
+        // Before this table existed, a channel's visibility was tied only to
+        // its single metadata owner's enabled state, so disabling the owner
+        // hid the channel even if another enabled playlist also listed it.
+        // channel_playlists records every (url, playlist_id) pair each
+        // playlist's latest refresh actually saw, independent of metadata
+        // ownership; _enabledFilter now checks this table instead of the
+        // owner's playlist_id directly (see AUDIT.md P0-3).
+        if (oldVersion < 9) {
+          await db.execute(_channelPlaylistsCreateSql);
+          await db.execute(_channelPlaylistsIndexSql);
+          // Backfill: each existing row's current (single) owner becomes its
+          // first membership entry. Any other playlist that also lists the
+          // same url reclaims membership the next time it refreshes.
+          await db.execute(
+            'INSERT OR IGNORE INTO channel_playlists (channel_url, playlist_id)'
+            ' SELECT url, playlist_id FROM channels',
+          );
+        }
       },
     );
     _db = opened;
@@ -171,6 +205,8 @@ CREATE TABLE recently_watched (
   watched_at  INTEGER NOT NULL,
   FOREIGN KEY (channel_url) REFERENCES channels (url) ON DELETE CASCADE
 )''');
+    await db.execute(_channelPlaylistsCreateSql);
+    await db.execute(_channelPlaylistsIndexSql);
     await db.execute('CREATE INDEX idx_channels_name      ON channels(name)');
     await db.execute(
       'CREATE INDEX idx_channels_group     ON channels(group_name)',
@@ -198,6 +234,21 @@ CREATE TABLE recently_watched (
       await db.execute(_ftsAuTriggerSql);
     } catch (_) {}
   }
+
+  // Join table recording which playlists currently list which channel URLs —
+  // see the v8 → v9 migration comment above for why this exists alongside
+  // channels.playlist_id (metadata ownership vs. visibility).
+  static const _channelPlaylistsCreateSql = '''
+CREATE TABLE IF NOT EXISTS channel_playlists (
+  channel_url TEXT    NOT NULL,
+  playlist_id INTEGER NOT NULL,
+  PRIMARY KEY (channel_url, playlist_id),
+  FOREIGN KEY (channel_url) REFERENCES channels (url) ON DELETE CASCADE,
+  FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE
+)''';
+  static const _channelPlaylistsIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_channel_playlists_playlist'
+      ' ON channel_playlists(playlist_id)';
 
   // FTS5 virtual table definition. Content table = channels, so FTS5 reads
   // the actual text by rowid from `channels` and stores only the index.
@@ -229,10 +280,24 @@ CREATE TRIGGER IF NOT EXISTS channels_au AFTER UPDATE ON channels BEGIN
   INSERT INTO channels_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
 END''';
 
-  /// SQL fragment restricting channel rows to enabled playlists. Prefix with
-  /// a table alias when the query joins (e.g. 'c.$_enabledFilter').
-  static const _enabledFilter =
-      'playlist_id IN (SELECT id FROM playlists WHERE enabled = 1)';
+  /// SQL fragment restricting channel rows to ones listed by at least one
+  /// enabled playlist. [prefix] is the table-alias dot-prefix for the `url`
+  /// column being compared (e.g. `_enabledFilter('c.')` when the query
+  /// aliases channels as `c`). Defaults to the real table name, `channels.`
+  /// — NOT `''` — because the subquery's own `playlists` table also has a
+  /// `url` column; a bare, unqualified `url` reference would resolve to
+  /// `playlists.url` (the innermost matching scope) instead of correlating
+  /// out to the intended channels row, silently matching nothing.
+  ///
+  /// A channel row's own `playlist_id` is only its *metadata owner* (see
+  /// [replaceChannels]) — the same url can also be listed by other playlists
+  /// via `channel_playlists`, and any one of them being enabled is enough to
+  /// keep the channel visible. This is what stops disabling the metadata
+  /// owner from hiding a url another enabled playlist also lists.
+  static String _enabledFilter([String prefix = 'channels.']) =>
+      'EXISTS (SELECT 1 FROM channel_playlists cp'
+      ' JOIN playlists p ON p.id = cp.playlist_id'
+      ' WHERE cp.channel_url = ${prefix}url AND p.enabled = 1)';
 
   /// True if the FTS5 table exists in this database (SQLite 3.9+ / Android 7+).
   /// Result is cached after the first check.
@@ -326,8 +391,14 @@ END''';
   Future<void> deletePlaylistByUrl(String url) =>
       _deletePlaylist('url', url);
 
-  /// Deletes the playlist matched by [column] = [value]. Channels are removed
-  /// by the ON DELETE CASCADE foreign key.
+  /// Deletes the playlist matched by [column] = [value]. Channels *owned* by
+  /// it (see [replaceChannels]) are removed by the ON DELETE CASCADE foreign
+  /// key — including a channel another, still-enabled playlist also lists via
+  /// `channel_playlists`, since that row's metadata has nowhere else to live.
+  /// Not currently reachable from the UI (Settings only ever toggles
+  /// [setPlaylistEnabled]); if a "remove playlist" action is added, ownership
+  /// should be handed to a remaining member of `channel_playlists` before
+  /// this delete runs, instead of losing the row.
   Future<void> _deletePlaylist(String column, Object value) async {
     final db = await database;
     await db.delete('playlists', where: '$column = ?', whereArgs: [value]);
@@ -350,8 +421,13 @@ END''';
   ///
   /// `channels.url` is globally UNIQUE, so a URL already stored under a
   /// *different* playlist is left untouched here — the first playlist to
-  /// store a URL owns it; refresh never re-parents or overwrites it away
-  /// from that owner (see the step-2 UPDATE below).
+  /// store a URL owns its metadata; refresh never re-parents or overwrites it
+  /// away from that owner (see the step-2 UPDATE below). Separately, this
+  /// playlist's own claim on every url in [channels] is recorded in
+  /// `channel_playlists` regardless of who owns the metadata — that's what
+  /// [_enabledFilter] checks for visibility, so a url another playlist owns
+  /// stays visible through *this* playlist too, independent of the owner's
+  /// enabled state.
   Future<void> replaceChannels({
     required int playlistId,
     required List<Channel> channels,
@@ -371,19 +447,29 @@ END''';
         for (final row in existing)
           if (!newUrls.contains(row['url'] as String)) row['url'] as String,
       ];
+      await _deleteStaleUrls(txn, table: 'channels', urlColumn: 'url', staleUrls: toDelete);
 
-      const chunkSize = 500;
-      for (var i = 0; i < toDelete.length; i += chunkSize) {
-        final slice = toDelete.sublist(
-          i,
-          math.min(i + chunkSize, toDelete.length),
-        );
-        final placeholders = List.filled(slice.length, '?').join(',');
-        await txn.rawDelete(
-          'DELETE FROM channels WHERE url IN ($placeholders)',
-          slice,
-        );
-      }
+      // This playlist's own channel_playlists membership diffs the same way:
+      // drop urls it no longer lists, upsert the rest below.
+      final existingMembership = await txn.query(
+        'channel_playlists',
+        columns: ['channel_url'],
+        where: 'playlist_id = ?',
+        whereArgs: [playlistId],
+      );
+      final staleMembership = [
+        for (final row in existingMembership)
+          if (!newUrls.contains(row['channel_url'] as String))
+            row['channel_url'] as String,
+      ];
+      await _deleteStaleUrls(
+        txn,
+        table: 'channel_playlists',
+        urlColumn: 'channel_url',
+        staleUrls: staleMembership,
+        extraWhere: 'playlist_id = ?',
+        extraWhereArgs: [playlistId],
+      );
 
       // Two-step upsert compatible with all SQLite versions (no 3.24+ upsert
       // syntax needed). INSERT OR IGNORE adds new rows; UPDATE refreshes
@@ -433,6 +519,14 @@ END''';
             data['logo'], data['group_name'], data['search_text'],
           ],
         );
+        // Step 3: record this playlist's claim on the url regardless of who
+        // owns its metadata (steps 1–2 above). Idempotent — the composite
+        // PK already prevents duplicates and there's no metadata to refresh.
+        batch.rawInsert(
+          'INSERT OR IGNORE INTO channel_playlists (channel_url, playlist_id)'
+          ' VALUES (?, ?)',
+          [data['url'], playlistId],
+        );
       }
       await batch.commit(noResult: true);
 
@@ -448,6 +542,32 @@ END''';
     });
 
     // FTS index is kept in sync automatically by the triggers added in v7.
+  }
+
+  /// Deletes rows from [table] whose [urlColumn] value is in [staleUrls],
+  /// chunked to stay under SQLite's default per-statement variable limit.
+  /// [extraWhere]/[extraWhereArgs] add an additional AND condition (e.g.
+  /// scoping the delete to one playlist_id). Shared by the two diff-deletes
+  /// in [replaceChannels] (owned channel rows, and this playlist's own
+  /// channel_playlists membership).
+  Future<void> _deleteStaleUrls(
+    Transaction txn, {
+    required String table,
+    required String urlColumn,
+    required List<String> staleUrls,
+    String? extraWhere,
+    List<Object?> extraWhereArgs = const [],
+  }) async {
+    const chunkSize = 500;
+    for (var i = 0; i < staleUrls.length; i += chunkSize) {
+      final slice = staleUrls.sublist(i, math.min(i + chunkSize, staleUrls.length));
+      final placeholders = List.filled(slice.length, '?').join(',');
+      final extra = extraWhere != null ? ' AND $extraWhere' : '';
+      await txn.rawDelete(
+        'DELETE FROM $table WHERE $urlColumn IN ($placeholders)$extra',
+        [...slice, ...extraWhereArgs],
+      );
+    }
   }
 
   // ── Channels — queries ─────────────────────────────────────────────────────
@@ -470,8 +590,8 @@ END''';
     final where = <String>[];
     final args = <Object?>[];
 
-    // Always restrict to channels from enabled playlists.
-    where.add(_enabledFilter);
+    // Always restrict to channels listed by at least one enabled playlist.
+    where.add(_enabledFilter());
 
     if (normalizedQuery.isNotEmpty) {
       final ftsQ = _ftsQuery(normalizedQuery);
@@ -543,12 +663,12 @@ SELECT c.*,
        $groupExprC AS _g
 FROM   channels c
 WHERE  $notLiveMatchC
-  AND  c.$_enabledFilter
+  AND  ${_enabledFilter('c.')}
   AND  $groupExprC IN (
          SELECT $groupExpr AS _g
          FROM   channels
          WHERE  $notLiveMatch
-           AND  $_enabledFilter
+           AND  ${_enabledFilter()}
          GROUP  BY _g
          ORDER  BY COUNT(*) DESC
          LIMIT  ?
@@ -581,7 +701,7 @@ ORDER  BY $groupExprC COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where: 'is_favorite = 1 AND $_enabledFilter',
+      where: 'is_favorite = 1 AND ${_enabledFilter()}',
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
     );
@@ -597,7 +717,7 @@ ORDER  BY $groupExprC COLLATE NOCASE ASC,
     final db = await database;
     final rows = await db.query(
       'channels',
-      where: 'url LIKE ? AND $_enabledFilter',
+      where: 'url LIKE ? AND ${_enabledFilter()}',
       whereArgs: ['$urlPrefix%'],
       orderBy: 'name COLLATE NOCASE ASC',
       limit: limit,
@@ -612,7 +732,7 @@ ORDER  BY $groupExprC COLLATE NOCASE ASC,
 SELECT channels.*
 FROM   recently_watched
 JOIN   channels ON channels.url = recently_watched.channel_url
-WHERE  channels.$_enabledFilter
+WHERE  ${_enabledFilter('channels.')}
 ORDER  BY recently_watched.watched_at DESC
 LIMIT  ?
 ''',
