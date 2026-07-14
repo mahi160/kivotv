@@ -21,9 +21,12 @@ import 'drift_tracker.dart';
 /// without a widget tree.
 class PlaybackSession extends ChangeNotifier {
   PlaybackSession({
+    // The public param name (repository) must stay independent of the
+    // private field name (_repository), so an initializing formal can't
+    // replace this assignment without exposing the private field name.
     required PlaylistRepository repository,
     required Channel initialChannel,
-  }) : _repository = repository,
+  }) : _repository = repository, // ignore: prefer_initializing_formals
        _currentChannel = initialChannel,
        player = Player(
          configuration: const PlayerConfiguration(bufferSize: 32 * 1024 * 1024),
@@ -221,7 +224,11 @@ class PlaybackSession extends ChangeNotifier {
     if (_disposed || gen != _loadGeneration) return;
     drift.start(() => player.state.position);
     await player.open(Media(playable, httpHeaders: headers), play: true);
-    if (_disposed || gen != _loadGeneration) {
+    // dispose() may have run while the above await was suspended — in that
+    // case the player itself is already destroyed, so calling stop() on it
+    // would throw. Only a superseded (but still-alive) session needs stop().
+    if (_disposed) return;
+    if (gen != _loadGeneration) {
       player.stop();
       return;
     }
