@@ -287,22 +287,27 @@ END''';
     );
   }
 
+  /// Upserts a playlist row's identity (name/url/enabled default).
+  /// Does NOT touch [Playlist.lastRefreshedAt] — that column means "channels
+  /// were last stored for this playlist" and is stamped only by
+  /// [replaceChannels], which is the only place channels actually get
+  /// written. Stamping it here (as this used to) marked a playlist "fresh"
+  /// before any channel had been fetched, which broke the staleness check
+  /// that gates auto-refresh.
   Future<int> upsertPlaylist({
     required String name,
     required String url,
     bool defaultEnabled = true, // only applied on INSERT; existing rows keep their enabled state
   }) async {
     final db = await database;
-    final now = DateTime.now().millisecondsSinceEpoch;
     await db.insert('playlists', {
       'name': name,
       'url': url,
-      'last_refreshed_at': now,
       'enabled': defaultEnabled ? 1 : 0,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
     await db.update(
       'playlists',
-      {'name': name, 'last_refreshed_at': now},
+      {'name': name},
       where: 'url = ?',
       whereArgs: [url],
     );
@@ -347,6 +352,7 @@ END''';
     required List<Channel> channels,
   }) async {
     final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       final newUrls = {for (final c in channels) c.url};
 
@@ -406,6 +412,16 @@ END''';
         );
       }
       await batch.commit(noResult: true);
+
+      // Stamp "refreshed now" only when channels were actually stored for
+      // this playlist — same transaction, so a crash between the two can't
+      // leave a stale timestamp paired with fresh data or vice versa.
+      await txn.update(
+        'playlists',
+        {'last_refreshed_at': now},
+        where: 'id = ?',
+        whereArgs: [playlistId],
+      );
     });
 
     // FTS index is kept in sync automatically by the triggers added in v7.
