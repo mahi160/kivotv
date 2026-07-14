@@ -399,15 +399,23 @@ END''';
         );
         // Step 2: refresh metadata for rows that already existed.
         // is_favorite is intentionally excluded so user choices survive
-        // a playlist refresh.
+        // a playlist refresh. The trailing WHERE clause makes this a no-op
+        // for unchanged rows — every UPDATE that actually runs fires the
+        // channels_au FTS trigger (delete+insert), so on a large playlist
+        // where most rows are identical to last refresh, matching them out
+        // here avoids rewriting the whole FTS index for nothing.
         batch.rawUpdate(
           'UPDATE channels'
           ' SET id=?, playlist_id=?, name=?, logo=?, group_name=?, search_text=?'
-          ' WHERE url=?',
+          ' WHERE url=?'
+          ' AND (id IS NOT ? OR playlist_id IS NOT ? OR name IS NOT ?'
+          ' OR logo IS NOT ? OR group_name IS NOT ? OR search_text IS NOT ?)',
           [
             data['id'], data['playlist_id'], data['name'],
             data['logo'], data['group_name'], data['search_text'],
             data['url'],
+            data['id'], data['playlist_id'], data['name'],
+            data['logo'], data['group_name'], data['search_text'],
           ],
         );
       }
